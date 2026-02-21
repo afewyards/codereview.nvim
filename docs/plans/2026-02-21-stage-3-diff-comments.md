@@ -781,9 +781,22 @@ function M.setup_keymaps(layout, state)
     vim.keymap.set("n", "q", function() split.close(layout) end, vim.tbl_extend("force", opts, { buffer = buf }))
   end
 
-  -- Comment creation on main buf
+  -- Comment creation on main buf (normal mode: single line)
   vim.keymap.set("n", "cc", function()
     M.create_comment_at_cursor(layout, state)
+  end, vim.tbl_extend("force", opts, { buffer = layout.main_buf }))
+
+  -- Comment creation (visual mode: multi-line range)
+  vim.keymap.set("v", "cc", function()
+    -- Get visual selection range
+    local start_line = vim.fn.line("v")
+    local end_line = vim.fn.line(".")
+    if start_line > end_line then
+      start_line, end_line = end_line, start_line
+    end
+    -- Exit visual mode
+    vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<Esc>", true, false, true), "n", false)
+    M.create_comment_range(layout, state, start_line, end_line)
   end, vim.tbl_extend("force", opts, { buffer = layout.main_buf }))
 
   -- Expand hidden lines
@@ -793,8 +806,39 @@ function M.setup_keymaps(layout, state)
 end
 
 function M.create_comment_at_cursor(layout, state)
-  -- Implemented in Task 6
-  vim.notify("Comment creation (Task 6)", vim.log.levels.WARN)
+  local cursor = vim.api.nvim_win_get_cursor(layout.main_win)
+  local buf_line = cursor[1]
+  local data = state.line_data and state.line_data[buf_line]
+  if not data or data.type == "header" or data.type == "hidden" then
+    vim.notify("Cannot comment on this line", vim.log.levels.WARN)
+    return
+  end
+
+  local file_diff = state.diffs[state.current_file_idx]
+  local comment_mod = require("glab_review.mr.comment")
+  comment_mod.create_inline(state.mr, file_diff.new_path or file_diff.old_path, data.old_line, data.new_line)
+end
+
+function M.create_comment_range(layout, state, start_buf_line, end_buf_line)
+  local start_data = state.line_data and state.line_data[start_buf_line]
+  local end_data = state.line_data and state.line_data[end_buf_line]
+  if not start_data or not end_data then
+    vim.notify("Invalid selection for comment", vim.log.levels.WARN)
+    return
+  end
+  if start_data.type == "header" or end_data.type == "header" then
+    vim.notify("Cannot comment on header lines", vim.log.levels.WARN)
+    return
+  end
+
+  local file_diff = state.diffs[state.current_file_idx]
+  local file_path = file_diff.new_path or file_diff.old_path
+  local comment_mod = require("glab_review.mr.comment")
+  comment_mod.create_inline_range(
+    state.mr, file_path,
+    { old_line = start_data.old_line, new_line = start_data.new_line },
+    { old_line = end_data.old_line, new_line = end_data.new_line }
+  )
 end
 
 function M.expand_hidden(layout, state)
@@ -1023,6 +1067,7 @@ function M.resolve_toggle(disc, mr, callback)
   if callback then callback() end
 end
 
+--- Single-line comment (normal mode `cc`)
 function M.create_inline(mr, file_path, old_line, new_line)
   vim.ui.input({ prompt = "Comment: " }, function(input)
     if not input or input == "" then return end
@@ -1054,6 +1099,64 @@ function M.create_inline(mr, file_path, old_line, new_line)
       return
     end
     vim.notify("Comment posted", vim.log.levels.INFO)
+  end)
+end
+
+--- Multi-line range comment (visual mode select + `cc`)
+--- Uses GitLab's position[line_range] for range comments.
+function M.create_inline_range(mr, file_path, start_pos, end_pos)
+  vim.ui.input({ prompt = "Comment (range): " }, function(input)
+    if not input or input == "" then return end
+
+    local base_url, project = git.detect_project()
+    if not base_url or not project then return end
+    local encoded = client.encode_project(project)
+
+    -- Build line_range start/end using the line type:
+    -- added line -> new_line only; deleted -> old_line only; context -> both
+    local function build_line_ref(pos)
+      local ref = { type = "new" }
+      if pos.new_line then
+        ref.line_code = pos.new_line
+        ref.type = "new"
+        ref.new_line = pos.new_line
+      elseif pos.old_line then
+        ref.line_code = pos.old_line
+        ref.type = "old"
+        ref.old_line = pos.old_line
+      end
+      return ref
+    end
+
+    local position = {
+      position_type = "text",
+      base_sha = mr.diff_refs.base_sha,
+      head_sha = mr.diff_refs.head_sha,
+      start_sha = mr.diff_refs.start_sha,
+      new_path = file_path,
+      old_path = file_path,
+      -- Single anchor line (GitLab requires new_line or old_line at top level too)
+      new_line = end_pos.new_line,
+      old_line = end_pos.old_line,
+      -- Range
+      line_range = {
+        start = build_line_ref(start_pos),
+        ["end"] = build_line_ref(end_pos),
+      },
+    }
+
+    local _, err = client.post(base_url, endpoints.discussions(encoded, mr.iid), {
+      body = {
+        body = input,
+        position = position,
+      },
+    })
+
+    if err then
+      vim.notify("Failed to create range comment: " .. err, vim.log.levels.ERROR)
+      return
+    end
+    vim.notify("Range comment posted", vim.log.levels.INFO)
   end)
 end
 

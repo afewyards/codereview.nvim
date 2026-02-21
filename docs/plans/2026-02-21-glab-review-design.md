@@ -142,6 +142,11 @@ Keymaps: `d` diff, `c` comment, `a` approve, `A` AI review, `p` pipeline, `m` me
 
 **Diff navigation:** `]f`/`[f` next/prev file, `]c`/`[c` next/prev comment, `cc` new comment on current line.
 
+**Creating comments:**
+- Normal mode `cc` on a diff line — single-line comment. Opens input prompt.
+- Visual mode: select line(s) with `V`, then `cc` — multi-line comment covering the selection. Uses GitLab's `position[line_range][start]` and `position[line_range][end]` for range comments.
+- Works in both regular diff view and AI review triage view (adds a manual comment alongside Claude's drafts).
+
 ### Comment Threads
 
 Floating window showing full discussion thread with:
