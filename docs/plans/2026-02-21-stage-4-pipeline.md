@@ -177,6 +177,19 @@ describe("pipeline.status", function()
       assert.truthy(joined:find("build"))
       assert.truthy(joined:find("compile"))
     end)
+
+    it("returns job line mapping", function()
+      local pipeline = { id = 100, status = "success", duration = 272 }
+      local jobs = {
+        { name = "compile", stage = "build", status = "success", duration = 23 },
+        { name = "unit", stage = "test", status = "success", duration = 72 },
+      }
+      local lines, job_line_map = status.build_pipeline_lines(pipeline, jobs)
+      -- At least 2 jobs should be in the map
+      local count = 0
+      for _ in pairs(job_line_map) do count = count + 1 end
+      assert.equals(2, count)
+    end)
   end)
 end)
 ```
@@ -235,6 +248,7 @@ end
 
 function M.build_pipeline_lines(pipeline, jobs)
   local lines = {}
+  local job_line_map = {}  -- 1-indexed line number -> job
 
   -- Header
   table.insert(lines, string.format(
@@ -264,6 +278,7 @@ function M.build_pipeline_lines(pipeline, jobs)
         job.name,
         M.format_duration(job.duration)
       ))
+      job_line_map[#lines] = job  -- Track the line number for this job
     end
     table.insert(lines, "")
   end
@@ -273,7 +288,7 @@ function M.build_pipeline_lines(pipeline, jobs)
   table.insert(lines, "<CR> view job log  |  [r]etry failed  |  [o]pen in browser")
   table.insert(lines, "[q]uit")
 
-  return lines
+  return lines, job_line_map
 end
 
 return M
@@ -309,6 +324,7 @@ local float = require("glab_review.ui.float")
 local M = {}
 
 function M.view_log(job)
+  vim.notify("Loading job log...", vim.log.levels.INFO)
   local base_url, project = git.detect_project()
   if not base_url or not project then return end
   local encoded = client.encode_project(project)
@@ -321,6 +337,16 @@ function M.view_log(job)
 
   local raw = type(result.data) == "string" and result.data or (result.data and vim.json.encode(result.data) or "")
   local lines = ansi.strip_lines(raw)
+
+  -- Truncate large logs to last N lines
+  local MAX_LOG_LINES = 5000
+  if #lines > MAX_LOG_LINES then
+    local truncated_notice = string.format("... (showing last %d of %d lines) ...", MAX_LOG_LINES, #lines)
+    local start = #lines - MAX_LOG_LINES + 2  -- +2 to make room for notice + blank
+    lines = vim.list_slice(lines, start)
+    table.insert(lines, 1, truncated_notice)
+    table.insert(lines, 2, "")
+  end
 
   if #lines == 0 then
     lines = { "(no log output)" }
@@ -397,6 +423,7 @@ local jobs_mod = require("glab_review.pipeline.jobs")
 local M = {}
 
 function M.open(mr)
+  vim.notify("Loading pipeline...", vim.log.levels.INFO)
   local base_url, project = git.detect_project()
   if not base_url or not project then
     vim.notify("Could not detect GitLab project", vim.log.levels.ERROR)
@@ -426,7 +453,7 @@ function M.open(mr)
   end
 
   -- Build and display
-  local lines = status.build_pipeline_lines(pipe_result.data, jobs)
+  local lines, job_line_map = status.build_pipeline_lines(pipe_result.data, jobs)
   local width = math.min(70, vim.o.columns - 10)
   local height = math.min(#lines, vim.o.lines - 6)
 
@@ -447,26 +474,14 @@ function M.open(mr)
     title_pos = "center",
   })
 
-  -- Store job data for keymaps
-  local stages = status.group_jobs_by_stage(jobs)
-  local job_line_map = {}  -- map buffer line -> job
-
-  -- Build line-to-job mapping (count lines matching job format)
-  local line_num = 0
-  for _, line in ipairs(lines) do
-    line_num = line_num + 1
-    for _, stage in ipairs(stages) do
-      for _, job in ipairs(stage.jobs) do
-        if line:find(job.name, 1, true) then
-          job_line_map[line_num] = job
-        end
-      end
-    end
-  end
-
   local map_opts = { buffer = buf, nowait = true }
   vim.keymap.set("n", "q", function()
     vim.api.nvim_win_close(win, true)
+  end, map_opts)
+
+  vim.keymap.set("n", "R", function()
+    vim.api.nvim_win_close(win, true)
+    M.open(mr)
   end, map_opts)
 
   vim.keymap.set("n", "<CR>", function()
@@ -545,3 +560,7 @@ git commit -m "feat: add pipeline view with job logs and retry"
 - [ ] `o` opens pipeline in browser
 - [ ] `:GlabReviewPipeline` command works
 - [ ] `p` from MR detail opens pipeline view
+- [ ] Job line mapping uses index-based tracking, not substring search
+- [ ] Large job logs truncated to last 5000 lines with notice
+- [ ] Loading indicators shown for pipeline and job log fetching
+- [ ] `R` keymap refreshes pipeline view

@@ -90,6 +90,20 @@ git add lua/glab_review/ui/highlight.lua tests/glab_review/ui/highlight_spec.lua
 git commit -m "feat: define diff and comment highlight groups"
 ```
 
+**Important:** `highlight.setup()` should be called once during plugin initialization (in `init.lua`'s `M.setup()`) and again on the `ColorScheme` autocommand, NOT per-render. Add this to `init.lua` setup:
+
+```lua
+function M.setup(opts)
+  require("glab_review.config").setup(opts)
+  require("glab_review.ui.highlight").setup()
+  vim.api.nvim_create_autocmd("ColorScheme", {
+    callback = function() require("glab_review.ui.highlight").setup() end,
+  })
+end
+```
+
+Do NOT call `highlight.setup()` inside `render_file_diff` (or any per-render path). The `highlight` require can also be removed from `diff.lua` if it is only used for `setup()`.
+
 ---
 
 ### Task 2: Diff Parser
@@ -253,6 +267,11 @@ function M.word_diff(old_text, new_text)
     new_end = #new_text - suffix_len,
   }
 end
+
+-- **Known limitation:** The common-prefix/suffix word_diff approach fails for mid-line
+-- insertions (e.g. "abc" -> "aXbc" highlights the wrong region). A future improvement
+-- could use word-level tokenization (split on word boundaries, then diff the token arrays).
+-- For now this is acceptable for most cases.
 
 --- Build display lines for hunks with configurable context
 function M.build_display(hunks, context_lines)
@@ -482,6 +501,18 @@ describe("mr.diff", function()
       assert.truthy(text:find("hidden"))
     end)
   end)
+
+  describe("LINE_NR_WIDTH", function()
+    it("line number prefix is exactly LINE_NR_WIDTH chars", function()
+      local text = diff.format_line_number(10, 12)
+      assert.equals(14, #text)
+    end)
+
+    it("line number prefix width is consistent for large numbers", function()
+      local text = diff.format_line_number(9999, 9999)
+      assert.equals(14, #text)
+    end)
+  end)
 end)
 ```
 
@@ -502,7 +533,7 @@ local split = require("glab_review.ui.split")
 local config = require("glab_review.config")
 local M = {}
 
-local LINE_NR_WIDTH = 12  -- "  10 | 12  "
+local LINE_NR_WIDTH = 14  -- "%4d | %-4d  " => 4 + 3 + 4 + 3 = 14 chars
 
 function M.format_line_number(old_nr, new_nr)
   local old = old_nr and string.format("%4d", old_nr) or "    "
@@ -520,7 +551,6 @@ function M.render_file_diff(buf, file_diff, mr, discussions)
   local hunks = parser.parse_hunks(file_diff.diff)
   local display = parser.build_display(hunks, context)
 
-  highlight.setup()
   local ns = vim.api.nvim_create_namespace("glab_review_diff")
 
   -- Build buffer lines and track highlights
@@ -803,6 +833,21 @@ function M.setup_keymaps(layout, state)
   vim.keymap.set("n", "<CR>", function()
     M.expand_hidden(layout, state)
   end, vim.tbl_extend("force", opts, { buffer = layout.main_buf }))
+
+  -- Refresh: re-fetch diffs and discussions, re-render
+  for _, buf in ipairs({ layout.main_buf, layout.sidebar_buf }) do
+    vim.keymap.set("n", "R", function()
+      local base_url, project = git.detect_project()
+      if not base_url or not project then return end
+      local encoded = client.encode_project(project)
+      state.diffs = client.paginate_all(base_url, endpoints.mr_diffs(encoded, state.mr.iid)) or state.diffs
+      state.discussions = client.paginate_all(base_url, endpoints.discussions(encoded, state.mr.iid)) or state.discussions
+      M.render_sidebar(layout.sidebar_buf, state)
+      if #state.diffs > 0 then
+        state.line_data = M.render_file_diff(layout.main_buf, state.diffs[state.current_file_idx], state.mr, state.discussions)
+      end
+    end, vim.tbl_extend("force", opts, { buffer = buf }))
+  end
 end
 
 function M.create_comment_at_cursor(layout, state)
@@ -816,7 +861,7 @@ function M.create_comment_at_cursor(layout, state)
 
   local file_diff = state.diffs[state.current_file_idx]
   local comment_mod = require("glab_review.mr.comment")
-  comment_mod.create_inline(state.mr, file_diff.new_path or file_diff.old_path, data.old_line, data.new_line)
+  comment_mod.create_inline(state.mr, file_diff.old_path, file_diff.new_path, data.old_line, data.new_line)
 end
 
 function M.create_comment_range(layout, state, start_buf_line, end_buf_line)
@@ -832,10 +877,9 @@ function M.create_comment_range(layout, state, start_buf_line, end_buf_line)
   end
 
   local file_diff = state.diffs[state.current_file_idx]
-  local file_path = file_diff.new_path or file_diff.old_path
   local comment_mod = require("glab_review.mr.comment")
   comment_mod.create_inline_range(
-    state.mr, file_path,
+    state.mr, file_diff.old_path, file_diff.new_path,
     { old_line = start_data.old_line, new_line = start_data.new_line },
     { old_line = end_data.old_line, new_line = end_data.new_line }
   )
@@ -844,10 +888,64 @@ end
 function M.expand_hidden(layout, state)
   local cursor = vim.api.nvim_win_get_cursor(layout.main_win)
   local line_idx = cursor[1]
-  if state.line_data and state.line_data[line_idx] and state.line_data[line_idx].type == "hidden" then
-    -- Re-render with expanded lines
-    -- For now, re-render with context = 999 (show all)
-    vim.notify("Expand hidden lines (TODO: implement targeted expand)", vim.log.levels.INFO)
+  local data = state.line_data and state.line_data[line_idx]
+  if not data or data.type ~= "hidden" then return end
+
+  -- Re-render the current file's diff with the hidden hunk expanded
+  local file_diff = state.diffs[state.current_file_idx]
+  local hunks = parser.parse_hunks(file_diff.diff)
+  local hunk = hunks[data.hunk_idx]
+  if not hunk then return end
+
+  -- Insert the hidden lines into the buffer at the cursor position
+  local new_lines = {}
+  local new_data = {}
+  for i = data.start_idx, data.end_idx do
+    local item = hunk.lines[i]
+    if item then
+      local prefix = M.format_line_number(item.old_line, item.new_line)
+      table.insert(new_lines, prefix .. item.text)
+      table.insert(new_data, {
+        type = item.type,
+        old_line = item.old_line,
+        new_line = item.new_line,
+        text = item.text,
+        hunk_idx = data.hunk_idx,
+      })
+    end
+  end
+
+  -- Replace the hidden line with expanded content
+  vim.bo[layout.main_buf].modifiable = true
+  vim.api.nvim_buf_set_lines(layout.main_buf, line_idx - 1, line_idx, false, new_lines)
+  vim.bo[layout.main_buf].modifiable = false
+
+  -- Update line_data: replace the hidden entry with expanded entries
+  local updated = {}
+  for i = 1, line_idx - 1 do
+    table.insert(updated, state.line_data[i])
+  end
+  for _, d in ipairs(new_data) do
+    table.insert(updated, d)
+  end
+  for i = line_idx + 1, #state.line_data do
+    table.insert(updated, state.line_data[i])
+  end
+  state.line_data = updated
+
+  -- Apply highlights to new lines
+  local ns = vim.api.nvim_create_namespace("glab_review_diff")
+  for j, d in ipairs(new_data) do
+    local buf_line = line_idx - 1 + j - 1
+    if d.type == "add" then
+      vim.api.nvim_buf_set_extmark(layout.main_buf, ns, buf_line, 0, {
+        line_hl_group = "GlabReviewDiffAdd",
+      })
+    elseif d.type == "delete" then
+      vim.api.nvim_buf_set_extmark(layout.main_buf, ns, buf_line, 0, {
+        line_hl_group = "GlabReviewDiffDelete",
+      })
+    end
   end
 end
 
@@ -1068,7 +1166,7 @@ function M.resolve_toggle(disc, mr, callback)
 end
 
 --- Single-line comment (normal mode `cc`)
-function M.create_inline(mr, file_path, old_line, new_line)
+function M.create_inline(mr, old_path, new_path, old_line, new_line)
   vim.ui.input({ prompt = "Comment: " }, function(input)
     if not input or input == "" then return end
 
@@ -1081,8 +1179,8 @@ function M.create_inline(mr, file_path, old_line, new_line)
       base_sha = mr.diff_refs.base_sha,
       head_sha = mr.diff_refs.head_sha,
       start_sha = mr.diff_refs.start_sha,
-      new_path = file_path,
-      old_path = file_path,
+      new_path = new_path,
+      old_path = old_path,
     }
     if new_line then position.new_line = new_line end
     if old_line then position.old_line = old_line end
@@ -1104,7 +1202,7 @@ end
 
 --- Multi-line range comment (visual mode select + `cc`)
 --- Uses GitLab's position[line_range] for range comments.
-function M.create_inline_range(mr, file_path, start_pos, end_pos)
+function M.create_inline_range(mr, old_path, new_path, start_pos, end_pos)
   vim.ui.input({ prompt = "Comment (range): " }, function(input)
     if not input or input == "" then return end
 
@@ -1114,14 +1212,14 @@ function M.create_inline_range(mr, file_path, start_pos, end_pos)
 
     -- Build line_range start/end using the line type:
     -- added line -> new_line only; deleted -> old_line only; context -> both
+    -- Note: line_code is NOT sent — it would need <sha>_<old>_<new> format and
+    -- is not required for position-based range comments.
     local function build_line_ref(pos)
       local ref = { type = "new" }
       if pos.new_line then
-        ref.line_code = pos.new_line
         ref.type = "new"
         ref.new_line = pos.new_line
       elseif pos.old_line then
-        ref.line_code = pos.old_line
         ref.type = "old"
         ref.old_line = pos.old_line
       end
@@ -1133,8 +1231,8 @@ function M.create_inline_range(mr, file_path, start_pos, end_pos)
       base_sha = mr.diff_refs.base_sha,
       head_sha = mr.diff_refs.head_sha,
       start_sha = mr.diff_refs.start_sha,
-      new_path = file_path,
-      old_path = file_path,
+      new_path = new_path,
+      old_path = old_path,
       -- Single anchor line (GitLab requires new_line or old_line at top level too)
       new_line = end_pos.new_line,
       old_line = end_pos.old_line,
@@ -1380,3 +1478,9 @@ git commit -m "feat: wire diff view and approve into MR detail flow"
 - [ ] `]f`/`[f` file nav, `]c`/`[c` comment nav, `cc` new comment
 - [ ] Approve, merge, close MR actions
 - [ ] Full flow: `:GlabReview` -> pick -> detail -> diff -> comment -> approve
+- [ ] `line_code` not sent in range comment positions
+- [ ] Renamed files correctly track old_path and new_path
+- [ ] Hidden lines expand inline on `<CR>` (not just a notification)
+- [ ] LINE_NR_WIDTH matches actual format_line_number output
+- [ ] Highlight groups set up once at init + on ColorScheme
+- [ ] `R` keymap refreshes diff view data

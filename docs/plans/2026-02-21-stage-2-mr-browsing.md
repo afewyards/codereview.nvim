@@ -128,6 +128,7 @@ end
 
 function M.fetch(opts, callback)
   opts = opts or {}
+  vim.notify("Fetching merge requests...", vim.log.levels.INFO)
   local base_url, project = git.detect_project()
   if not base_url or not project then
     callback(nil, "Could not detect GitLab project")
@@ -387,6 +388,8 @@ git commit -m "feat: add fzf-lua picker adapter"
 **Files:**
 - Create: `lua/glab_review/picker/snacks.lua`
 
+> **Note:** Verify the snacks.picker API against the actual snacks.nvim source before implementing. The API below is based on documented examples but may need adjustment. Key things to verify: `snacks.picker()` constructor signature, `items` vs `finder` parameter name, `confirm` callback signature, and `picker:close()` method.
+
 **Step 1: Implement snacks adapter**
 
 ```lua
@@ -546,6 +549,8 @@ describe("mr.detail", function()
         head_pipeline = { status = "success" },
         description = "Fixes the bug",
         web_url = "https://gitlab.com/group/project/-/merge_requests/42",
+        approved_by = { { user = { username = "reviewer1" } } },
+        approvals_before_merge = 2,
       }
       local lines = detail.build_header_lines(mr)
       assert.truthy(#lines > 0)
@@ -554,6 +559,7 @@ describe("mr.detail", function()
       assert.truthy(joined:find("!42"))
       assert.truthy(joined:find("Fix auth token refresh"))
       assert.truthy(joined:find("maria"))
+      assert.truthy(joined:find("Approvals"))
     end)
   end)
 
@@ -636,8 +642,25 @@ function M.build_header_lines(mr)
     "",
     string.format("Author: @%s   Branch: %s -> %s", mr.author.username, mr.source_branch, mr.target_branch or "main"),
     string.format("Status: %s   Pipeline: %s", mr.state, pipeline_icon),
-    string.rep("-", 70),
   }
+
+  -- Approval status
+  local approved_by = mr.approved_by or {}
+  local approvals_required = mr.approvals_before_merge or 0
+  if approvals_required > 0 or #approved_by > 0 then
+    local approver_names = {}
+    for _, a in ipairs(approved_by) do
+      table.insert(approver_names, "@" .. a.user.username)
+    end
+    table.insert(lines, string.format(
+      "Approvals: %d/%d  %s",
+      #approved_by,
+      approvals_required,
+      #approver_names > 0 and table.concat(approver_names, ", ") or ""
+    ))
+  end
+
+  table.insert(lines, string.rep("-", 70))
 
   if mr.description and mr.description ~= "" then
     table.insert(lines, "")
@@ -725,6 +748,7 @@ function M.count_discussions(discussions)
 end
 
 function M.open(mr_entry)
+  vim.notify("Loading MR details...", vim.log.levels.INFO)
   local base_url, project = git.detect_project()
   if not base_url or not project then
     vim.notify("Could not detect GitLab project", vim.log.levels.ERROR)
@@ -760,7 +784,7 @@ function M.open(mr_entry)
     total, unresolved
   ))
   table.insert(lines, "")
-  table.insert(lines, "  [d]iff  [c]omment  [a]pprove  [A]I review  [p]ipeline  [m]erge  [q]uit")
+  table.insert(lines, "  [d]iff  [c]omment  [a]pprove  [A]I review  [p]ipeline  [m]erge  [R]efresh  [q]uit")
 
   -- Open floating window
   local width = math.min(80, vim.o.columns - 10)
@@ -812,6 +836,36 @@ function M.open(mr_entry)
     if mr.web_url then
       vim.ui.open(mr.web_url)
     end
+  end, map_opts)
+  vim.keymap.set("n", "c", function()
+    -- Stage 3: create general comment on MR
+    vim.ui.input({ prompt = "Comment on MR: " }, function(input)
+      if not input or input == "" then return end
+      local base_url, project = git.detect_project()
+      if not base_url or not project then return end
+      local encoded = client.encode_project(project)
+      client.post(base_url, endpoints.discussions(encoded, mr.iid), {
+        body = { body = input },
+      })
+      vim.notify("Comment posted", vim.log.levels.INFO)
+    end)
+  end, map_opts)
+  vim.keymap.set("n", "m", function()
+    vim.ui.select({ "Merge", "Merge when pipeline succeeds", "Cancel" }, {
+      prompt = "Merge MR !%d?" .. mr.iid,
+    }, function(choice)
+      if not choice or choice == "Cancel" then return end
+      local actions = require("glab_review.mr.actions")
+      if choice == "Merge when pipeline succeeds" then
+        actions.merge(mr, { auto_merge = true })
+      else
+        actions.merge(mr)
+      end
+    end)
+  end, map_opts)
+  vim.keymap.set("n", "R", function()
+    vim.api.nvim_win_close(win, true)
+    detail.open(mr_entry)
   end, map_opts)
 end
 
@@ -892,3 +946,7 @@ git commit -m "feat: wire up :GlabReview with picker and detail view"
 - [ ] System notes (approvals, labels, etc.) shown as compact one-liners
 - [ ] `q` closes, `o` opens in browser
 - [ ] Stub keymaps for `d`, `p`, `A`, `a` ready for later stages
+- [ ] `c` keymap posts general comment on MR
+- [ ] `m` keymap triggers merge with options
+- [ ] Approval status shown in detail header
+- [ ] `R` keymap refreshes the current view

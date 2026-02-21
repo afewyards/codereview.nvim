@@ -4,7 +4,11 @@
 
 **Goal:** Scaffold the plugin, build the API client with auth, and verify we can make authenticated GitLab API calls.
 
+**Error handling pattern:** All internal APIs return `nil, err_string` on failure. User-facing surfaces use `vim.notify()` with appropriate log level. This pattern is established in Task 4 (client) and all subsequent stages follow it.
+
 **Architecture:** Pure Lua Neovim plugin. HTTP via plenary.curl. Auth cascade: env var -> glab CLI config -> OAuth2 device flow -> stored token. Project auto-detected from git remote.
+
+**Loading/progress indicators:** Add `vim.notify` progress messages for long operations (API calls). Example: `vim.notify('Fetching MRs...', vim.log.levels.INFO)` before async API calls.
 
 **Tech Stack:** Lua, Neovim API, plenary.nvim, plenary.curl
 
@@ -223,6 +227,15 @@ describe("git.parse_remote", function()
     assert.is_nil(project)
   end)
 end)
+
+describe("git.detect_project", function()
+  it("uses config overrides when set", function()
+    config.setup({ gitlab_url = "https://custom.gitlab.com", project = "my/project" })
+    local url, proj = git.detect_project()
+    assert.equals("https://custom.gitlab.com", url)
+    assert.equals("my/project", proj)
+  end)
+end)
 ```
 
 **Step 2: Run test to verify it fails**
@@ -319,6 +332,9 @@ git commit -m "feat: add git remote parsing and project detection"
 
 ```lua
 -- tests/glab_review/api/client_spec.lua
+-- NOTE: Tests cover sync-safe helpers only (build_url, encode_project, build_headers,
+-- parse_next_page). Async variants (async_get, async_post, etc.) require a running
+-- event loop and are tested via integration tests in later stages.
 local client = require("glab_review.api.client")
 
 describe("api.client", function()
@@ -336,6 +352,18 @@ describe("api.client", function()
 
   describe("build_headers", function()
     it("uses PRIVATE-TOKEN for PAT", function()
+      local headers = client.build_headers("glpat-abc123", "pat")
+      assert.equals("glpat-abc123", headers["PRIVATE-TOKEN"])
+      assert.is_nil(headers["Authorization"])
+    end)
+
+    it("uses Authorization Bearer for OAuth", function()
+      local headers = client.build_headers("oauth-token-xyz", "oauth")
+      assert.equals("Bearer oauth-token-xyz", headers["Authorization"])
+      assert.is_nil(headers["PRIVATE-TOKEN"])
+    end)
+
+    it("defaults to PRIVATE-TOKEN when no token_type given", function()
       local headers = client.build_headers("glpat-abc123")
       assert.equals("glpat-abc123", headers["PRIVATE-TOKEN"])
     end)
@@ -370,6 +398,8 @@ Expected: FAIL
 ```lua
 -- lua/glab_review/api/client.lua
 local curl = require("plenary.curl")
+local async = require("plenary.async")
+local async_util = require("plenary.async.util")
 local M = {}
 
 function M.encode_project(project_path)
@@ -380,11 +410,22 @@ function M.build_url(base_url, path)
   return base_url .. "/api/v4" .. path
 end
 
-function M.build_headers(token)
-  return {
-    ["PRIVATE-TOKEN"] = token,
-    ["Content-Type"] = "application/json",
-  }
+--- Build request headers based on token type.
+--- @param token string The auth token value
+--- @param token_type string|nil "pat" (default) or "oauth"
+function M.build_headers(token, token_type)
+  if token_type == "oauth" then
+    return {
+      ["Authorization"] = "Bearer " .. token,
+      ["Content-Type"] = "application/json",
+    }
+  else
+    -- "pat" or nil — use PRIVATE-TOKEN
+    return {
+      ["PRIVATE-TOKEN"] = token,
+      ["Content-Type"] = "application/json",
+    }
+  end
 end
 
 function M.parse_next_page(headers)
@@ -395,18 +436,11 @@ function M.parse_next_page(headers)
   return nil
 end
 
-function M.request(method, base_url, path, opts)
-  opts = opts or {}
-  local auth = require("glab_review.api.auth")
-  local token = auth.get_token()
-  if not token then
-    return nil, "No authentication token. Run :GlabReviewAuth"
-  end
-
+local function build_params(method, base_url, path, token, token_type, opts)
   local url = M.build_url(base_url, path)
   local params = {
     url = url,
-    headers = M.build_headers(token),
+    headers = M.build_headers(token, token_type),
     method = method,
   }
 
@@ -424,24 +458,10 @@ function M.request(method, base_url, path, opts)
     end
   end
 
-  local response = curl.request(params)
-  if not response then
-    return nil, "Request failed: no response"
-  end
+  return params
+end
 
-  if response.status == 401 then
-    -- Try token refresh
-    local new_token = auth.refresh()
-    if new_token then
-      params.headers = M.build_headers(new_token)
-      response = curl.request(params)
-    end
-  end
-
-  if response.status < 200 or response.status >= 300 then
-    return nil, string.format("HTTP %d: %s", response.status, response.body or "")
-  end
-
+local function process_response(response)
   local body = nil
   if response.body and response.body ~= "" then
     local ok, decoded = pcall(vim.json.decode, response.body)
@@ -460,6 +480,90 @@ function M.request(method, base_url, path, opts)
   }
 end
 
+--- Sync request — ONLY use in tests or non-interactive contexts.
+--- All plugin callers should use M.async_request() instead.
+function M.request(method, base_url, path, opts)
+  opts = opts or {}
+  local auth = require("glab_review.api.auth")
+  local token, token_type = auth.get_token()
+  if not token then
+    return nil, "No authentication token. Run :GlabReviewAuth"
+  end
+
+  local params = build_params(method, base_url, path, token, token_type, opts)
+
+  local response = curl.request(params)
+  if not response then
+    return nil, "Request failed: no response"
+  end
+
+  -- Respect rate limiting
+  if response.status == 429 then
+    local retry_after = tonumber(response.headers and response.headers["retry-after"]) or 5
+    vim.notify(string.format("Rate limited. Retrying in %ds...", retry_after), vim.log.levels.WARN)
+    vim.wait(retry_after * 1000)
+    response = curl.request(params)
+  end
+
+  if response.status == 401 then
+    -- Try token refresh
+    local new_token, new_type = auth.refresh()
+    if new_token then
+      params.headers = M.build_headers(new_token, new_type)
+      response = curl.request(params)
+    end
+  end
+
+  if response.status < 200 or response.status >= 300 then
+    return nil, string.format("HTTP %d: %s", response.status, response.body or "")
+  end
+
+  return process_response(response)
+end
+
+--- Async request — use this for all plugin callers to avoid blocking the UI thread.
+--- Must be called from within a plenary.async coroutine.
+function M.async_request(method, base_url, path, opts)
+  opts = opts or {}
+  local auth = require("glab_review.api.auth")
+  local token, token_type = auth.get_token()
+  if not token then
+    return nil, "No authentication token. Run :GlabReviewAuth"
+  end
+
+  local params = build_params(method, base_url, path, token, token_type, opts)
+
+  local response = async_util.wrap(curl.request, 2)(params)
+  if not response then
+    return nil, "Request failed: no response"
+  end
+
+  -- Respect rate limiting
+  if response.status == 429 then
+    local retry_after = tonumber(response.headers and response.headers["retry-after"]) or 5
+    vim.schedule(function()
+      vim.notify(string.format("Rate limited. Retrying in %ds...", retry_after), vim.log.levels.WARN)
+    end)
+    async_util.sleep(retry_after * 1000)
+    response = async_util.wrap(curl.request, 2)(params)
+  end
+
+  if response.status == 401 then
+    local new_token, new_type = auth.refresh()
+    if new_token then
+      params.headers = M.build_headers(new_token, new_type)
+      response = async_util.wrap(curl.request, 2)(params)
+    end
+  end
+
+  if response.status < 200 or response.status >= 300 then
+    return nil, string.format("HTTP %d: %s", response.status, response.body or "")
+  end
+
+  return process_response(response)
+end
+
+-- Sync variants — ONLY use in tests.
 function M.get(base_url, path, opts)
   return M.request("get", base_url, path, opts)
 end
@@ -476,8 +580,28 @@ function M.delete(base_url, path, opts)
   return M.request("delete", base_url, path, opts)
 end
 
+-- Async variants — use these in all plugin callers (Stage 2+).
+function M.async_get(base_url, path, opts)
+  return M.async_request("get", base_url, path, opts)
+end
+
+function M.async_post(base_url, path, opts)
+  return M.async_request("post", base_url, path, opts)
+end
+
+function M.async_put(base_url, path, opts)
+  return M.async_request("put", base_url, path, opts)
+end
+
+function M.async_delete(base_url, path, opts)
+  return M.async_request("delete", base_url, path, opts)
+end
+
+--- Paginate all pages of a GET request. Uses async_get to avoid blocking the UI.
+--- Must be called from within a plenary.async coroutine.
 function M.paginate_all(base_url, path, opts)
-  opts = opts or {}
+  -- Deep-copy to avoid mutating the caller's opts table.
+  opts = vim.deepcopy(opts or {})
   local all_data = {}
   local page = 1
   local per_page = opts.per_page or 100
@@ -487,7 +611,7 @@ function M.paginate_all(base_url, path, opts)
     opts.query.page = page
     opts.query.per_page = per_page
 
-    local result, err = M.get(base_url, path, opts)
+    local result, err = M.async_get(base_url, path, opts)
     if not result then
       return nil, err
     end
@@ -519,7 +643,7 @@ Expected: PASS
 
 ```bash
 git add lua/glab_review/api/client.lua tests/glab_review/api/client_spec.lua
-git commit -m "feat: add API client with pagination and auth header support"
+git commit -m "feat: add API client with async variants, OAuth Bearer header, 429 handling, and safe pagination"
 ```
 
 ---
@@ -544,17 +668,19 @@ describe("auth", function()
   end)
 
   describe("get_token", function()
-    it("reads from GITLAB_TOKEN env var first", function()
+    it("reads from GITLAB_TOKEN env var first, returns pat type", function()
       vim.env.GITLAB_TOKEN = "test-env-token"
-      local token = auth.get_token()
+      local token, token_type = auth.get_token()
       assert.equals("test-env-token", token)
+      assert.equals("pat", token_type)
       vim.env.GITLAB_TOKEN = nil
     end)
 
-    it("reads from config.token second", function()
+    it("reads from config.token second, returns pat type", function()
       config.setup({ token = "config-token" })
-      local token = auth.get_token()
+      local token, token_type = auth.get_token()
       assert.equals("config-token", token)
+      assert.equals("pat", token_type)
     end)
   end)
 
@@ -606,9 +732,11 @@ Expected: FAIL
 local M = {}
 
 local cached_token = nil
+local cached_token_type = nil  -- "pat" or "oauth"
 
 function M.reset()
   cached_token = nil
+  cached_token_type = nil
 end
 
 --- Minimal YAML parser for glab config (handles the flat hosts structure only)
@@ -724,23 +852,27 @@ function M.store_token(host, token_data)
   end
 end
 
+--- Returns token, token_type. token_type is "pat" or "oauth".
+--- All callers should unpack both values and pass token_type to build_headers().
 function M.get_token()
   if cached_token then
-    return cached_token
+    return cached_token, cached_token_type
   end
 
   -- 1. GITLAB_TOKEN env var
   local env_token = os.getenv("GITLAB_TOKEN")
   if env_token and env_token ~= "" then
     cached_token = env_token
-    return cached_token
+    cached_token_type = "pat"
+    return cached_token, cached_token_type
   end
 
   -- 2. Config token
   local config = require("glab_review.config").get()
   if config.token then
     cached_token = config.token
-    return cached_token
+    cached_token_type = "pat"
+    return cached_token, cached_token_type
   end
 
   -- 3. glab CLI config
@@ -752,7 +884,8 @@ function M.get_token()
       local glab_token = M.read_glab_config(host)
       if glab_token then
         cached_token = glab_token
-        return cached_token
+        cached_token_type = "pat"
+        return cached_token, cached_token_type
       end
     end
   end
@@ -761,16 +894,18 @@ function M.get_token()
   local stored = M.read_stored_token()
   if stored then
     cached_token = stored
-    return cached_token
+    cached_token_type = "oauth"
+    return cached_token, cached_token_type
   end
 
-  return nil
+  return nil, nil
 end
 
 function M.refresh()
   -- Token refresh for OAuth - implemented in Task 6
   cached_token = nil
-  return nil
+  cached_token_type = nil
+  return nil, nil
 end
 
 return M
@@ -948,6 +1083,7 @@ function M.start_device_flow(base_url, callback)
             local host = base_url:match("https?://(.+)")
             M.store_token(host, token_data)
             cached_token = token_data.access_token
+            cached_token_type = "oauth"
             vim.schedule(function()
               float.close(win_id)
               callback(token_data.access_token)
@@ -962,10 +1098,11 @@ end
 
 function M.refresh()
   cached_token = nil
+  cached_token_type = nil
   local git = require("glab_review.git")
   local base_url = git.detect_project()
   if not base_url then
-    return nil
+    return nil, nil
   end
 
   local host = base_url:match("https?://(.+)")
@@ -973,11 +1110,11 @@ function M.refresh()
   local path = data_dir .. "/glab-review/tokens.json"
 
   local f = io.open(path, "r")
-  if not f then return nil end
+  if not f then return nil, nil end
   local ok, stored = pcall(vim.json.decode, f:read("*a"))
   f:close()
   if not ok or not stored or not stored[host] or not stored[host].refresh_token then
-    return nil
+    return nil, nil
   end
 
   local curl = require("plenary.curl")
@@ -992,10 +1129,11 @@ function M.refresh()
     local token_data = vim.json.decode(resp.body)
     M.store_token(host, token_data)
     cached_token = token_data.access_token
-    return cached_token
+    cached_token_type = "oauth"
+    return cached_token, cached_token_type
   end
 
-  return nil
+  return nil, nil
 end
 ```
 
@@ -1298,6 +1436,8 @@ Open Neovim in a git repo with a GitLab remote:
 1. `:GlabReviewAuth` — should start device flow or report already authenticated
 2. `:GlabReview` — should show "not yet implemented" message
 
+**Note:** Add a test that verifies commands are registered after plugin load (check `vim.api.nvim_get_commands({})`).
+
 **Step 4: Commit**
 
 ```bash
@@ -1317,3 +1457,7 @@ git commit -m "feat: register commands and wire up :GlabReviewAuth"
 - [ ] OAuth device flow shows floating window, polls, stores token
 - [ ] All endpoint path builders tested
 - [ ] `:GlabReviewAuth` command works end-to-end
+- [ ] Async API variants available (`async_get`, `async_post`, etc.)
+- [ ] OAuth Bearer token header used for OAuth tokens
+- [ ] 429 rate-limit handling with Retry-After
+- [ ] `paginate_all` does not mutate caller's opts

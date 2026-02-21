@@ -179,7 +179,8 @@ function M.run_review(mr, diffs, callback)
 
   vim.notify("Running AI review...", vim.log.levels.INFO)
 
-  vim.fn.jobstart({
+  local done = false  -- Prevent double callback from stdout/exit race
+  local job_id = vim.fn.jobstart({
     cmd,
     "--print",
     "--max-turns", "1",
@@ -190,31 +191,35 @@ function M.run_review(mr, diffs, callback)
     stdout_buffered = true,
     stderr_buffered = true,
     on_stdout = function(_, data)
+      if done then return end
       local output = table.concat(data, "\n")
+      if output == "" then return end  -- Ignore empty stdout
+      done = true
       vim.schedule(function()
         os.remove(tmpfile)
         local suggestions = M.parse_review_output(output)
         callback(suggestions)
       end)
     end,
-    on_stderr = function(_, data)
-      local err = table.concat(data, "\n")
-      if err and err ~= "" then
-        vim.schedule(function()
-          os.remove(tmpfile)
-          callback(nil, "Claude CLI error: " .. err)
-        end)
-      end
-    end,
     on_exit = function(_, code)
-      if code ~= 0 then
-        vim.schedule(function()
-          os.remove(tmpfile)
+      if done then return end
+      done = true
+      vim.schedule(function()
+        os.remove(tmpfile)
+        if code ~= 0 then
           callback(nil, "Claude CLI exited with code " .. code)
-        end)
-      end
+        else
+          -- stdout was empty but exit was clean — no suggestions
+          callback({})
+        end
+      end)
     end,
   })
+  if job_id <= 0 then
+    os.remove(tmpfile)
+    callback(nil, "Failed to start Claude CLI. Is '" .. cmd .. "' in your PATH?")
+    return
+  end
 end
 
 return M
@@ -707,6 +712,27 @@ function M.setup_keymaps(state)
     vim.keymap.set("n", "]c", function() M.navigate(state, 1) end, buf_opts)
     vim.keymap.set("n", "[c", function() M.navigate(state, -1) end, buf_opts)
 
+    -- Allow creating manual comments from triage view
+    vim.keymap.set("n", "cc", function()
+      local cursor = vim.api.nvim_win_get_cursor(layout.main_win)
+      local buf_line = cursor[1]
+      local data = state.line_data and state.line_data[buf_line]
+      if not data or data.type == "header" or data.type == "hidden" then
+        vim.notify("Cannot comment on this line", vim.log.levels.WARN)
+        return
+      end
+      local current = state.suggestions[state.current_idx]
+      if not current then return end
+      -- Find the file_diff for the current suggestion
+      for _, file_diff in ipairs(state.diffs) do
+        if file_diff.new_path == current.file or file_diff.old_path == current.file then
+          local comment_mod = require("glab_review.mr.comment")
+          comment_mod.create_inline(state.mr, file_diff.old_path, file_diff.new_path, data.old_line, data.new_line)
+          break
+        end
+      end
+    end, buf_opts)
+
     vim.keymap.set("n", "q", function() split.close(layout) end, buf_opts)
   end
 end
@@ -795,7 +821,14 @@ function M.ai_review()
 end
 
 function M.submit()
-  vim.notify("Use [S] in the AI review triage view to submit", vim.log.levels.INFO)
+  local buf = vim.api.nvim_get_current_buf()
+  local mr = vim.b[buf].glab_review_mr
+  if not mr then
+    vim.notify("No MR context. Open an MR first with :GlabReview", vim.log.levels.WARN)
+    return
+  end
+  local submit_mod = require("glab_review.review.submit")
+  submit_mod.bulk_publish(mr)
 end
 ```
 
@@ -947,11 +980,18 @@ function M.get_current_branch()
   return vim.trim(result[1])
 end
 
-function M.open_editor(title, description, mr_opts, callback)
+function M.open_editor(title, description, target_branch, mr_opts, callback)
   local buf = vim.api.nvim_create_buf(false, true)
   local lines = {
     "# MR Title (edit and save with <CR>):",
     title,
+    "",
+    "# Target Branch:",
+    target_branch,
+    "",
+    "# Labels (comma-separated):",
+    "",
+    "# Assignee (username):",
     "",
     "# Description:",
     "",
@@ -980,21 +1020,34 @@ function M.open_editor(title, description, mr_opts, callback)
 
   vim.keymap.set("n", "<CR>", function()
     local buf_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-    -- Parse: line 2 is title, lines after "# Description:" are description
+    -- Parse: line 2 is title, then target branch, labels, assignee, then description
     local new_title = buf_lines[2] or title
+    local metadata = {}
     local desc_lines = {}
-    local in_desc = false
+    local section = nil
     for _, line in ipairs(buf_lines) do
-      if in_desc then
-        table.insert(desc_lines, line)
+      if line:find("^# Target Branch:") then
+        section = "target"
+      elseif line:find("^# Labels") then
+        section = "labels"
+      elseif line:find("^# Assignee") then
+        section = "assignee"
       elseif line:find("^# Description:") then
-        in_desc = true
+        section = "desc"
+      elseif section == "labels" and vim.trim(line) ~= "" then
+        metadata.labels = vim.trim(line)
+        section = nil
+      elseif section == "assignee" and vim.trim(line) ~= "" then
+        metadata.assignee = vim.trim(line)
+        section = nil
+      elseif section == "desc" then
+        table.insert(desc_lines, line)
       end
     end
     local new_desc = table.concat(desc_lines, "\n")
 
     vim.api.nvim_win_close(win, true)
-    callback(vim.trim(new_title), vim.trim(new_desc))
+    callback(vim.trim(new_title), vim.trim(new_desc), metadata)
   end, { buffer = buf })
 
   vim.keymap.set("n", "q", function()
@@ -1015,14 +1068,32 @@ function M.create(opts)
     return
   end
 
-  local target = opts.target or "main"
-  local diff = M.get_branch_diff(target)
-  if not diff or diff == "" then
-    vim.notify("No diff found against " .. target, vim.log.levels.WARN)
-    return
+  -- Pick target branch
+  local targets = { "main", "master", "develop" }
+  -- Try to detect default branch from remote
+  local default_branch = vim.fn.systemlist({ "git", "symbolic-ref", "refs/remotes/origin/HEAD" })
+  if vim.v.shell_error == 0 and #default_branch > 0 then
+    local db = default_branch[1]:match("refs/remotes/origin/(.+)")
+    if db and not vim.tbl_contains(targets, db) then
+      table.insert(targets, 1, db)
+    end
   end
 
-  -- Run Claude to draft title + description
+  vim.ui.select(targets, { prompt = "Target branch:" }, function(target)
+    if not target then return end
+
+    local diff = M.get_branch_diff(target)
+    if not diff or diff == "" then
+      vim.notify("No diff found against " .. target, vim.log.levels.WARN)
+      return
+    end
+
+    -- Continue with Claude draft...
+    M.draft_with_claude(branch, target, diff, opts)
+  end)
+end
+
+function M.draft_with_claude(branch, target, diff, opts)
   local cfg = config_mod.get()
   local prompt = M.build_mr_prompt(branch, diff)
   local tmpfile = os.tmpname()
@@ -1032,7 +1103,8 @@ function M.create(opts)
 
   vim.notify("Generating MR description...", vim.log.levels.INFO)
 
-  vim.fn.jobstart({
+  local done = false
+  local job_id = vim.fn.jobstart({
     cfg.ai.claude_cmd,
     "--print",
     "--max-turns", "1",
@@ -1040,39 +1112,53 @@ function M.create(opts)
   }, {
     stdout_buffered = true,
     on_stdout = function(_, data)
+      if done then return end
       local output = table.concat(data, "\n")
+      if output == "" then return end
+      done = true
       vim.schedule(function()
         os.remove(tmpfile)
         local title, description = M.parse_mr_draft(output)
-
-        M.open_editor(title, description, opts, function(final_title, final_desc)
-          M.submit_mr(branch, target, final_title, final_desc)
+        M.open_editor(title, description, target, opts, function(final_title, final_desc, metadata)
+          M.submit_mr(branch, target, final_title, final_desc, metadata)
         end)
       end)
     end,
     on_exit = function(_, code)
-      if code ~= 0 then
-        vim.schedule(function()
-          os.remove(tmpfile)
-          vim.notify("Claude CLI failed", vim.log.levels.ERROR)
-        end)
-      end
+      if done then return end
+      done = true
+      vim.schedule(function()
+        os.remove(tmpfile)
+        if code ~= 0 then
+          vim.notify("Claude CLI failed with code " .. code, vim.log.levels.ERROR)
+        end
+      end)
     end,
   })
+  if job_id <= 0 then
+    os.remove(tmpfile)
+    vim.notify("Failed to start Claude CLI. Is '" .. cfg.ai.claude_cmd .. "' in your PATH?", vim.log.levels.ERROR)
+    return
+  end
 end
 
-function M.submit_mr(source_branch, target_branch, title, description)
+function M.submit_mr(source_branch, target_branch, title, description, metadata)
+  metadata = metadata or {}
   local base_url, project = git.detect_project()
   if not base_url or not project then return end
   local encoded = client.encode_project(project)
 
+  local body = {
+    source_branch = source_branch,
+    target_branch = target_branch,
+    title = title,
+    description = description,
+  }
+  if metadata.labels then body.labels = metadata.labels end
+  if metadata.assignee then body.assignee_id = metadata.assignee end
+
   local result, err = client.post(base_url, endpoints.mr_list(encoded), {
-    body = {
-      source_branch = source_branch,
-      target_branch = target_branch,
-      title = title,
-      description = description,
-    },
+    body = body,
   })
 
   if not result then
@@ -1129,3 +1215,9 @@ git commit -m "feat: add MR creation with Claude-drafted title and description"
 - [ ] Claude drafts title + description from branch diff
 - [ ] Editable float for reviewing/editing the draft before submission
 - [ ] MR created via API, opens in detail view
+- [ ] Claude CLI callbacks use completion flag to prevent double invocation
+- [ ] `jobstart` return value checked; user notified if Claude not in PATH
+- [ ] `cc` keymap available in triage UI for manual comments
+- [ ] Target branch picker with auto-detected default branch
+- [ ] MR creation editor includes labels and assignee fields
+- [ ] `:GlabReviewSubmit` works standalone to publish existing drafts
