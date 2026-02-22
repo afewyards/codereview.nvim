@@ -1,4 +1,5 @@
 local M = {}
+local config = require("codereview.config")
 
 -- LINE_NR_WIDTH: "%5d | %-5d " = 5+3+5+1 = 14 chars
 local LINE_NR_WIDTH = 14
@@ -113,7 +114,7 @@ function M.place_comment_signs(buf, line_data, discussions, file_diff)
               local status_str = resolved and " Resolved " or " Unresolved "
               local time_str = format_time_short(first.created_at)
               local header_meta = time_str ~= "" and (" · " .. time_str) or ""
-              local header_text = "@" .. first.author.username
+              local header_text = "@" .. first.author
               local fill = math.max(0, 62 - #header_text - #header_meta - #status_str)
 
               local virt_lines = {}
@@ -144,7 +145,7 @@ function M.place_comment_signs(buf, line_data, discussions, file_diff)
                   table.insert(virt_lines, { { "  │", bdr } })
                   table.insert(virt_lines, {
                     { "  │  ↪ ", bdr },
-                    { "@" .. reply.author.username, aut },
+                    { "@" .. reply.author, aut },
                     { rmeta, bdr },
                   })
                   for _, rl in ipairs(wrap_text(reply.body, 58)) do
@@ -184,22 +185,22 @@ end
 
 -- ─── Diff rendering ───────────────────────────────────────────────────────────
 
-function M.render_file_diff(buf, file_diff, mr, discussions, context)
+function M.render_file_diff(buf, file_diff, review, discussions, context)
   local parser = require("codereview.mr.diff_parser")
   if not context then
-    context = require("codereview.config").get().diff.context
+    context = config.get().diff.context
   end
 
   -- Try local git diff with more context lines; fall back to API diff
   local diff_text = file_diff.diff or ""
-  if mr.diff_refs and mr.diff_refs.base_sha and mr.diff_refs.head_sha then
+  if review.base_sha and review.head_sha then
     local path = file_diff.new_path or file_diff.old_path
     if path then
       local result = vim.fn.system({
         "git", "diff",
         "-U" .. context,
-        mr.diff_refs.base_sha,
-        mr.diff_refs.head_sha,
+        review.base_sha,
+        review.head_sha,
         "--", path,
       })
       if vim.v.shell_error == 0 and result ~= "" then
@@ -214,9 +215,9 @@ function M.render_file_diff(buf, file_diff, mr, discussions, context)
   -- Get file line count for BOF/EOF detection
   local file_line_count
   local file_path = file_diff.new_path or file_diff.old_path
-  if file_path and mr.diff_refs and mr.diff_refs.head_sha then
+  if file_path and review.head_sha then
     local wc = vim.fn.system({
-      "git", "show", mr.diff_refs.head_sha .. ":" .. file_path,
+      "git", "show", review.head_sha .. ":" .. file_path,
     })
     if vim.v.shell_error == 0 then
       file_line_count = select(2, wc:gsub("\n", "\n"))
@@ -319,9 +320,8 @@ end
 
 -- ─── All-files scroll view ────────────────────────────────────────────────────
 
-function M.render_all_files(buf, files, mr, discussions, context, file_contexts)
+function M.render_all_files(buf, files, review, discussions, context, file_contexts)
   local parser = require("codereview.mr.diff_parser")
-  local config = require("codereview.config")
   context = context or config.get().diff.context
   file_contexts = file_contexts or {}
 
@@ -349,12 +349,12 @@ function M.render_all_files(buf, files, mr, discussions, context, file_contexts)
     -- Parse and build display for this file (per-file context overrides global)
     local file_ctx = file_contexts[file_idx] or context
     local diff_text = file_diff.diff or ""
-    if mr.diff_refs and mr.diff_refs.base_sha and mr.diff_refs.head_sha then
+    if review.base_sha and review.head_sha then
       local fpath = file_diff.new_path or file_diff.old_path
       if fpath then
         local result = vim.fn.system({
           "git", "diff", "-U" .. file_ctx,
-          mr.diff_refs.base_sha, mr.diff_refs.head_sha, "--", fpath,
+          review.base_sha, review.head_sha, "--", fpath,
         })
         if vim.v.shell_error == 0 and result ~= "" then
           diff_text = result
@@ -521,7 +521,7 @@ function M.render_all_files(buf, files, mr, discussions, context, file_contexts)
                 local status_str = resolved and " Resolved " or " Unresolved "
                 local time_str = format_time_short(first.created_at)
                 local header_meta = time_str ~= "" and (" · " .. time_str) or ""
-                local header_text = "@" .. first.author.username
+                local header_text = "@" .. first.author
                 local fill = math.max(0, 62 - #header_text - #header_meta - #status_str)
 
                 local virt_lines = {}
@@ -540,7 +540,7 @@ function M.render_all_files(buf, files, mr, discussions, context, file_contexts)
                     local rmeta = rt ~= "" and (" · " .. rt) or ""
                     table.insert(virt_lines, { { "  │", bdr } })
                     table.insert(virt_lines, {
-                      { "  │  ↪ ", bdr }, { "@" .. reply.author.username, aut }, { rmeta, bdr },
+                      { "  │  ↪ ", bdr }, { "@" .. reply.author, aut }, { rmeta, bdr },
                     })
                     for _, rl in ipairs(wrap_text(reply.body, 58)) do
                       table.insert(virt_lines, { { "  │    ", bdr }, { rl, body_hl } })
@@ -579,7 +579,7 @@ function M.render_summary(buf, state)
   local detail = require("codereview.mr.detail")
   local markdown_mod = require("codereview.ui.markdown")
 
-  local lines = detail.build_header_lines(state.mr)
+  local lines = detail.build_header_lines(state.review)
   local activity_lines = detail.build_activity_lines(state.discussions)
   for _, line in ipairs(activity_lines) do
     table.insert(lines, line)
@@ -613,16 +613,15 @@ end
 
 function M.render_sidebar(buf, state)
   local list = require("codereview.mr.list")
-  local mr = state.mr
+  local review = state.review
   local files = state.files or {}
 
   local lines = {}
 
-  -- MR header
-  table.insert(lines, string.format("MR !%d", mr.iid or 0))
-  table.insert(lines, (mr.title or ""):sub(1, 28))
-  local pipeline_status = mr.head_pipeline and mr.head_pipeline.status or nil
-  table.insert(lines, list.pipeline_icon(pipeline_status) .. " " .. (mr.source_branch or ""))
+  -- Review header
+  table.insert(lines, string.format("#%d", review.id or 0))
+  table.insert(lines, (review.title or ""):sub(1, 28))
+  table.insert(lines, list.pipeline_icon(review.pipeline_status) .. " " .. (review.source_branch or ""))
   table.insert(lines, string.rep("─", 30))
   table.insert(lines, string.format("%d files changed", #files))
   local mode_str = state.scroll_mode and "All files" or "Per file"
@@ -734,7 +733,7 @@ function M.create_comment_at_cursor(layout, state)
   local file = state.files[state.current_file]
   local comment = require("codereview.mr.comment")
   comment.create_inline(
-    state.mr,
+    state.review,
     file.old_path,
     file.new_path,
     data.item.old_line,
@@ -757,7 +756,7 @@ function M.create_comment_range(layout, state)
   local file = state.files[state.current_file]
   local comment = require("codereview.mr.comment")
   comment.create_inline_range(
-    state.mr,
+    state.review,
     file.old_path,
     file.new_path,
     { old_line = start_data.item.old_line, new_line = start_data.item.new_line },
@@ -773,7 +772,7 @@ local function nav_file(layout, state, delta)
   if next_idx < 1 or next_idx > #files then return end
   state.current_file = next_idx
   M.render_sidebar(layout.sidebar_buf, state)
-  local line_data, row_disc = M.render_file_diff(layout.main_buf, files[next_idx], state.mr, state.discussions, state.context)
+  local line_data, row_disc = M.render_file_diff(layout.main_buf, files[next_idx], state.review, state.discussions, state.context)
   state.line_data_cache[next_idx] = line_data
   state.row_disc_cache[next_idx] = row_disc
   vim.api.nvim_win_set_cursor(layout.main_win, { 1, 0 })
@@ -800,7 +799,7 @@ local function switch_to_file(layout, state, idx)
   state.current_file = idx
   M.render_sidebar(layout.sidebar_buf, state)
   local ld, rd = M.render_file_diff(
-    layout.main_buf, state.files[idx], state.mr, state.discussions, state.context)
+    layout.main_buf, state.files[idx], state.review, state.discussions, state.context)
   state.line_data_cache[idx] = ld
   state.row_disc_cache[idx] = rd
 end
@@ -859,7 +858,7 @@ local function adjust_context(layout, state, delta)
   state.context = math.max(1, state.context + delta)
   if state.scroll_mode then
     local anchor = M.find_anchor(state.scroll_line_data, cursor_row)
-    local result = M.render_all_files(layout.main_buf, state.files, state.mr, state.discussions, state.context, state.file_contexts)
+    local result = M.render_all_files(layout.main_buf, state.files, state.review, state.discussions, state.context, state.file_contexts)
     state.file_sections = result.file_sections
     state.scroll_line_data = result.line_data
     state.scroll_row_disc = result.row_discussions
@@ -871,7 +870,7 @@ local function adjust_context(layout, state, delta)
     local file = state.files and state.files[state.current_file]
     if not file then return end
     local ld, row_disc = M.render_file_diff(
-      layout.main_buf, file, state.mr, state.discussions, state.context)
+      layout.main_buf, file, state.review, state.discussions, state.context)
     state.line_data_cache[state.current_file] = ld
     state.row_disc_cache[state.current_file] = row_disc
     local row = M.find_row_for_anchor(ld, anchor, state.current_file)
@@ -969,7 +968,7 @@ local function toggle_scroll_mode(layout, state)
 
     local file = state.files[state.current_file]
     if file then
-      local ld, rd = M.render_file_diff(layout.main_buf, file, state.mr, state.discussions, state.context)
+      local ld, rd = M.render_file_diff(layout.main_buf, file, state.review, state.discussions, state.context)
       state.line_data_cache[state.current_file] = ld
       state.row_disc_cache[state.current_file] = rd
       local row = M.find_row_for_anchor(ld, anchor, state.current_file)
@@ -981,7 +980,7 @@ local function toggle_scroll_mode(layout, state)
     local anchor = M.find_anchor(per_file_ld or {}, cursor_row, state.current_file)
     state.scroll_mode = true
 
-    local result = M.render_all_files(layout.main_buf, state.files, state.mr, state.discussions, state.context, state.file_contexts)
+    local result = M.render_all_files(layout.main_buf, state.files, state.review, state.discussions, state.context, state.file_contexts)
     state.file_sections = result.file_sections
     state.scroll_line_data = result.line_data
     state.scroll_row_disc = result.row_discussions
@@ -1105,7 +1104,7 @@ function M.setup_keymaps(layout, state)
       end
       local file = state.files[data.file_idx]
       local comment = require("codereview.mr.comment")
-      comment.create_inline(state.mr, file.old_path, file.new_path, data.item.old_line, data.item.new_line)
+      comment.create_inline(state.review, file.old_path, file.new_path, data.item.old_line, data.item.new_line)
     else
       M.create_comment_at_cursor(layout, state)
     end
@@ -1124,7 +1123,7 @@ function M.setup_keymaps(layout, state)
       local file = state.files[start_data.file_idx]
       local comment = require("codereview.mr.comment")
       comment.create_inline_range(
-        state.mr,
+        state.review,
         file.old_path,
         file.new_path,
         { old_line = start_data.item.old_line, new_line = start_data.item.new_line },
@@ -1167,7 +1166,7 @@ function M.setup_keymaps(layout, state)
     local disc = get_cursor_disc()
     if disc then
       local comment = require("codereview.mr.comment")
-      comment.reply(disc, state.mr)
+      comment.reply(disc, state.review)
     end
   end)
 
@@ -1176,11 +1175,11 @@ function M.setup_keymaps(layout, state)
     local disc = get_cursor_disc()
     if disc then
       local comment = require("codereview.mr.comment")
-      comment.resolve_toggle(disc, state.mr, function()
+      comment.resolve_toggle(disc, state.review, function()
         -- Re-render to update resolved status
         if state.scroll_mode then
           local cursor = vim.api.nvim_win_get_cursor(layout.main_win)
-          local result = M.render_all_files(layout.main_buf, state.files, state.mr, state.discussions, state.context, state.file_contexts)
+          local result = M.render_all_files(layout.main_buf, state.files, state.review, state.discussions, state.context, state.file_contexts)
           state.file_sections = result.file_sections
           state.scroll_line_data = result.line_data
           state.scroll_row_disc = result.row_discussions
@@ -1189,7 +1188,7 @@ function M.setup_keymaps(layout, state)
           local file = state.files and state.files[state.current_file]
           if file then
             local ld, rd = M.render_file_diff(
-              layout.main_buf, file, state.mr, state.discussions, state.context)
+              layout.main_buf, file, state.review, state.discussions, state.context)
             state.line_data_cache[state.current_file] = ld
             state.row_disc_cache[state.current_file] = rd
           end
@@ -1221,7 +1220,7 @@ function M.setup_keymaps(layout, state)
       else
         state.file_contexts[file_idx] = 99999
       end
-      local result = M.render_all_files(layout.main_buf, state.files, state.mr, state.discussions, state.context, state.file_contexts)
+      local result = M.render_all_files(layout.main_buf, state.files, state.review, state.discussions, state.context, state.file_contexts)
       state.file_sections = result.file_sections
       state.scroll_line_data = result.line_data
       state.scroll_row_disc = result.row_discussions
@@ -1237,7 +1236,7 @@ function M.setup_keymaps(layout, state)
       end
       local file = state.files and state.files[state.current_file]
       if not file then return end
-      local ld, rd = M.render_file_diff(layout.main_buf, file, state.mr, state.discussions, state.context)
+      local ld, rd = M.render_file_diff(layout.main_buf, file, state.review, state.discussions, state.context)
       state.line_data_cache[state.current_file] = ld
       state.row_disc_cache[state.current_file] = rd
       local row = M.find_row_for_anchor(ld, anchor, state.current_file)
@@ -1250,30 +1249,33 @@ function M.setup_keymaps(layout, state)
     if state.view_mode ~= "summary" then return end
     vim.ui.input({ prompt = "Comment on MR: " }, function(input)
       if not input or input == "" then return end
-      local b_url, proj = require("codereview.git").detect_project()
-      if not b_url or not proj then return end
-      local enc = require("codereview.api.client").encode_project(proj)
-      require("codereview.api.client").post(b_url,
-        require("codereview.api.endpoints").discussions(enc, state.mr.iid),
-        { body = { body = input } })
-      vim.notify("Comment posted", vim.log.levels.INFO)
+      local provider = state.provider
+      local ctx = state.ctx
+      if not provider or not ctx then return end
+      local client_mod = require("codereview.api.client")
+      local _, err = provider.post_comment(client_mod, ctx, state.review, input, nil)
+      if err then
+        vim.notify("Failed to post comment: " .. err, vim.log.levels.ERROR)
+      else
+        vim.notify("Comment posted", vim.log.levels.INFO)
+      end
     end)
   end)
 
   map(main_buf, "n", "a", function()
     if state.view_mode ~= "summary" then return end
-    require("codereview.mr.actions").approve(state.mr)
+    require("codereview.mr.actions").approve(state.review)
   end)
 
   map(main_buf, "n", "o", function()
     if state.view_mode ~= "summary" then return end
-    if state.mr.web_url then vim.ui.open(state.mr.web_url) end
+    if state.review.web_url then vim.ui.open(state.review.web_url) end
   end)
 
   map(main_buf, "n", "m", function()
     if state.view_mode ~= "summary" then return end
     vim.ui.select({ "Merge", "Merge when pipeline succeeds", "Cancel" }, {
-      prompt = string.format("Merge MR !%d?", state.mr.iid),
+      prompt = string.format("Merge MR #%d?", state.review.id),
     }, function(choice)
       if not choice or choice == "Cancel" then return end
       local ok, actions = pcall(require, "codereview.mr.actions")
@@ -1282,9 +1284,9 @@ function M.setup_keymaps(layout, state)
         return
       end
       if choice == "Merge when pipeline succeeds" then
-        actions.merge(state.mr, { auto_merge = true })
+        actions.merge(state.review, { auto_merge = true })
       else
-        actions.merge(state.mr)
+        actions.merge(state.review)
       end
     end)
   end)
@@ -1304,7 +1306,7 @@ function M.setup_keymaps(layout, state)
     local split_mod = require("codereview.ui.split")
     split_mod.close(layout)
     local detail = require("codereview.mr.detail")
-    detail.open(state.mr_entry or state.mr)
+    detail.open(state.entry or state.review)
   end
   map(main_buf, "n", "R", refresh)
   map(sidebar_buf, "n", "R", refresh)
@@ -1345,20 +1347,16 @@ function M.setup_keymaps(layout, state)
     elseif entry.type == "file" then
       -- Lazy load diffs if needed
       if not state.files then
+        local provider = state.provider
+        local ctx = state.ctx
+        if not provider or not ctx then return end
         local client_mod = require("codereview.api.client")
-        local endpoints_mod = require("codereview.api.endpoints")
-        local git_mod = require("codereview.git")
-        local b_url, proj = git_mod.detect_project()
-        if not b_url or not proj then return end
-        local enc = client_mod.encode_project(proj)
-        local result, fetch_err = client_mod.get(b_url, endpoints_mod.mr_diffs(enc, state.mr.iid))
+        local files, fetch_err = provider.get_diffs(client_mod, ctx, state.review)
         if fetch_err then
           vim.notify("Failed to fetch diffs: " .. fetch_err, vim.log.levels.ERROR)
           return
         end
-        local files = result and result.data or {}
-        if type(files) ~= "table" then files = {} end
-        M.load_diffs_into_state(state, files)
+        M.load_diffs_into_state(state, files or {})
         M.render_sidebar(layout.sidebar_buf, state)
       end
 
@@ -1367,7 +1365,7 @@ function M.setup_keymaps(layout, state)
 
       if state.scroll_mode then
         -- Always re-render all files (buffer may have summary content)
-        local result = M.render_all_files(layout.main_buf, state.files, state.mr, state.discussions, state.context, state.file_contexts)
+        local result = M.render_all_files(layout.main_buf, state.files, state.review, state.discussions, state.context, state.file_contexts)
         state.file_sections = result.file_sections
         state.scroll_line_data = result.line_data
         state.scroll_row_disc = result.row_discussions
@@ -1381,7 +1379,7 @@ function M.setup_keymaps(layout, state)
       else
         M.render_sidebar(layout.sidebar_buf, state)
         local line_data, row_disc = M.render_file_diff(
-          layout.main_buf, state.files[entry.idx], state.mr, state.discussions, state.context)
+          layout.main_buf, state.files[entry.idx], state.review, state.discussions, state.context)
         state.line_data_cache[entry.idx] = line_data
         state.row_disc_cache[entry.idx] = row_disc
       end
@@ -1457,35 +1455,31 @@ end
 
 -- ─── Main entry point ─────────────────────────────────────────────────────────
 
-function M.open(mr, discussions)
-  local client = require("codereview.api.client")
-  local endpoints = require("codereview.api.endpoints")
-  local git = require("codereview.git")
+function M.open(review, discussions)
+  local providers = require("codereview.providers")
+  local client_mod = require("codereview.api.client")
   local split = require("codereview.ui.split")
 
-  local base_url, project = git.detect_project()
-  if not base_url or not project then
-    vim.notify("Could not detect GitLab project", vim.log.levels.ERROR)
+  local provider, ctx, err = providers.detect()
+  if not provider then
+    vim.notify(err or "Could not detect platform", vim.log.levels.ERROR)
     return
   end
 
-  local encoded = client.encode_project(project)
-  local result, err = client.get(base_url, endpoints.mr_diffs(encoded, mr.iid))
-  if err then
-    vim.notify("Failed to fetch diffs: " .. err, vim.log.levels.ERROR)
+  local files, fetch_err = provider.get_diffs(client_mod, ctx, review)
+  if not files then
+    vim.notify(fetch_err or "Failed to fetch diffs", vim.log.levels.ERROR)
     return
   end
-
-  local files = result and result.data or {}
-  if type(files) ~= "table" then files = {} end
 
   local layout = split.create()
 
-  local config = require("codereview.config")
   local cfg = config.get()
   local state = {
     view_mode = "diff",
-    mr = mr,
+    review = review,
+    provider = provider,
+    ctx = ctx,
     files = files,
     current_file = 1,
     layout = layout,
@@ -1506,12 +1500,12 @@ function M.open(mr, discussions)
 
   if #files > 0 then
     if state.scroll_mode then
-      local result = M.render_all_files(layout.main_buf, files, mr, state.discussions, state.context, state.file_contexts)
-      state.file_sections = result.file_sections
-      state.scroll_line_data = result.line_data
-      state.scroll_row_disc = result.row_discussions
+      local render_result = M.render_all_files(layout.main_buf, files, review, state.discussions, state.context, state.file_contexts)
+      state.file_sections = render_result.file_sections
+      state.scroll_line_data = render_result.line_data
+      state.scroll_row_disc = render_result.row_discussions
     else
-      local line_data, row_disc = M.render_file_diff(layout.main_buf, files[1], mr, state.discussions, state.context)
+      local line_data, row_disc = M.render_file_diff(layout.main_buf, files[1], review, state.discussions, state.context)
       state.line_data_cache[1] = line_data
       state.row_disc_cache[1] = row_disc
     end

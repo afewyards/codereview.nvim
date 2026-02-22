@@ -338,17 +338,17 @@ describe("mr.diff", function()
     it("renders MR header and activity into buffer", function()
       local buf = vim.api.nvim_create_buf(false, true)
       local state = {
-        mr = {
-          iid = 42,
+        review = {
+          id = 42,
           title = "Fix auth",
-          author = { username = "maria" },
+          author = "maria",
           source_branch = "fix/auth",
           target_branch = "main",
           state = "opened",
-          head_pipeline = { status = "success" },
+          pipeline_status = "success",
           description = "Fixes the bug",
           approved_by = {},
-          approvals_before_merge = 0,
+          approvals_required = 0,
         },
         discussions = {
           {
@@ -357,7 +357,7 @@ describe("mr.diff", function()
               {
                 id = 1,
                 body = "Looks good!",
-                author = { username = "jan" },
+                author = "jan",
                 created_at = "2026-02-20T10:00:00Z",
                 system = false,
               },
@@ -369,7 +369,7 @@ describe("mr.diff", function()
 
       local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
       local joined = table.concat(lines, "\n")
-      assert.truthy(joined:find("!42"))
+      assert.truthy(joined:find("#42"))
       assert.truthy(joined:find("Fix auth"))
       assert.truthy(joined:find("jan"))
       assert.truthy(joined:find("Looks good"))
@@ -394,7 +394,7 @@ describe("mr.diff", function()
     it("renders Summary button as first interactive row", function()
       local buf = vim.api.nvim_create_buf(false, true)
       local state = {
-        mr = { iid = 1, title = "Test", source_branch = "feat", head_pipeline = nil },
+        review = { id = 1, title = "Test", source_branch = "feat", pipeline_status = nil },
         files = {
           { new_path = "src/a.lua", old_path = "src/a.lua" },
         },
@@ -424,7 +424,7 @@ describe("mr.diff", function()
     it("shows active indicator on Summary when view_mode is summary", function()
       local buf = vim.api.nvim_create_buf(false, true)
       local state = {
-        mr = { iid = 1, title = "Test", source_branch = "feat", head_pipeline = nil },
+        review = { id = 1, title = "Test", source_branch = "feat", pipeline_status = nil },
         files = { { new_path = "a.lua", old_path = "a.lua" } },
         discussions = {},
         current_file = 1,
@@ -445,7 +445,7 @@ describe("mr.diff", function()
     it("no file gets active indicator when view_mode is summary", function()
       local buf = vim.api.nvim_create_buf(false, true)
       local state = {
-        mr = { iid = 1, title = "Test", source_branch = "feat", head_pipeline = nil },
+        review = { id = 1, title = "Test", source_branch = "feat", pipeline_status = nil },
         files = { { new_path = "a.lua", old_path = "a.lua" } },
         discussions = {},
         current_file = 1,
@@ -467,7 +467,7 @@ describe("mr.diff", function()
   describe("load_diffs_into_state", function()
     it("sets state.files when not yet loaded", function()
       local state = {
-        mr = { iid = 1 },
+        review = { id = 1 },
         files = nil,
         scroll_mode = nil,
       }
@@ -482,7 +482,7 @@ describe("mr.diff", function()
 
     it("is a no-op when files already loaded", function()
       local state = {
-        mr = { iid = 1 },
+        review = { id = 1 },
         files = { { new_path = "existing.lua" } },
         scroll_mode = true,
       }
