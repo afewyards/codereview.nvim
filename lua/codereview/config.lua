@@ -2,8 +2,9 @@
 local M = {}
 
 local defaults = {
-  gitlab_url = nil,
+  base_url = nil,     -- API base URL override (auto-detected). Alias: gitlab_url
   project = nil,
+  platform = nil,     -- "github" | "gitlab" | nil (auto-detect)
   token = nil,
   picker = nil,
   diff = { context = 8, scroll_threshold = 50 },
@@ -31,6 +32,10 @@ end
 
 function M.setup(opts)
   current = validate(deep_merge(defaults, opts or {}))
+  -- Backward compat: gitlab_url → base_url
+  if current.gitlab_url and not current.base_url then
+    current.base_url = current.gitlab_url
+  end
 end
 
 function M.get()

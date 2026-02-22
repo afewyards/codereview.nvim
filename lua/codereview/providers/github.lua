@@ -114,6 +114,26 @@ function M.normalize_review_comments_to_discussions(comments)
   return discussions
 end
 
+-- Provider interface ---------------------------------------------------------
+
+--- List open PRs for the repo (owner/repo from ctx.project).
+function M.list_reviews(client, ctx, opts)
+  opts = opts or {}
+  local parts = {}
+  for part in ctx.project:gmatch("[^/]+") do table.insert(parts, part) end
+  local owner, repo = parts[1], parts[2]
+  local path_url = string.format("/repos/%s/%s/pulls", owner, repo)
+  local result, err = client.get(ctx.base_url, path_url, {
+    query = { state = opts.state or "open", per_page = opts.per_page or 50 },
+  })
+  if not result then return nil, err end
+  local reviews = {}
+  for _, pr in ipairs(result.data or {}) do
+    table.insert(reviews, M.normalize_pr(pr))
+  end
+  return reviews
+end
+
 -- API operations -------------------------------------------------------------
 
 --- Post a single-line review comment.
