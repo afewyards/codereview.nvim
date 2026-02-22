@@ -18,11 +18,11 @@ function M.open()
 
   mr_list.fetch({}, function(entries, err)
     if err then
-      vim.notify("Failed to load MRs: " .. err, vim.log.levels.ERROR)
+      vim.notify("Failed to load reviews: " .. err, vim.log.levels.ERROR)
       return
     end
     if not entries or #entries == 0 then
-      vim.notify("No open merge requests found", vim.log.levels.INFO)
+      vim.notify("No open reviews found", vim.log.levels.INFO)
       return
     end
 
@@ -38,9 +38,9 @@ function M.ai_review() vim.notify("AI review not yet implemented (Stage 5)", vim
 function M.submit() vim.notify("Submit not yet implemented (Stage 5)", vim.log.levels.WARN) end
 function M.approve()
   local buf = vim.api.nvim_get_current_buf()
-  local mr = vim.b[buf].codereview_mr
+  local mr = vim.b[buf].codereview_review
   if not mr then
-    vim.notify("No MR context in current buffer", vim.log.levels.WARN)
+    vim.notify("No review context in current buffer", vim.log.levels.WARN)
     return
   end
   require("codereview.mr.actions").approve(mr)
