@@ -79,13 +79,13 @@ local function normalize_note(raw)
 
   return {
     id = raw.id,
-    author = raw.author and raw.author.username or "",
+    author = type(raw.author) == "table" and raw.author.username or "",
     body = raw.body or "",
     created_at = raw.created_at or "",
     system = raw.system or false,
     resolvable = raw.resolvable or false,
     resolved = raw.resolved or false,
-    resolved_by = raw.resolved_by and raw.resolved_by.username or nil,
+    resolved_by = type(raw.resolved_by) == "table" and raw.resolved_by.username or nil,
     position = position,
   }
 end
