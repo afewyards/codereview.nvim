@@ -559,6 +559,34 @@ function M.render_all_files(buf, files, mr, discussions, context, file_contexts)
   }
 end
 
+-- ─── Summary rendering ──────────────────────────────────────────────────────
+
+function M.render_summary(buf, state)
+  local detail = require("glab_review.mr.detail")
+  local markdown_mod = require("glab_review.ui.markdown")
+
+  local lines = detail.build_header_lines(state.mr)
+  local activity_lines = detail.build_activity_lines(state.discussions)
+  for _, line in ipairs(activity_lines) do
+    table.insert(lines, line)
+  end
+
+  local total, unresolved = detail.count_discussions(state.discussions)
+  table.insert(lines, "")
+  table.insert(lines, string.rep("-", 70))
+  table.insert(lines, string.format(
+    "  %d discussions (%d unresolved)",
+    total, unresolved
+  ))
+  table.insert(lines, "")
+  table.insert(lines, "  [c]omment  [a]pprove  [A]I review  [p]ipeline  [m]erge  [R]efresh  [q]uit")
+
+  vim.bo[buf].modifiable = true
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+  markdown_mod.set_buf_markdown(buf)
+  vim.bo[buf].modifiable = false
+end
+
 -- ─── Sidebar rendering ────────────────────────────────────────────────────────
 
 local function count_file_comments(file, discussions)
