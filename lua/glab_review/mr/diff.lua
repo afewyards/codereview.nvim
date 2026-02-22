@@ -59,23 +59,52 @@ function M.place_comment_signs(buf, line_data, discussions, file_diff)
   -- Remove old signs for this buffer
   pcall(vim.fn.sign_unplace, "GlabReview", { buffer = buf })
 
+  -- Track which rows have discussions (for keymap lookups)
+  local row_discussions = {}
+
   for _, discussion in ipairs(discussions or {}) do
     if discussion_matches_file(discussion, file_diff) then
       local target_line = discussion_line(discussion)
       if target_line then
-        -- Find the buffer row matching this line number
         for row, data in ipairs(line_data) do
           local item = data.item
           if item and (item.new_line == target_line or item.old_line == target_line) then
+            -- Place gutter sign
             local sign_name = is_resolved(discussion) and "GlabReviewCommentSign"
               or "GlabReviewUnresolvedSign"
             pcall(vim.fn.sign_place, 0, "GlabReview", sign_name, buf, { lnum = row })
+
+            -- Render comment preview as virtual lines
+            local note = discussion.notes[1]
+            if note then
+              local hl = is_resolved(discussion) and "GlabReviewComment" or "GlabReviewCommentUnresolved"
+              local body_preview = (note.body or ""):gsub("\n", " "):sub(1, 80)
+              local virt_lines = {
+                { { string.format("  >> @%s: %s", note.author.username, body_preview), hl } },
+              }
+              if #discussion.notes > 1 then
+                local reply_count = #discussion.notes - 1
+                table.insert(virt_lines, {
+                  { string.format("     ... %d more %s (Enter to view)", reply_count, reply_count == 1 and "reply" or "replies"), hl },
+                })
+              end
+              pcall(vim.api.nvim_buf_set_extmark, buf, DIFF_NS, row - 1, 0, {
+                virt_lines = virt_lines,
+                virt_lines_above = false,
+              })
+            end
+
+            -- Store discussion for this row
+            if not row_discussions[row] then row_discussions[row] = {} end
+            table.insert(row_discussions[row], discussion)
             break
           end
         end
       end
     end
   end
+
+  return row_discussions
 end
 
 -- ─── Diff rendering ───────────────────────────────────────────────────────────
@@ -205,11 +234,12 @@ function M.render_file_diff(buf, file_diff, mr, discussions, context)
     end
   end
 
+  local row_discussions = {}
   if discussions then
-    M.place_comment_signs(buf, line_data, discussions, file_diff)
+    row_discussions = M.place_comment_signs(buf, line_data, discussions, file_diff) or {}
   end
 
-  return line_data
+  return line_data, row_discussions
 end
 
 -- ─── Sidebar rendering ────────────────────────────────────────────────────────
@@ -381,8 +411,9 @@ local function nav_file(layout, state, delta)
   if next_idx < 1 or next_idx > #files then return end
   state.current_file = next_idx
   M.render_sidebar(layout.sidebar_buf, state)
-  local line_data = M.render_file_diff(layout.main_buf, files[next_idx], state.mr, state.discussions, state.context)
+  local line_data, row_disc = M.render_file_diff(layout.main_buf, files[next_idx], state.mr, state.discussions, state.context)
   state.line_data_cache[next_idx] = line_data
+  state.row_disc_cache[next_idx] = row_disc
   vim.api.nvim_win_set_cursor(layout.main_win, { 1, 0 })
 end
 
@@ -426,9 +457,10 @@ local function adjust_context(layout, state, delta)
   state.context = math.max(1, state.context + delta)
   local file = state.files and state.files[state.current_file]
   if not file then return end
-  local line_data = M.render_file_diff(
+  local line_data, row_disc = M.render_file_diff(
     layout.main_buf, file, state.mr, state.discussions, state.context)
   state.line_data_cache[state.current_file] = line_data
+  state.row_disc_cache[state.current_file] = row_disc
   vim.api.nvim_win_set_cursor(layout.main_win, { math.min(cursor[1], vim.api.nvim_buf_line_count(layout.main_buf)), 0 })
   vim.notify("Context: " .. state.context .. " lines", vim.log.levels.INFO)
 end
@@ -458,7 +490,7 @@ function M.setup_keymaps(layout, state)
   map(main_buf, "n", "cc", function() M.create_comment_at_cursor(layout, state) end)
   map(main_buf, "v", "cc", function() M.create_comment_range(layout, state) end)
 
-  -- Expand hidden lines / load more context
+  -- Expand hidden lines / load more context / open comment thread
   map(main_buf, "n", "<CR>", function()
     local cursor = vim.api.nvim_win_get_cursor(layout.main_win)
     local row = cursor[1]
@@ -468,6 +500,13 @@ function M.setup_keymaps(layout, state)
       M.expand_hidden(layout, state)
     elseif line_data[row].type == "load_more" then
       adjust_context(layout, state, 10)
+    else
+      -- Check if this row has a discussion thread
+      local row_disc = state.row_disc_cache[state.current_file]
+      if row_disc and row_disc[row] then
+        local comment = require("glab_review.mr.comment")
+        comment.show_thread(row_disc[row][1], state.mr)
+      end
     end
   end)
 
@@ -481,8 +520,9 @@ function M.setup_keymaps(layout, state)
     local file = state.files and state.files[state.current_file]
     if not file then return end
     local cursor = vim.api.nvim_win_get_cursor(layout.main_win)
-    local ld = M.render_file_diff(layout.main_buf, file, state.mr, state.discussions, state.context)
+    local ld, rd = M.render_file_diff(layout.main_buf, file, state.mr, state.discussions, state.context)
     state.line_data_cache[state.current_file] = ld
+    state.row_disc_cache[state.current_file] = rd
     vim.api.nvim_win_set_cursor(layout.main_win, { math.min(cursor[1], vim.api.nvim_buf_line_count(layout.main_buf)), 0 })
     vim.notify("Full file loaded", vim.log.levels.INFO)
   end)
@@ -512,9 +552,10 @@ function M.setup_keymaps(layout, state)
     if idx >= 1 and idx <= #(state.files or {}) then
       state.current_file = idx
       M.render_sidebar(layout.sidebar_buf, state)
-      local line_data = M.render_file_diff(
+      local line_data, row_disc = M.render_file_diff(
         layout.main_buf, state.files[idx], state.mr, state.discussions, state.context)
       state.line_data_cache[idx] = line_data
+      state.row_disc_cache[idx] = row_disc
       vim.api.nvim_set_current_win(layout.main_win)
     end
   end)
@@ -554,14 +595,16 @@ function M.open(mr, discussions)
     layout = layout,
     discussions = discussions or {},
     line_data_cache = {},
+    row_disc_cache = {},
     context = config.get().diff.context,
   }
 
   M.render_sidebar(layout.sidebar_buf, state)
 
   if #files > 0 then
-    local line_data = M.render_file_diff(layout.main_buf, files[1], mr, state.discussions, state.context)
+    local line_data, row_disc = M.render_file_diff(layout.main_buf, files[1], mr, state.discussions, state.context)
     state.line_data_cache[1] = line_data
+    state.row_disc_cache[1] = row_disc
   else
     vim.bo[layout.main_buf].modifiable = true
     vim.api.nvim_buf_set_lines(layout.main_buf, 0, -1, false, { "No diffs found." })
