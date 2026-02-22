@@ -34,8 +34,25 @@ function M.open()
   end)
 end
 function M.pipeline() vim.notify("Pipeline not yet implemented (Stage 4)", vim.log.levels.WARN) end
-function M.ai_review() vim.notify("AI review not yet implemented (Stage 5)", vim.log.levels.WARN) end
-function M.submit() vim.notify("Submit not yet implemented (Stage 5)", vim.log.levels.WARN) end
+function M.ai_review()
+  local buf = vim.api.nvim_get_current_buf()
+  local review = vim.b[buf].codereview_review
+  if not review then
+    vim.notify("No review context. Open a review first with :CodeReview", vim.log.levels.WARN)
+    return
+  end
+  require("codereview.review").start(review)
+end
+
+function M.submit()
+  local buf = vim.api.nvim_get_current_buf()
+  local review = vim.b[buf].codereview_review
+  if not review then
+    vim.notify("No review context. Open a review first with :CodeReview", vim.log.levels.WARN)
+    return
+  end
+  require("codereview.review.submit").bulk_publish(review)
+end
 function M.approve()
   local buf = vim.api.nvim_get_current_buf()
   local mr = vim.b[buf].codereview_review
