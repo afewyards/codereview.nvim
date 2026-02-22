@@ -247,6 +247,54 @@ describe("mr.diff", function()
     end)
   end)
 
+  describe("clamp_cursor_to_content", function()
+    local buf, win
+
+    before_each(function()
+      buf = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_buf_set_lines(buf, 0, -1, false, {
+        "   10 | 10    local x = 1",
+        "   11 | 11    local y = 2",
+      })
+      win = vim.api.nvim_open_win(buf, false, {
+        relative = "editor",
+        row = 0,
+        col = 0,
+        width = 40,
+        height = 5,
+      })
+    end)
+
+    after_each(function()
+      vim.api.nvim_win_close(win, true)
+      vim.api.nvim_buf_delete(buf, { force = true })
+    end)
+
+    it("snaps cursor to LINE_NR_WIDTH when placed at column 0", function()
+      diff.clamp_cursor_to_content(buf, win)
+      vim.api.nvim_win_set_cursor(win, { 1, 0 })
+      vim.api.nvim_exec_autocmds("CursorMoved", { buf = buf })
+      local col = vim.api.nvim_win_get_cursor(win)[2]
+      assert.equals(diff.LINE_NR_WIDTH, col)
+    end)
+
+    it("does not move cursor already past LINE_NR_WIDTH", function()
+      diff.clamp_cursor_to_content(buf, win)
+      vim.api.nvim_win_set_cursor(win, { 1, 20 })
+      vim.api.nvim_exec_autocmds("CursorMoved", { buf = buf })
+      local col = vim.api.nvim_win_get_cursor(win)[2]
+      assert.equals(20, col)
+    end)
+
+    it("clamps cursor at exactly LINE_NR_WIDTH - 1", function()
+      diff.clamp_cursor_to_content(buf, win)
+      vim.api.nvim_win_set_cursor(win, { 1, 13 })
+      vim.api.nvim_exec_autocmds("CursorMoved", { buf = buf })
+      local col = vim.api.nvim_win_get_cursor(win)[2]
+      assert.equals(14, col)
+    end)
+  end)
+
   describe("toggle_scroll_mode line preservation", function()
     local function make_files()
       return {
