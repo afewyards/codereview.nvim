@@ -22,6 +22,7 @@ function M.setup()
   vim.api.nvim_set_hl(0, "CodeReviewSpinner", { fg = "#7aa2f7", bold = true, default = true })
   vim.fn.sign_define("CodeReviewCommentSign", { text = "▍ ", texthl = "CodeReviewComment" })
   vim.fn.sign_define("CodeReviewUnresolvedSign", { text = "▍ ", texthl = "CodeReviewCommentUnresolved" })
+  vim.fn.sign_define("CodeReviewAISign", { text = "▍ ", texthl = "CodeReviewAIDraft" })
 end
 
 return M

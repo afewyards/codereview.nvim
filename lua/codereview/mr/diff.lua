@@ -5,6 +5,15 @@ local config = require("codereview.config")
 local LINE_NR_WIDTH = 14
 
 local DIFF_NS = vim.api.nvim_create_namespace("codereview_diff")
+local AIDRAFT_NS = vim.api.nvim_create_namespace("codereview_ai_draft")
+
+-- ─── Active state tracking ────────────────────────────────────────────────────
+
+local active_states = {}
+
+function M.get_state(buf)
+  return active_states[buf]
+end
 
 -- ─── Formatting helpers ───────────────────────────────────────────────────────
 
@@ -201,9 +210,139 @@ function M.place_comment_signs(buf, line_data, discussions, file_diff)
   return row_discussions
 end
 
+function M.place_ai_suggestions(buf, line_data, suggestions, file_diff)
+  -- Clear old AI signs and extmarks
+  pcall(vim.fn.sign_unplace, "CodeReviewAI", { buffer = buf })
+  vim.api.nvim_buf_clear_namespace(buf, AIDRAFT_NS, 0, -1)
+
+  local row_ai_map = {}
+
+  for _, suggestion in ipairs(suggestions or {}) do
+    if suggestion.status == "dismissed" then goto continue end
+    local path = file_diff.new_path or file_diff.old_path
+    if suggestion.file ~= path then goto continue end
+
+    -- Find row in line_data where new_line matches suggestion.line
+    for row, data in ipairs(line_data) do
+      if data.item and data.item.new_line == suggestion.line then
+        pcall(vim.fn.sign_place, 0, "CodeReviewAI", "CodeReviewAISign", buf, { lnum = row })
+
+        local bdr = "CodeReviewAIDraftBorder"
+        local body_hl = "CodeReviewAIDraft"
+        local severity = suggestion.severity or "info"
+        local header_fill = math.max(0, 62 - #(" AI [" .. severity .. "] "))
+        local footer_content = "a:accept  d:dismiss  e:edit"
+        local footer_fill = math.max(0, 62 - #footer_content - 1)
+
+        local virt_lines = {}
+
+        -- ┌ AI [severity] ──────────────────────────────────────────
+        table.insert(virt_lines, {
+          { "  ┌ AI [" .. severity .. "] ", bdr },
+          { string.rep("─", header_fill), bdr },
+        })
+
+        -- Comment body wrapped to width 64
+        for _, bl in ipairs(wrap_text(suggestion.comment, 64)) do
+          table.insert(virt_lines, {
+            { "  │ ", bdr },
+            { bl, body_hl },
+          })
+        end
+
+        -- └ a:accept  d:dismiss  e:edit ─────────────────────────
+        table.insert(virt_lines, {
+          { "  └ ", bdr },
+          { footer_content, body_hl },
+          { " " .. string.rep("─", footer_fill), bdr },
+        })
+
+        pcall(vim.api.nvim_buf_set_extmark, buf, AIDRAFT_NS, row - 1, 0, {
+          virt_lines = virt_lines,
+          virt_lines_above = false,
+        })
+
+        row_ai_map[row] = suggestion
+        break
+      end
+    end
+
+    ::continue::
+  end
+
+  return row_ai_map
+end
+
+function M.place_ai_suggestions_all(buf, all_line_data, file_sections, suggestions)
+  -- Clear old AI signs and extmarks
+  pcall(vim.fn.sign_unplace, "CodeReviewAI", { buffer = buf })
+  vim.api.nvim_buf_clear_namespace(buf, AIDRAFT_NS, 0, -1)
+
+  local scroll_row_ai = {}
+
+  for _, suggestion in ipairs(suggestions or {}) do
+    if suggestion.status == "dismissed" then goto continue end
+
+    -- Find the matching section for this suggestion's file
+    for _, section in ipairs(file_sections) do
+      local fpath = section.file.new_path or section.file.old_path
+      if suggestion.file == fpath then
+        -- Find the row within this section
+        for i = section.start_line, section.end_line do
+          local data = all_line_data[i]
+          if data and data.item and data.item.new_line == suggestion.line
+            and data.file_idx == section.file_idx then
+            pcall(vim.fn.sign_place, 0, "CodeReviewAI", "CodeReviewAISign", buf, { lnum = i })
+
+            local bdr = "CodeReviewAIDraftBorder"
+            local body_hl = "CodeReviewAIDraft"
+            local severity = suggestion.severity or "info"
+            local header_fill = math.max(0, 62 - #(" AI [" .. severity .. "] "))
+            local footer_content = "a:accept  d:dismiss  e:edit"
+            local footer_fill = math.max(0, 62 - #footer_content - 1)
+
+            local virt_lines = {}
+
+            table.insert(virt_lines, {
+              { "  ┌ AI [" .. severity .. "] ", bdr },
+              { string.rep("─", header_fill), bdr },
+            })
+
+            for _, bl in ipairs(wrap_text(suggestion.comment, 64)) do
+              table.insert(virt_lines, {
+                { "  │ ", bdr },
+                { bl, body_hl },
+              })
+            end
+
+            table.insert(virt_lines, {
+              { "  └ ", bdr },
+              { footer_content, body_hl },
+              { " " .. string.rep("─", footer_fill), bdr },
+            })
+
+            pcall(vim.api.nvim_buf_set_extmark, buf, AIDRAFT_NS, i - 1, 0, {
+              virt_lines = virt_lines,
+              virt_lines_above = false,
+            })
+
+            scroll_row_ai[i] = suggestion
+            break
+          end
+        end
+        break
+      end
+    end
+
+    ::continue::
+  end
+
+  return scroll_row_ai
+end
+
 -- ─── Diff rendering ───────────────────────────────────────────────────────────
 
-function M.render_file_diff(buf, file_diff, review, discussions, context)
+function M.render_file_diff(buf, file_diff, review, discussions, context, ai_suggestions)
   local parser = require("codereview.mr.diff_parser")
   if not context then
     context = config.get().diff.context
@@ -333,12 +472,17 @@ function M.render_file_diff(buf, file_diff, review, discussions, context)
     row_discussions = M.place_comment_signs(buf, line_data, discussions, file_diff) or {}
   end
 
-  return line_data, row_discussions
+  local row_ai = {}
+  if ai_suggestions then
+    row_ai = M.place_ai_suggestions(buf, line_data, ai_suggestions, file_diff) or {}
+  end
+
+  return line_data, row_discussions, row_ai
 end
 
 -- ─── All-files scroll view ────────────────────────────────────────────────────
 
-function M.render_all_files(buf, files, review, discussions, context, file_contexts)
+function M.render_all_files(buf, files, review, discussions, context, file_contexts, ai_suggestions)
   local parser = require("codereview.mr.diff_parser")
   context = context or config.get().diff.context
   file_contexts = file_contexts or {}
@@ -600,10 +744,16 @@ function M.render_all_files(buf, files, review, discussions, context, file_conte
     end
   end
 
+  local all_row_ai = {}
+  if ai_suggestions then
+    all_row_ai = M.place_ai_suggestions_all(buf, all_line_data, file_sections, ai_suggestions) or {}
+  end
+
   return {
     file_sections = file_sections,
     line_data = all_line_data,
     row_discussions = all_row_discussions,
+    row_ai = all_row_ai,
   }
 end
 
@@ -641,6 +791,15 @@ local function count_file_comments(file, discussions)
   local n = 0
   for _, disc in ipairs(discussions or {}) do
     if discussion_matches_file(disc, file) then n = n + 1 end
+  end
+  return n
+end
+
+local function count_file_ai(file, suggestions)
+  local n = 0
+  local path = file.new_path or file.old_path
+  for _, s in ipairs(suggestions or {}) do
+    if s.file == path and s.status ~= "dismissed" then n = n + 1 end
   end
   return n
 end
@@ -706,10 +865,12 @@ function M.render_sidebar(buf, state)
         local indicator = (state.view_mode == "diff" and entry.idx == state.current_file) and "▸" or " "
         local ccount = count_file_comments(files[entry.idx], state.discussions)
         local cstr = ccount > 0 and (" [" .. ccount .. "]") or ""
+        local aicount = count_file_ai(files[entry.idx], state.ai_suggestions)
+        local aistr = aicount > 0 and (" [" .. aicount .. " AI]") or ""
         local name = entry.name
-        local max_name = 22 - #cstr
+        local max_name = 22 - #cstr - #aistr
         if #name > max_name then name = ".." .. name:sub(-(max_name - 2)) end
-        table.insert(lines, string.format("  %s %s%s", indicator, name, cstr))
+        table.insert(lines, string.format("  %s %s%s%s", indicator, name, cstr, aistr))
         state.sidebar_row_map[#lines] = { type = "file", idx = entry.idx }
       end
     end
@@ -720,10 +881,12 @@ function M.render_sidebar(buf, state)
     local indicator = (state.view_mode == "diff" and entry.idx == state.current_file) and "▸" or " "
     local ccount = count_file_comments(files[entry.idx], state.discussions)
     local cstr = ccount > 0 and (" [" .. ccount .. "]") or ""
+    local aicount = count_file_ai(files[entry.idx], state.ai_suggestions)
+    local aistr = aicount > 0 and (" [" .. aicount .. " AI]") or ""
     local name = entry.name
-    local max_name = 24 - #cstr
+    local max_name = 24 - #cstr - #aistr
     if #name > max_name then name = ".." .. name:sub(-(max_name - 2)) end
-    table.insert(lines, string.format("  %s %s%s", indicator, name, cstr))
+    table.insert(lines, string.format("  %s %s%s%s", indicator, name, cstr, aistr))
     state.sidebar_row_map[#lines] = { type = "file", idx = entry.idx }
   end
 
@@ -808,9 +971,10 @@ local function nav_file(layout, state, delta)
   if next_idx < 1 or next_idx > #files then return end
   state.current_file = next_idx
   M.render_sidebar(layout.sidebar_buf, state)
-  local line_data, row_disc = M.render_file_diff(layout.main_buf, files[next_idx], state.review, state.discussions, state.context)
+  local line_data, row_disc, row_ai = M.render_file_diff(layout.main_buf, files[next_idx], state.review, state.discussions, state.context, state.ai_suggestions)
   state.line_data_cache[next_idx] = line_data
   state.row_disc_cache[next_idx] = row_disc
+  state.row_ai_cache[next_idx] = row_ai
   vim.api.nvim_win_set_cursor(layout.main_win, { 1, 0 })
 end
 
@@ -834,10 +998,11 @@ end
 local function switch_to_file(layout, state, idx)
   state.current_file = idx
   M.render_sidebar(layout.sidebar_buf, state)
-  local ld, rd = M.render_file_diff(
-    layout.main_buf, state.files[idx], state.review, state.discussions, state.context)
+  local ld, rd, ra = M.render_file_diff(
+    layout.main_buf, state.files[idx], state.review, state.discussions, state.context, state.ai_suggestions)
   state.line_data_cache[idx] = ld
   state.row_disc_cache[idx] = rd
+  state.row_ai_cache[idx] = ra
 end
 
 local function nav_comment(layout, state, delta)
@@ -894,10 +1059,11 @@ local function adjust_context(layout, state, delta)
   state.context = math.max(1, state.context + delta)
   if state.scroll_mode then
     local anchor = M.find_anchor(state.scroll_line_data, cursor_row)
-    local result = M.render_all_files(layout.main_buf, state.files, state.review, state.discussions, state.context, state.file_contexts)
+    local result = M.render_all_files(layout.main_buf, state.files, state.review, state.discussions, state.context, state.file_contexts, state.ai_suggestions)
     state.file_sections = result.file_sections
     state.scroll_line_data = result.line_data
     state.scroll_row_disc = result.row_discussions
+    state.scroll_row_ai = result.row_ai
     local row = M.find_row_for_anchor(state.scroll_line_data, anchor)
     vim.api.nvim_win_set_cursor(layout.main_win, { row, 0 })
   else
@@ -905,10 +1071,11 @@ local function adjust_context(layout, state, delta)
     local anchor = M.find_anchor(per_file_ld or {}, cursor_row, state.current_file)
     local file = state.files and state.files[state.current_file]
     if not file then return end
-    local ld, row_disc = M.render_file_diff(
-      layout.main_buf, file, state.review, state.discussions, state.context)
+    local ld, row_disc, row_ai = M.render_file_diff(
+      layout.main_buf, file, state.review, state.discussions, state.context, state.ai_suggestions)
     state.line_data_cache[state.current_file] = ld
     state.row_disc_cache[state.current_file] = row_disc
+    state.row_ai_cache[state.current_file] = row_ai
     local row = M.find_row_for_anchor(ld, anchor, state.current_file)
     vim.api.nvim_win_set_cursor(layout.main_win, { row, 0 })
   end
@@ -1004,9 +1171,10 @@ local function toggle_scroll_mode(layout, state)
 
     local file = state.files[state.current_file]
     if file then
-      local ld, rd = M.render_file_diff(layout.main_buf, file, state.review, state.discussions, state.context)
+      local ld, rd, ra = M.render_file_diff(layout.main_buf, file, state.review, state.discussions, state.context, state.ai_suggestions)
       state.line_data_cache[state.current_file] = ld
       state.row_disc_cache[state.current_file] = rd
+      state.row_ai_cache[state.current_file] = ra
       local row = M.find_row_for_anchor(ld, anchor, state.current_file)
       vim.api.nvim_win_set_cursor(layout.main_win, { row, 0 })
     end
@@ -1016,10 +1184,11 @@ local function toggle_scroll_mode(layout, state)
     local anchor = M.find_anchor(per_file_ld or {}, cursor_row, state.current_file)
     state.scroll_mode = true
 
-    local result = M.render_all_files(layout.main_buf, state.files, state.review, state.discussions, state.context, state.file_contexts)
+    local result = M.render_all_files(layout.main_buf, state.files, state.review, state.discussions, state.context, state.file_contexts, state.ai_suggestions)
     state.file_sections = result.file_sections
     state.scroll_line_data = result.line_data
     state.scroll_row_disc = result.row_discussions
+    state.scroll_row_ai = result.row_ai
     local row = M.find_row_for_anchor(state.scroll_line_data, anchor)
     vim.api.nvim_win_set_cursor(layout.main_win, { row, 0 })
   end
@@ -1038,6 +1207,9 @@ function M.setup_keymaps(layout, state)
   local function map(buf, mode, lhs, fn)
     vim.keymap.set(mode, lhs, fn, vim.tbl_extend("force", opts, { buffer = buf }))
   end
+
+  -- Track active state for external access (e.g. from AI review module)
+  active_states[main_buf] = { state = state, layout = layout }
 
   -- Scroll mode toggle
   map(main_buf, "n", "<C-a>", function()
@@ -1136,16 +1308,18 @@ function M.setup_keymaps(layout, state)
     local view = vim.fn.winsaveview()
 
     if state.scroll_mode then
-      local result = M.render_all_files(layout.main_buf, state.files, state.review, discs, state.context, state.file_contexts)
+      local result = M.render_all_files(layout.main_buf, state.files, state.review, discs, state.context, state.file_contexts, state.ai_suggestions)
       state.file_sections = result.file_sections
       state.scroll_line_data = result.line_data
       state.scroll_row_disc = result.row_discussions
+      state.scroll_row_ai = result.row_ai
     else
       local file = state.files and state.files[state.current_file]
       if file then
-        local ld, rd = M.render_file_diff(layout.main_buf, file, state.review, discs, state.context)
+        local ld, rd, ra = M.render_file_diff(layout.main_buf, file, state.review, discs, state.context, state.ai_suggestions)
         state.line_data_cache[state.current_file] = ld
         state.row_disc_cache[state.current_file] = rd
+        state.row_ai_cache[state.current_file] = ra
       end
     end
 
@@ -1272,10 +1446,11 @@ function M.setup_keymaps(layout, state)
       else
         state.file_contexts[file_idx] = 99999
       end
-      local result = M.render_all_files(layout.main_buf, state.files, state.review, state.discussions, state.context, state.file_contexts)
+      local result = M.render_all_files(layout.main_buf, state.files, state.review, state.discussions, state.context, state.file_contexts, state.ai_suggestions)
       state.file_sections = result.file_sections
       state.scroll_line_data = result.line_data
       state.scroll_row_disc = result.row_discussions
+      state.scroll_row_ai = result.row_ai
       local row = M.find_row_for_anchor(state.scroll_line_data, anchor)
       vim.api.nvim_win_set_cursor(layout.main_win, { row, 0 })
     else
@@ -1288,9 +1463,10 @@ function M.setup_keymaps(layout, state)
       end
       local file = state.files and state.files[state.current_file]
       if not file then return end
-      local ld, rd = M.render_file_diff(layout.main_buf, file, state.review, state.discussions, state.context)
+      local ld, rd, ra = M.render_file_diff(layout.main_buf, file, state.review, state.discussions, state.context, state.ai_suggestions)
       state.line_data_cache[state.current_file] = ld
       state.row_disc_cache[state.current_file] = rd
+      state.row_ai_cache[state.current_file] = ra
       local row = M.find_row_for_anchor(ld, anchor, state.current_file)
       vim.api.nvim_win_set_cursor(layout.main_win, { row, 0 })
     end
@@ -1301,9 +1477,148 @@ function M.setup_keymaps(layout, state)
   -- fires when in summary mode because that handler returns early for summary.
   -- NOTE: We must NOT map bare "c" with nowait — it blocks cc from ever firing.
 
+  -- Helper: re-render current view after AI suggestion state change
+  local function rerender_ai()
+    if state.scroll_mode then
+      local result = M.render_all_files(layout.main_buf, state.files, state.review, state.discussions, state.context, state.file_contexts, state.ai_suggestions)
+      state.file_sections = result.file_sections
+      state.scroll_line_data = result.line_data
+      state.scroll_row_disc = result.row_discussions
+      state.scroll_row_ai = result.row_ai
+    else
+      local file = state.files[state.current_file]
+      if file then
+        local ld, rd, ra = M.render_file_diff(layout.main_buf, file, state.review, state.discussions, state.context, state.ai_suggestions)
+        state.line_data_cache[state.current_file] = ld
+        state.row_disc_cache[state.current_file] = rd
+        state.row_ai_cache[state.current_file] = ra
+      end
+    end
+    M.render_sidebar(layout.sidebar_buf, state)
+  end
+
+  -- AI suggestion navigation: ]s / [s
+  map(main_buf, "n", "]s", function()
+    if state.view_mode ~= "diff" then return end
+    local cursor = vim.api.nvim_win_get_cursor(layout.main_win)[1]
+    local row_ai = state.scroll_mode and state.scroll_row_ai or (state.row_ai_cache[state.current_file] or {})
+    local rows = {}
+    for r in pairs(row_ai) do table.insert(rows, r) end
+    table.sort(rows)
+    for _, r in ipairs(rows) do
+      if r > cursor then
+        vim.api.nvim_win_set_cursor(layout.main_win, { r, 0 })
+        return
+      end
+    end
+  end)
+
+  map(main_buf, "n", "[s", function()
+    if state.view_mode ~= "diff" then return end
+    local cursor = vim.api.nvim_win_get_cursor(layout.main_win)[1]
+    local row_ai = state.scroll_mode and state.scroll_row_ai or (state.row_ai_cache[state.current_file] or {})
+    local rows = {}
+    for r in pairs(row_ai) do table.insert(rows, r) end
+    table.sort(rows)
+    for i = #rows, 1, -1 do
+      if rows[i] < cursor then
+        vim.api.nvim_win_set_cursor(layout.main_win, { rows[i], 0 })
+        return
+      end
+    end
+  end)
+
+  -- a: approve (summary mode) or accept AI suggestion at cursor (diff mode)
   map(main_buf, "n", "a", function()
-    if state.view_mode ~= "summary" then return end
-    require("codereview.mr.actions").approve(state.review)
+    if state.view_mode == "summary" then
+      require("codereview.mr.actions").approve(state.review)
+      return
+    end
+    if state.view_mode ~= "diff" then return end
+    local cursor = vim.api.nvim_win_get_cursor(layout.main_win)[1]
+    local row_ai = state.scroll_mode and state.scroll_row_ai or (state.row_ai_cache[state.current_file] or {})
+    local suggestion = row_ai[cursor]
+    if not suggestion then return end
+    suggestion.status = "accepted"
+    rerender_ai()
+  end)
+
+  -- d: dismiss AI suggestion at cursor
+  map(main_buf, "n", "d", function()
+    if state.view_mode ~= "diff" then return end
+    local cursor = vim.api.nvim_win_get_cursor(layout.main_win)[1]
+    local row_ai = state.scroll_mode and state.scroll_row_ai or (state.row_ai_cache[state.current_file] or {})
+    local suggestion = row_ai[cursor]
+    if not suggestion then return end
+    suggestion.status = "dismissed"
+    rerender_ai()
+  end)
+
+  -- e: edit AI suggestion comment at cursor
+  map(main_buf, "n", "e", function()
+    if state.view_mode ~= "diff" then return end
+    local cursor = vim.api.nvim_win_get_cursor(layout.main_win)[1]
+    local row_ai = state.scroll_mode and state.scroll_row_ai or (state.row_ai_cache[state.current_file] or {})
+    local suggestion = row_ai[cursor]
+    if not suggestion then return end
+
+    -- Open a scratch float with the current comment text for editing
+    local width = 70
+    local height = 10
+    local float_buf = vim.api.nvim_create_buf(false, true)
+    vim.bo[float_buf].buftype = "nofile"
+    local initial_lines = vim.split(suggestion.comment or "", "\n")
+    vim.api.nvim_buf_set_lines(float_buf, 0, -1, false, initial_lines)
+    local ui = vim.api.nvim_list_uis()[1]
+    local float_win = vim.api.nvim_open_win(float_buf, true, {
+      relative = "editor",
+      row = math.floor((ui.height - height) / 2),
+      col = math.floor((ui.width - width) / 2),
+      width = width,
+      height = height,
+      style = "minimal",
+      border = "rounded",
+      title = " Edit AI Suggestion (Enter: save, q: cancel) ",
+      title_pos = "center",
+    })
+
+    local function close_float()
+      pcall(vim.api.nvim_win_close, float_win, true)
+      pcall(vim.api.nvim_buf_delete, float_buf, { force = true })
+    end
+
+    vim.keymap.set("n", "<CR>", function()
+      local new_lines = vim.api.nvim_buf_get_lines(float_buf, 0, -1, false)
+      suggestion.comment = table.concat(new_lines, "\n")
+      suggestion.status = "edited"
+      close_float()
+      rerender_ai()
+    end, { buffer = float_buf, noremap = true, silent = true })
+
+    vim.keymap.set("n", "q", function()
+      close_float()
+    end, { buffer = float_buf, noremap = true, silent = true })
+  end)
+
+  -- S: submit accepted/edited AI suggestions as review comments
+  map(main_buf, "n", "S", function()
+    if state.view_mode ~= "diff" or not state.ai_suggestions then return end
+    local submit_mod = require("codereview.review.submit")
+    submit_mod.submit_review(state.review, state.ai_suggestions)
+  end)
+
+  -- ds: dismiss all AI suggestions
+  map(main_buf, "n", "ds", function()
+    if state.view_mode ~= "diff" or not state.ai_suggestions then return end
+    for _, s in ipairs(state.ai_suggestions) do
+      if s.status ~= "accepted" and s.status ~= "edited" then
+        s.status = "dismissed"
+      end
+    end
+    state.ai_suggestions = nil
+    vim.api.nvim_buf_clear_namespace(layout.main_buf, AIDRAFT_NS, 0, -1)
+    pcall(vim.fn.sign_unplace, "CodeReviewAI", { buffer = layout.main_buf })
+    M.render_sidebar(layout.sidebar_buf, state)
   end)
 
   map(main_buf, "n", "o", function()
@@ -1336,8 +1651,12 @@ function M.setup_keymaps(layout, state)
   end)
 
   map(main_buf, "n", "A", function()
-    if state.view_mode ~= "summary" then return end
-    require("codereview.review").start(state.review)
+    local review_mod = require("codereview.review")
+    if state.view_mode == "diff" then
+      review_mod.start(state.review, state, layout)
+    else
+      review_mod.start(state.review)
+    end
   end)
 
   -- Refresh
@@ -1352,6 +1671,7 @@ function M.setup_keymaps(layout, state)
 
   -- Quit
   local function quit()
+    active_states[main_buf] = nil
     local split = require("codereview.ui.split")
     split.close(layout)
     pcall(vim.api.nvim_buf_delete, layout.main_buf, { force = true })
@@ -1404,10 +1724,11 @@ function M.setup_keymaps(layout, state)
 
       if state.scroll_mode then
         -- Always re-render all files (buffer may have summary content)
-        local result = M.render_all_files(layout.main_buf, state.files, state.review, state.discussions, state.context, state.file_contexts)
+        local result = M.render_all_files(layout.main_buf, state.files, state.review, state.discussions, state.context, state.file_contexts, state.ai_suggestions)
         state.file_sections = result.file_sections
         state.scroll_line_data = result.line_data
         state.scroll_row_disc = result.row_discussions
+        state.scroll_row_ai = result.row_ai
         M.render_sidebar(layout.sidebar_buf, state)
         for _, sec in ipairs(state.file_sections) do
           if sec.file_idx == entry.idx then
@@ -1417,10 +1738,11 @@ function M.setup_keymaps(layout, state)
         end
       else
         M.render_sidebar(layout.sidebar_buf, state)
-        local line_data, row_disc = M.render_file_diff(
-          layout.main_buf, state.files[entry.idx], state.review, state.discussions, state.context)
+        local line_data, row_disc, row_ai = M.render_file_diff(
+          layout.main_buf, state.files[entry.idx], state.review, state.discussions, state.context, state.ai_suggestions)
         state.line_data_cache[entry.idx] = line_data
         state.row_disc_cache[entry.idx] = row_disc
+        state.row_ai_cache[entry.idx] = row_ai
       end
       vim.api.nvim_set_current_win(layout.main_win)
     end
@@ -1533,6 +1855,9 @@ function M.open(review, discussions)
     scroll_line_data = {},
     scroll_row_disc = {},
     file_contexts = {},
+    ai_suggestions = nil,
+    row_ai_cache = {},
+    scroll_row_ai = {},
   }
 
   M.render_sidebar(layout.sidebar_buf, state)
