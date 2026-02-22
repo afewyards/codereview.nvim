@@ -1362,43 +1362,29 @@ function M.setup_keymaps(layout, state)
       end
 
       state.view_mode = "diff"
+      state.current_file = entry.idx
 
-      -- Now do the existing file selection logic
       if state.scroll_mode then
+        -- Always re-render all files (buffer may have summary content)
+        local result = M.render_all_files(layout.main_buf, state.files, state.mr, state.discussions, state.context, state.file_contexts)
+        state.file_sections = result.file_sections
+        state.scroll_line_data = result.line_data
+        state.scroll_row_disc = result.row_discussions
+        M.render_sidebar(layout.sidebar_buf, state)
         for _, sec in ipairs(state.file_sections) do
           if sec.file_idx == entry.idx then
-            state.current_file = entry.idx
-            M.render_sidebar(layout.sidebar_buf, state)
             vim.api.nvim_win_set_cursor(layout.main_win, { sec.start_line, 0 })
-            vim.api.nvim_set_current_win(layout.main_win)
-            return
+            break
           end
-        end
-        -- If we just loaded diffs, need to render them first
-        if state.file_sections and #state.file_sections == 0 then
-          local result = M.render_all_files(layout.main_buf, state.files, state.mr, state.discussions, state.context, state.file_contexts)
-          state.file_sections = result.file_sections
-          state.scroll_line_data = result.line_data
-          state.scroll_row_disc = result.row_discussions
-          state.current_file = entry.idx
-          M.render_sidebar(layout.sidebar_buf, state)
-          for _, sec in ipairs(state.file_sections) do
-            if sec.file_idx == entry.idx then
-              vim.api.nvim_win_set_cursor(layout.main_win, { sec.start_line, 0 })
-              break
-            end
-          end
-          vim.api.nvim_set_current_win(layout.main_win)
         end
       else
-        state.current_file = entry.idx
         M.render_sidebar(layout.sidebar_buf, state)
         local line_data, row_disc = M.render_file_diff(
           layout.main_buf, state.files[entry.idx], state.mr, state.discussions, state.context)
         state.line_data_cache[entry.idx] = line_data
         state.row_disc_cache[entry.idx] = row_disc
-        vim.api.nvim_set_current_win(layout.main_win)
       end
+      vim.api.nvim_set_current_win(layout.main_win)
     end
   end)
 
