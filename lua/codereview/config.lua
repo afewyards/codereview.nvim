@@ -7,6 +7,7 @@ local defaults = {
   platform = nil,     -- "github" | "gitlab" | nil (auto-detect)
   token = nil,
   picker = nil,
+  debug = false,      -- write request/auth logs to .codereview.log
   diff = { context = 8, scroll_threshold = 50 },
   ai = { enabled = true, claude_cmd = "claude" },
 }

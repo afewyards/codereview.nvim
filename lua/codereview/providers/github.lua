@@ -1,4 +1,5 @@
 local types = require("codereview.providers.types")
+local log = require("codereview.log")
 local M = {}
 
 M.name = "github"
@@ -45,6 +46,7 @@ end
 local function normalize_comment_to_note(comment)
   return {
     id = comment.id,
+    node_id = comment.node_id,
     author = comment.user and comment.user.login or "",
     body = comment.body or "",
     created_at = comment.created_at or "",
@@ -55,6 +57,8 @@ local function normalize_comment_to_note(comment)
       new_path = comment.path,
       new_line = comment.line,
       side = comment.side,   -- stored UPPERCASE: "RIGHT" or "LEFT"
+      start_line = comment.start_line,   -- nil for single-line comments
+      start_side = comment.start_side,
       commit_sha = comment.commit_id,
     },
   }
@@ -184,6 +188,54 @@ function M.get_diffs(client, ctx, review)
   return diffs
 end
 
+--- Fetch thread resolved status via GraphQL, returns { [root_comment_db_id] = bool }.
+local function fetch_thread_resolved_map(headers, owner, repo, pr_number)
+  local curl = require("plenary.curl")
+  local query = string.format([[
+    query {
+      repository(owner: "%s", name: "%s") {
+        pullRequest(number: %d) {
+          reviewThreads(first: 100) {
+            nodes {
+              isResolved
+              comments(first: 1) {
+                nodes { databaseId }
+              }
+            }
+          }
+        }
+      }
+    }
+  ]], owner, repo, pr_number)
+
+  local resp = curl.request({
+    url = "https://api.github.com/graphql",
+    method = "post",
+    headers = headers,
+    body = vim.json.encode({ query = query }),
+  })
+  if not resp or resp.status ~= 200 then return {} end
+  local ok, data = pcall(vim.json.decode, resp.body)
+  if not ok then return {} end
+
+  local threads = data
+    and data.data
+    and data.data.repository
+    and data.data.repository.pullRequest
+    and data.data.repository.pullRequest.reviewThreads
+    and data.data.repository.pullRequest.reviewThreads.nodes
+  if not threads then return {} end
+
+  local map = {}
+  for _, thread in ipairs(threads) do
+    local comments = thread.comments and thread.comments.nodes
+    if comments and #comments > 0 then
+      map[comments[1].databaseId] = thread.isResolved
+    end
+  end
+  return map
+end
+
 --- Get all review comment discussions for a PR.
 function M.get_discussions(client, ctx, review)
   local headers, err = get_headers()
@@ -192,7 +244,21 @@ function M.get_discussions(client, ctx, review)
   local start_url = string.format("%s/repos/%s/%s/pulls/%d/comments", ctx.base_url, owner, repo, review.id)
   local all_comments = client.paginate_all_url(start_url, { headers = headers })
   if not all_comments then return nil, "Failed to fetch discussions" end
-  return M.normalize_review_comments_to_discussions(all_comments)
+  local discussions = M.normalize_review_comments_to_discussions(all_comments)
+
+  -- Enrich with resolved status from GraphQL
+  local resolved_map = fetch_thread_resolved_map(headers, owner, repo, review.id)
+  for _, disc in ipairs(discussions) do
+    local root_id = tonumber(disc.id)
+    if root_id and resolved_map[root_id] ~= nil then
+      disc.resolved = resolved_map[root_id]
+      if disc.notes and disc.notes[1] then
+        disc.notes[1].resolved = resolved_map[root_id]
+      end
+    end
+  end
+
+  return discussions
 end
 
 --- Post an inline comment or general PR comment.
@@ -206,7 +272,7 @@ function M.post_comment(client, ctx, review, body, position)
     local path_url = string.format("/repos/%s/%s/pulls/%d/comments", owner, repo, review.id)
     local payload = {
       body = body,
-      commit_id = position.commit_sha,
+      commit_id = position.commit_sha or review.head_sha,
       path = position.new_path or position.old_path,
       line = position.new_line or position.old_line,
       side = position.side or "RIGHT",
@@ -254,9 +320,118 @@ function M.close(client, ctx, review)
   return client.patch(ctx.base_url, path_url, { body = { state = "closed" }, headers = headers })
 end
 
---- GitHub does not support resolving individual review threads via the REST API.
-function M.resolve_discussion(client, ctx, review, discussion_id, resolved) -- luacheck: ignore
-  return nil, "not supported"
+--- Resolve/unresolve a review thread via GitHub GraphQL API.
+--- discussion_id is the root comment ID (string). We look up the thread node_id
+--- via GraphQL, then call resolveReviewThread or unresolveReviewThread.
+function M.resolve_discussion(client, ctx, review, discussion_id, resolved)
+  local headers, err = get_headers()
+  if not headers then return nil, err end
+  local owner, repo = parse_owner_repo(ctx)
+  local curl = require("plenary.curl")
+
+  -- Step 1: find the thread node_id for this comment
+  local lookup_query = string.format([[
+    query {
+      repository(owner: "%s", name: "%s") {
+        pullRequest(number: %d) {
+          reviewThreads(first: 100) {
+            nodes {
+              id
+              isResolved
+              comments(first: 1) {
+                nodes { databaseId }
+              }
+            }
+          }
+        }
+      }
+    }
+  ]], owner, repo, review.id)
+
+  local gql_url = "https://api.github.com/graphql"
+  log.debug("GraphQL: fetching review threads for comment " .. discussion_id)
+  local resp = curl.request({
+    url = gql_url,
+    method = "post",
+    headers = headers,
+    body = vim.json.encode({ query = lookup_query }),
+  })
+  if not resp or resp.status ~= 200 then
+    local msg = "GraphQL lookup failed: " .. (resp and resp.body or "no response")
+    log.error(msg)
+    return nil, msg
+  end
+
+  local ok, data = pcall(vim.json.decode, resp.body)
+  if not ok then return nil, "Failed to parse GraphQL response" end
+
+  if data.errors then
+    local msg = "GraphQL errors: " .. vim.json.encode(data.errors)
+    log.error(msg)
+    return nil, msg
+  end
+
+  local threads = data
+    and data.data
+    and data.data.repository
+    and data.data.repository.pullRequest
+    and data.data.repository.pullRequest.reviewThreads
+    and data.data.repository.pullRequest.reviewThreads.nodes
+  if not threads then
+    log.error("GraphQL: no review threads in response")
+    return nil, "No review threads found"
+  end
+
+  local comment_id = tonumber(discussion_id)
+  local thread_node_id
+  for _, thread in ipairs(threads) do
+    local comments = thread.comments and thread.comments.nodes
+    if comments and #comments > 0 and comments[1].databaseId == comment_id then
+      thread_node_id = thread.id
+      break
+    end
+  end
+
+  if not thread_node_id then
+    log.error("GraphQL: no thread matched comment id " .. discussion_id)
+    return nil, "Could not find thread for comment " .. discussion_id
+  end
+
+  -- Step 2: resolve or unresolve
+  local action = resolved and "resolve" or "unresolve"
+  log.debug("GraphQL: " .. action .. " thread " .. thread_node_id)
+  local mutation
+  if resolved then
+    mutation = string.format([[
+      mutation { resolveReviewThread(input: {threadId: "%s"}) { thread { id isResolved } } }
+    ]], thread_node_id)
+  else
+    mutation = string.format([[
+      mutation { unresolveReviewThread(input: {threadId: "%s"}) { thread { id isResolved } } }
+    ]], thread_node_id)
+  end
+
+  local mresp = curl.request({
+    url = gql_url,
+    method = "post",
+    headers = headers,
+    body = vim.json.encode({ query = mutation }),
+  })
+  if not mresp or mresp.status ~= 200 then
+    local msg = "GraphQL mutation failed: " .. (mresp and mresp.body or "no response")
+    log.error(msg)
+    return nil, msg
+  end
+
+  local mok, mdata = pcall(vim.json.decode, mresp.body)
+  if mok and mdata.errors then
+    local msg = "GraphQL mutation errors: " .. vim.json.encode(mdata.errors)
+    log.error(msg)
+    return nil, msg
+  end
+
+  log.info("GraphQL: thread " .. thread_node_id .. " " .. action .. "d")
+  return { data = true }
 end
 
 --- Approve a PR by submitting an APPROVE review.

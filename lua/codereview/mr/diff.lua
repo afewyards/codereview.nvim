@@ -74,7 +74,10 @@ local function discussion_line(discussion)
   local note = discussion.notes and discussion.notes[1]
   if not note or not note.position then return nil end
   local pos = note.position
-  return pos.new_line or pos.old_line
+  local end_line = tonumber(pos.new_line) or tonumber(pos.old_line)
+  -- Range comments: derive start from GitHub start_line or GitLab line_range
+  local start_line = tonumber(pos.start_line) or tonumber(pos.start_new_line) or tonumber(pos.start_old_line)
+  return end_line, start_line
 end
 
 local function is_resolved(discussion)
@@ -92,14 +95,29 @@ function M.place_comment_signs(buf, line_data, discussions, file_diff)
 
   for _, discussion in ipairs(discussions or {}) do
     if discussion_matches_file(discussion, file_diff) then
-      local target_line = discussion_line(discussion)
+      local target_line, range_start = discussion_line(discussion)
       if target_line then
+        local sign_name = is_resolved(discussion) and "CodeReviewCommentSign"
+          or "CodeReviewUnresolvedSign"
+        -- Place signs on all lines in the range and map rows to discussion
+        if range_start and range_start ~= target_line then
+          for row, data in ipairs(line_data) do
+            local item = data.item
+            if item then
+              local ln = tonumber(item.new_line) or tonumber(item.old_line)
+              if ln and ln >= range_start and ln <= target_line then
+                pcall(vim.fn.sign_place, 0, "CodeReview", sign_name, buf, { lnum = row })
+                if not row_discussions[row] then row_discussions[row] = {} end
+                table.insert(row_discussions[row], discussion)
+              end
+            end
+          end
+        end
+        -- Find the end-line row for the inline thread
         for row, data in ipairs(line_data) do
           local item = data.item
           if item and (item.new_line == target_line or item.old_line == target_line) then
-            -- Place gutter sign
-            local sign_name = is_resolved(discussion) and "CodeReviewCommentSign"
-              or "CodeReviewUnresolvedSign"
+            -- Place gutter sign (also covers single-line comments)
             pcall(vim.fn.sign_place, 0, "CodeReview", sign_name, buf, { lnum = row })
 
             -- Render full comment thread inline
@@ -501,13 +519,29 @@ function M.render_all_files(buf, files, review, discussions, context, file_conte
   for _, section in ipairs(file_sections) do
     for _, disc in ipairs(discussions or {}) do
       if discussion_matches_file(disc, section.file) then
-        local target_line = discussion_line(disc)
+        local target_line, range_start = discussion_line(disc)
         if target_line then
+          local sign_name = is_resolved(disc) and "CodeReviewCommentSign"
+            or "CodeReviewUnresolvedSign"
+          -- Place signs on all lines in the range and map rows to discussion
+          if range_start and range_start ~= target_line then
+            for i = section.start_line, section.end_line do
+              local data = all_line_data[i]
+              if data.item then
+                local ln = tonumber(data.item.new_line) or tonumber(data.item.old_line)
+                if ln and ln >= range_start and ln <= target_line then
+                  pcall(vim.fn.sign_place, 0, "CodeReview", sign_name, buf, { lnum = i })
+                  if not all_row_discussions[i] then all_row_discussions[i] = {} end
+                  table.insert(all_row_discussions[i], disc)
+                end
+              end
+            end
+          end
+          -- Find the end-line row for the inline thread
           for i = section.start_line, section.end_line do
             local data = all_line_data[i]
             if data.item and (data.item.new_line == target_line or data.item.old_line == target_line) then
-              local sign_name = is_resolved(disc) and "CodeReviewCommentSign"
-                or "CodeReviewUnresolvedSign"
+              -- Place sign (also covers single-line comments)
               pcall(vim.fn.sign_place, 0, "CodeReview", sign_name, buf, { lnum = i })
 
               local notes = disc.notes
@@ -720,7 +754,7 @@ end
 
 -- ─── Comment creation ─────────────────────────────────────────────────────────
 
-function M.create_comment_at_cursor(layout, state)
+function M.create_comment_at_cursor(layout, state, on_success)
   local line_data = state.line_data_cache[state.current_file]
   if not line_data then return end
   local cursor = vim.api.nvim_win_get_cursor(layout.main_win)
@@ -737,18 +771,19 @@ function M.create_comment_at_cursor(layout, state)
     file.old_path,
     file.new_path,
     data.item.old_line,
-    data.item.new_line
+    data.item.new_line,
+    on_success
   )
 end
 
-function M.create_comment_range(layout, state)
+function M.create_comment_range(layout, state, on_success)
   local line_data = state.line_data_cache[state.current_file]
   if not line_data then return end
   -- Get visual selection range
-  local start_row = vim.fn.line("'<")
-  local end_row = vim.fn.line("'>")
-  local start_data = line_data[start_row]
-  local end_data = line_data[end_row]
+  local s, e = vim.fn.line("v"), vim.fn.line(".")
+  if s > e then s, e = e, s end
+  local start_data = line_data[s]
+  local end_data = line_data[e]
   if not start_data or not end_data then
     vim.notify("Invalid selection range", vim.log.levels.WARN)
     return
@@ -760,7 +795,8 @@ function M.create_comment_range(layout, state)
     file.old_path,
     file.new_path,
     { old_line = start_data.item.old_line, new_line = start_data.item.new_line },
-    { old_line = end_data.item.old_line, new_line = end_data.item.new_line }
+    { old_line = end_data.item.old_line, new_line = end_data.item.new_line },
+    on_success
   )
 end
 
@@ -1091,8 +1127,35 @@ function M.setup_keymaps(layout, state)
     end
   end)
 
-  -- Comment creation
+  -- Re-fetch discussions from API and re-render the diff view
+  local function refresh_discussions()
+    local client_mod = require("codereview.api.client")
+    local discs = state.provider.get_discussions(client_mod, state.ctx, state.review) or {}
+    state.discussions = discs
+    if state.scroll_mode then
+      local cursor = vim.api.nvim_win_get_cursor(layout.main_win)
+      local result = M.render_all_files(layout.main_buf, state.files, state.review, discs, state.context, state.file_contexts)
+      state.file_sections = result.file_sections
+      state.scroll_line_data = result.line_data
+      state.scroll_row_disc = result.row_discussions
+      vim.api.nvim_win_set_cursor(layout.main_win, { math.min(cursor[1], vim.api.nvim_buf_line_count(layout.main_buf)), 0 })
+    else
+      local file = state.files and state.files[state.current_file]
+      if file then
+        local ld, rd = M.render_file_diff(layout.main_buf, file, state.review, discs, state.context)
+        state.line_data_cache[state.current_file] = ld
+        state.row_disc_cache[state.current_file] = rd
+      end
+    end
+  end
+
+  -- Comment creation (works in both diff and summary modes)
   map(main_buf, "n", "cc", function()
+    if state.view_mode == "summary" then
+      local comment = require("codereview.mr.comment")
+      comment.create_mr_comment(state.review, state.provider, state.ctx, refresh_discussions)
+      return
+    end
     if state.view_mode ~= "diff" then return end
     if state.scroll_mode then
       local cursor = vim.api.nvim_win_get_cursor(layout.main_win)
@@ -1104,18 +1167,18 @@ function M.setup_keymaps(layout, state)
       end
       local file = state.files[data.file_idx]
       local comment = require("codereview.mr.comment")
-      comment.create_inline(state.review, file.old_path, file.new_path, data.item.old_line, data.item.new_line)
+      comment.create_inline(state.review, file.old_path, file.new_path, data.item.old_line, data.item.new_line, refresh_discussions)
     else
-      M.create_comment_at_cursor(layout, state)
+      M.create_comment_at_cursor(layout, state, refresh_discussions)
     end
   end)
   map(main_buf, "v", "cc", function()
     if state.view_mode ~= "diff" then return end
     if state.scroll_mode then
-      local start_row = vim.fn.line("'<")
-      local end_row = vim.fn.line("'>")
-      local start_data = state.scroll_line_data[start_row]
-      local end_data = state.scroll_line_data[end_row]
+      local s, e = vim.fn.line("v"), vim.fn.line(".")
+      if s > e then s, e = e, s end
+      local start_data = state.scroll_line_data[s]
+      local end_data = state.scroll_line_data[e]
       if not start_data or not start_data.item or not end_data or not end_data.item then
         vim.notify("Invalid selection range", vim.log.levels.WARN)
         return
@@ -1127,10 +1190,11 @@ function M.setup_keymaps(layout, state)
         file.old_path,
         file.new_path,
         { old_line = start_data.item.old_line, new_line = start_data.item.new_line },
-        { old_line = end_data.item.old_line, new_line = end_data.item.new_line }
+        { old_line = end_data.item.old_line, new_line = end_data.item.new_line },
+        refresh_discussions
       )
     else
-      M.create_comment_range(layout, state)
+      M.create_comment_range(layout, state, refresh_discussions)
     end
   end)
 
@@ -1166,7 +1230,7 @@ function M.setup_keymaps(layout, state)
     local disc = get_cursor_disc()
     if disc then
       local comment = require("codereview.mr.comment")
-      comment.reply(disc, state.review)
+      comment.reply(disc, state.review, refresh_discussions)
     end
   end)
 
@@ -1175,26 +1239,7 @@ function M.setup_keymaps(layout, state)
     local disc = get_cursor_disc()
     if disc then
       local comment = require("codereview.mr.comment")
-      comment.resolve_toggle(disc, state.review, function()
-        -- Re-render to update resolved status
-        if state.scroll_mode then
-          local cursor = vim.api.nvim_win_get_cursor(layout.main_win)
-          local result = M.render_all_files(layout.main_buf, state.files, state.review, state.discussions, state.context, state.file_contexts)
-          state.file_sections = result.file_sections
-          state.scroll_line_data = result.line_data
-          state.scroll_row_disc = result.row_discussions
-          vim.api.nvim_win_set_cursor(layout.main_win, { math.min(cursor[1], vim.api.nvim_buf_line_count(layout.main_buf)), 0 })
-        else
-          local file = state.files and state.files[state.current_file]
-          if file then
-            local ld, rd = M.render_file_diff(
-              layout.main_buf, file, state.review, state.discussions, state.context)
-            state.line_data_cache[state.current_file] = ld
-            state.row_disc_cache[state.current_file] = rd
-          end
-        end
-        vim.notify("Resolve status toggled", vim.log.levels.INFO)
-      end)
+      comment.resolve_toggle(disc, state.review, refresh_discussions)
     end
   end)
 
@@ -1244,23 +1289,10 @@ function M.setup_keymaps(layout, state)
     end
   end)
 
-  -- Summary-mode keymaps (no-op in diff mode)
-  map(main_buf, "n", "c", function()
-    if state.view_mode ~= "summary" then return end
-    vim.ui.input({ prompt = "Comment on MR: " }, function(input)
-      if not input or input == "" then return end
-      local provider = state.provider
-      local ctx = state.ctx
-      if not provider or not ctx then return end
-      local client_mod = require("codereview.api.client")
-      local _, err = provider.post_comment(client_mod, ctx, state.review, input, nil)
-      if err then
-        vim.notify("Failed to post comment: " .. err, vim.log.levels.ERROR)
-      else
-        vim.notify("Comment posted", vim.log.levels.INFO)
-      end
-    end)
-  end)
+  -- Summary-mode general comment (uses cc, same key as inline comment in diff mode)
+  -- The cc handler above (line ~1095) checks view_mode == "diff", so this only
+  -- fires when in summary mode because that handler returns early for summary.
+  -- NOTE: We must NOT map bare "c" with nowait — it blocks cc from ever firing.
 
   map(main_buf, "n", "a", function()
     if state.view_mode ~= "summary" then return end
@@ -1298,7 +1330,7 @@ function M.setup_keymaps(layout, state)
 
   map(main_buf, "n", "A", function()
     if state.view_mode ~= "summary" then return end
-    vim.notify("AI review (Stage 5)", vim.log.levels.WARN)
+    require("codereview.review").start(state.review)
   end)
 
   -- Refresh

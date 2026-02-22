@@ -1,6 +1,7 @@
 local curl = require("plenary.curl")
 local async = require("plenary.async")
 local async_util = require("plenary.async.util")
+local log = require("codereview.log")
 local M = {}
 
 local function build_headers(token, token_type)
@@ -94,21 +95,28 @@ function M.request(method, base_url, path, opts)
   end
 
   local params = build_params(method, base_url, path, opts)
+  log.debug(string.format("REQ %s %s", method:upper(), params.url))
 
   local response = curl.request(params)
   if not response then
+    log.error(string.format("REQ %s %s — no response", method:upper(), params.url))
     return nil, "Request failed: no response"
   end
 
+  log.debug(string.format("RES %d %s %s", response.status, method:upper(), params.url))
+
   if response.status == 429 then
     local retry_after = tonumber(response.headers and response.headers["retry-after"]) or 5
+    log.warn(string.format("Rate limited on %s, retrying in %ds", params.url, retry_after))
     vim.notify(string.format("Rate limited. Retrying in %ds...", retry_after), vim.log.levels.WARN)
     vim.wait(retry_after * 1000)
     response = curl.request(params)
   end
 
   if response.status < 200 or response.status >= 300 then
-    return nil, string.format("HTTP %d: %s", response.status, response.body or "")
+    local err = string.format("HTTP %d: %s", response.status, response.body or "")
+    log.error(string.format("RES %d %s %s — %s", response.status, method:upper(), params.url, response.body or ""))
+    return nil, err
   end
 
   return process_response(response)
@@ -128,14 +136,19 @@ function M.async_request(method, base_url, path, opts)
   end
 
   local params = build_params(method, base_url, path, opts)
+  log.debug(string.format("ASYNC REQ %s %s", method:upper(), params.url))
 
   local response = async_util.wrap(curl.request, 2)(params)
   if not response then
+    log.error(string.format("ASYNC REQ %s %s — no response", method:upper(), params.url))
     return nil, "Request failed: no response"
   end
 
+  log.debug(string.format("ASYNC RES %d %s %s", response.status, method:upper(), params.url))
+
   if response.status == 429 then
     local retry_after = tonumber(response.headers and response.headers["retry-after"]) or 5
+    log.warn(string.format("Rate limited on %s, retrying in %ds", params.url, retry_after))
     vim.schedule(function()
       vim.notify(string.format("Rate limited. Retrying in %ds...", retry_after), vim.log.levels.WARN)
     end)
@@ -144,7 +157,9 @@ function M.async_request(method, base_url, path, opts)
   end
 
   if response.status < 200 or response.status >= 300 then
-    return nil, string.format("HTTP %d: %s", response.status, response.body or "")
+    local err = string.format("HTTP %d: %s", response.status, response.body or "")
+    log.error(string.format("ASYNC RES %d %s %s — %s", response.status, method:upper(), params.url, response.body or ""))
+    return nil, err
   end
 
   return process_response(response)

@@ -2,6 +2,59 @@ local markdown = require("codereview.ui.markdown")
 local detail = require("codereview.mr.detail")
 local M = {}
 
+--- Open a floating popup for multi-line comment input.
+--- @param title string  Title shown in the border
+--- @param callback fun(text: string)  Called with the joined text on submit
+local function open_input_popup(title, callback)
+  local width = 70
+  local height = 8
+  local row = math.floor((vim.o.lines - height) / 2)
+  local col = math.floor((vim.o.columns - width) / 2)
+
+  local buf = vim.api.nvim_create_buf(false, true)
+  vim.bo[buf].bufhidden = "wipe"
+  vim.bo[buf].filetype = "markdown"
+
+  local win = vim.api.nvim_open_win(buf, true, {
+    relative = "editor",
+    width = width,
+    height = height,
+    row = row,
+    col = col,
+    style = "minimal",
+    border = "rounded",
+    title = " " .. title .. " ",
+    title_pos = "center",
+    footer = " <C-CR> submit  q/Esc cancel ",
+    footer_pos = "center",
+  })
+
+  vim.cmd("startinsert")
+
+  local closed = false
+  local function close()
+    if closed then return end
+    closed = true
+    vim.cmd("stopinsert")
+    pcall(vim.api.nvim_win_close, win, true)
+  end
+
+  local function submit()
+    local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+    close()
+    local text = vim.fn.join(lines, "\n")
+    text = vim.trim(text)
+    if text ~= "" then
+      callback(text)
+    end
+  end
+
+  local map_opts = { buffer = buf, nowait = true }
+  vim.keymap.set("n", "q", close, map_opts)
+  vim.keymap.set("n", "<Esc>", close, map_opts)
+  vim.keymap.set({ "n", "i" }, "<C-CR>", submit, map_opts)
+end
+
 local function get_provider()
   local providers = require("codereview.providers")
   local client = require("codereview.api.client")
@@ -115,16 +168,16 @@ function M.show_thread(disc, mr)
   end, map_opts)
 end
 
-function M.reply(disc, mr)
-  vim.ui.input({ prompt = "Reply: " }, function(input)
-    if not input or input == "" then return end
+function M.reply(disc, mr, on_success)
+  open_input_popup("Reply", function(text)
     local provider, client, ctx = get_provider()
     if not provider then return end
-    local _, err = provider.reply_to_discussion(client, ctx, mr, disc.id, input)
+    local _, err = provider.reply_to_discussion(client, ctx, mr, disc.id, text)
     if err then
       vim.notify("Failed to post reply: " .. err, vim.log.levels.ERROR)
     else
       vim.notify("Reply posted", vim.log.levels.INFO)
+      if on_success then on_success() end
     end
   end)
 end
@@ -145,9 +198,8 @@ function M.resolve_toggle(disc, mr, callback)
   end
 end
 
-function M.create_inline(mr, old_path, new_path, old_line, new_line)
-  vim.ui.input({ prompt = "Inline comment: " }, function(input)
-    if not input or input == "" then return end
+function M.create_inline(mr, old_path, new_path, old_line, new_line, on_success)
+  open_input_popup("Inline Comment", function(text)
     local provider, client, ctx = get_provider()
     if not provider then return end
     local position = {
@@ -156,25 +208,40 @@ function M.create_inline(mr, old_path, new_path, old_line, new_line)
       old_line = old_line,
       new_line = new_line,
     }
-    local _, err = provider.post_comment(client, ctx, mr, input, position)
+    local _, err = provider.post_comment(client, ctx, mr, text, position)
     if err then
       vim.notify("Failed to post comment: " .. err, vim.log.levels.ERROR)
     else
       vim.notify("Comment posted", vim.log.levels.INFO)
+      if on_success then on_success() end
     end
   end)
 end
 
-function M.create_inline_range(mr, old_path, new_path, start_pos, end_pos)
-  vim.ui.input({ prompt = "Range comment: " }, function(input)
-    if not input or input == "" then return end
+function M.create_inline_range(mr, old_path, new_path, start_pos, end_pos, on_success)
+  open_input_popup("Range Comment", function(text)
     local provider, client, ctx = get_provider()
     if not provider then return end
-    local _, err = provider.post_range_comment(client, ctx, mr, input, old_path, new_path, start_pos, end_pos)
+    local _, err = provider.post_range_comment(client, ctx, mr, text, old_path, new_path, start_pos, end_pos)
     if err then
       vim.notify("Failed to post range comment: " .. err, vim.log.levels.ERROR)
     else
       vim.notify("Range comment posted", vim.log.levels.INFO)
+      if on_success then on_success() end
+    end
+  end)
+end
+
+function M.create_mr_comment(review, provider, ctx, on_success)
+  open_input_popup("Comment on MR", function(text)
+    if not provider or not ctx then return end
+    local client_mod = require("codereview.api.client")
+    local _, err = provider.post_comment(client_mod, ctx, review, text, nil)
+    if err then
+      vim.notify("Failed to post comment: " .. err, vim.log.levels.ERROR)
+    else
+      vim.notify("Comment posted", vim.log.levels.INFO)
+      if on_success then on_success() end
     end
   end)
 end

@@ -75,6 +75,12 @@ local function normalize_note(raw)
       new_line = p.new_line,
       old_line = p.old_line,
     }
+    -- Preserve range start from line_range (GitLab range comments)
+    if p.line_range and p.line_range.start then
+      local s = p.line_range.start
+      position.start_new_line = s.new_line
+      position.start_old_line = s.old_line
+    end
   end
 
   return {

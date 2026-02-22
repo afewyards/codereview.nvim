@@ -1,3 +1,4 @@
+local log = require("codereview.log")
 local M = {}
 
 local cached = {} -- { [platform] = { token, type } }
@@ -60,10 +61,13 @@ function M.get_token(platform)
     return cached[platform].token, cached[platform].type
   end
 
+  log.debug("get_token: resolving for platform=" .. platform)
+
   -- 1. Environment variable
   local env_var = platform == "github" and "GITHUB_TOKEN" or "GITLAB_TOKEN"
   local env_token = os.getenv(env_var)
   if env_token and env_token ~= "" then
+    log.info("get_token: using " .. env_var .. " env var")
     cached[platform] = { token = env_token, type = "pat" }
     return env_token, "pat"
   end
@@ -71,13 +75,16 @@ function M.get_token(platform)
   -- 2. .codereview.json platform-scoped token
   local file_config = read_config_file()
   if file_config then
-    local scoped_token = file_config[platform .. "_token"]
+    local scoped_key = platform .. "_token"
+    local scoped_token = file_config[scoped_key]
     if scoped_token and scoped_token ~= "" then
+      log.info("get_token: using .codereview.json " .. scoped_key)
       cached[platform] = { token = scoped_token, type = "pat" }
       return scoped_token, "pat"
     end
     -- 3. .codereview.json generic token
     if file_config.token and file_config.token ~= "" then
+      log.info("get_token: using .codereview.json generic token")
       cached[platform] = { token = file_config.token, type = "pat" }
       return file_config.token, "pat"
     end
@@ -86,10 +93,12 @@ function M.get_token(platform)
   -- 4. Plugin config
   local config = require("codereview.config").get()
   if config.token then
+    log.info("get_token: using plugin config token")
     cached[platform] = { token = config.token, type = "pat" }
     return config.token, "pat"
   end
 
+  log.warn("get_token: no token found for platform=" .. platform)
   return nil, nil
 end
 
