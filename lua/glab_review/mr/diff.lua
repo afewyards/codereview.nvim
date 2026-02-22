@@ -110,6 +110,12 @@ function M.render_file_diff(buf, file_diff, mr, discussions, context)
   local lines = {}
   local line_data = {}
 
+  -- "Load more above" indicator if first hunk doesn't start at line 1
+  if #hunks > 0 and (hunks[1].new_start > 1 or hunks[1].old_start > 1) then
+    table.insert(lines, "  ↑ Press <CR> to load more context above ↑")
+    table.insert(line_data, { type = "load_more", direction = "above" })
+  end
+
   for _, item in ipairs(display) do
     if item.type == "hidden" then
       table.insert(lines, M.format_hidden_line(item.count))
@@ -119,6 +125,12 @@ function M.render_file_diff(buf, file_diff, mr, discussions, context)
       table.insert(lines, prefix .. (item.text or ""))
       table.insert(line_data, { type = item.type, item = item })
     end
+  end
+
+  -- "Load more below" indicator
+  if #hunks > 0 then
+    table.insert(lines, "  ↓ Press <CR> to load more context below ↓")
+    table.insert(line_data, { type = "load_more", direction = "below" })
   end
 
   vim.bo[buf].modifiable = true
@@ -161,7 +173,7 @@ function M.render_file_diff(buf, file_diff, mr, discussions, context)
       apply_line_hl(buf, row, "GlabReviewDiffDelete")
       prev_delete_row = row
       prev_delete_text = data.item.text or ""
-    elseif data.type == "hidden" then
+    elseif data.type == "hidden" or data.type == "load_more" then
       apply_line_hl(buf, row, "GlabReviewHidden")
       prev_delete_row = nil
       prev_delete_text = nil
@@ -424,13 +436,16 @@ function M.setup_keymaps(layout, state)
   map(main_buf, "n", "cc", function() M.create_comment_at_cursor(layout, state) end)
   map(main_buf, "v", "cc", function() M.create_comment_range(layout, state) end)
 
-  -- Expand hidden lines
+  -- Expand hidden lines / load more context
   map(main_buf, "n", "<CR>", function()
     local cursor = vim.api.nvim_win_get_cursor(layout.main_win)
     local row = cursor[1]
     local line_data = state.line_data_cache[state.current_file]
-    if line_data and line_data[row] and line_data[row].type == "hidden" then
+    if not line_data or not line_data[row] then return end
+    if line_data[row].type == "hidden" then
       M.expand_hidden(layout, state)
+    elseif line_data[row].type == "load_more" then
+      adjust_context(layout, state, 10)
     end
   end)
 
