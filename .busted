@@ -1,0 +1,9 @@
+return {
+  _all = {
+    helper = "tests/unit_helper.lua",
+  },
+  unit = {
+    ROOT = { "tests" },
+    pattern = "_spec",
+  },
+}
