@@ -82,8 +82,9 @@ end
 
 function M.render_file_diff(buf, file_diff, mr, discussions)
   local parser = require("glab_review.mr.diff_parser")
+  local config = require("glab_review.config")
   local hunks = parser.parse_hunks(file_diff.diff or "")
-  local display = parser.build_display(hunks)
+  local display = parser.build_display(hunks, config.get().diff.context)
 
   local lines = {}
   local line_data = {}
@@ -102,6 +103,13 @@ function M.render_file_diff(buf, file_diff, mr, discussions)
   vim.bo[buf].modifiable = true
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
   vim.bo[buf].modifiable = false
+
+  -- Set syntax from file extension for code highlighting
+  local path = file_diff.new_path or file_diff.old_path or ""
+  local ft = vim.filetype.match({ filename = path })
+  if ft then
+    vim.bo[buf].syntax = ft
+  end
 
   -- Clear previous highlights
   vim.api.nvim_buf_clear_namespace(buf, DIFF_NS, 0, -1)
@@ -260,12 +268,15 @@ function M.create_comment_at_cursor(layout, state)
     vim.notify("No diff line at cursor", vim.log.levels.WARN)
     return
   end
+  local file = state.files[state.current_file]
   local comment = require("glab_review.mr.comment")
-  comment.create(state.mr, data.item, nil, function()
-    -- Refresh signs after comment creation
-    local file = state.files[state.current_file]
-    M.place_comment_signs(layout.main_buf, line_data, state.discussions, file)
-  end)
+  comment.create_inline(
+    state.mr,
+    file.old_path,
+    file.new_path,
+    data.item.old_line,
+    data.item.new_line
+  )
 end
 
 function M.create_comment_range(layout, state)
@@ -280,11 +291,15 @@ function M.create_comment_range(layout, state)
     vim.notify("Invalid selection range", vim.log.levels.WARN)
     return
   end
+  local file = state.files[state.current_file]
   local comment = require("glab_review.mr.comment")
-  comment.create(state.mr, start_data.item, end_data.item, function()
-    local file = state.files[state.current_file]
-    M.place_comment_signs(layout.main_buf, line_data, state.discussions, file)
-  end)
+  comment.create_inline_range(
+    state.mr,
+    file.old_path,
+    file.new_path,
+    { old_line = start_data.item.old_line, new_line = start_data.item.new_line },
+    { old_line = end_data.item.old_line, new_line = end_data.item.new_line }
+  )
 end
 
 -- ─── Navigation helpers ───────────────────────────────────────────────────────
