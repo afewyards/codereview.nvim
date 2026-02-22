@@ -19,6 +19,7 @@ function M.setup()
   vim.api.nvim_set_hl(0, "CodeReviewFileHeader", { bg = "#1e2030", fg = "#c8d3f5", bold = true, default = true })
   vim.api.nvim_set_hl(0, "CodeReviewLineNr", { fg = "#565f89", default = true })
   vim.api.nvim_set_hl(0, "CodeReviewSummaryButton", { fg = "#7aa2f7", bold = true, default = true })
+  vim.api.nvim_set_hl(0, "CodeReviewSpinner", { fg = "#7aa2f7", bold = true, default = true })
   vim.fn.sign_define("CodeReviewCommentSign", { text = "▍ ", texthl = "CodeReviewComment" })
   vim.fn.sign_define("CodeReviewUnresolvedSign", { text = "▍ ", texthl = "CodeReviewCommentUnresolved" })
 end
