@@ -4,6 +4,7 @@ local client = require("codereview.api.client")
 local ai_sub = require("codereview.ai.subprocess")
 local prompt_mod = require("codereview.ai.prompt")
 local triage = require("codereview.review.triage")
+local spinner = require("codereview.ui.spinner")
 local M = {}
 
 function M.start(review)
@@ -23,11 +24,13 @@ function M.start(review)
   -- Fetch discussions
   local discussions = provider.get_discussions(client, ctx, review) or {}
 
-  -- Run Claude review
   local review_prompt = prompt_mod.build_review_prompt(review, diffs)
-  vim.notify("Running AI review...", vim.log.levels.INFO)
+  local win = vim.api.nvim_get_current_win()
+  spinner.start(win, "Running AI review…")
 
   ai_sub.run(review_prompt, function(output, ai_err)
+    spinner.stop(win)
+
     if ai_err then
       vim.notify("AI review failed: " .. ai_err, vim.log.levels.ERROR)
       return
