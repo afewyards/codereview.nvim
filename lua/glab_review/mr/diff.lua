@@ -14,6 +14,31 @@ function M.format_line_number(old_nr, new_nr)
   return old_str .. " | " .. new_str .. " "
 end
 
+function M.clamp_cursor_to_content(buf, win)
+  vim.api.nvim_create_autocmd("CursorMoved", {
+    buffer = buf,
+    callback = function()
+      if not vim.api.nvim_win_is_valid(win) then return true end
+      local cursor = vim.api.nvim_win_get_cursor(win)
+      if cursor[2] < LINE_NR_WIDTH then
+        vim.api.nvim_win_set_cursor(win, { cursor[1], LINE_NR_WIDTH })
+      end
+    end,
+  })
+
+  local clamp_keys = { "0", "^", "h", "<Left>", "<BS>" }
+  local opts = { noremap = true, silent = true, buffer = buf }
+  for _, key in ipairs(clamp_keys) do
+    vim.keymap.set("n", key, function()
+      vim.cmd("normal! " .. vim.api.nvim_replace_termcodes(key, true, false, true))
+      local cursor = vim.api.nvim_win_get_cursor(win)
+      if cursor[2] < LINE_NR_WIDTH then
+        vim.api.nvim_win_set_cursor(win, { cursor[1], LINE_NR_WIDTH })
+      end
+    end, opts)
+  end
+end
+
 -- ─── Highlight application ────────────────────────────────────────────────────
 
 local function apply_line_hl(buf, row, hl_group)
@@ -1349,6 +1374,7 @@ function M.open(mr, discussions)
   end
 
   M.setup_keymaps(layout, state)
+  M.clamp_cursor_to_content(layout.main_buf, layout.main_win)
   vim.api.nvim_set_current_win(layout.main_win)
 end
 
