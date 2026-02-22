@@ -2,6 +2,12 @@ local M = {}
 
 function M.setup(opts)
   require("glab_review.config").setup(opts)
+  require("glab_review.ui.highlight").setup()
+  vim.api.nvim_create_autocmd("ColorScheme", {
+    callback = function()
+      require("glab_review.ui.highlight").setup()
+    end,
+  })
 end
 
 -- Stubs for later stages
