@@ -1319,6 +1319,23 @@ function M.setup_keymaps(layout, state)
   })
 end
 
+-- ─── Lazy diff loading ──────────────────────────────────────────────────────
+
+function M.load_diffs_into_state(state, files)
+  if state.files then return end
+  local config = require("glab_review.config")
+  local cfg = config.get()
+  state.files = files
+  state.scroll_mode = #files <= cfg.diff.scroll_threshold
+  state.line_data_cache = state.line_data_cache or {}
+  state.row_disc_cache = state.row_disc_cache or {}
+  state.file_sections = state.file_sections or {}
+  state.scroll_line_data = state.scroll_line_data or {}
+  state.scroll_row_disc = state.scroll_row_disc or {}
+  state.file_contexts = state.file_contexts or {}
+  state.current_file = 1
+end
+
 -- ─── Main entry point ─────────────────────────────────────────────────────────
 
 function M.open(mr, discussions)
