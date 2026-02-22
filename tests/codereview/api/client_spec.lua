@@ -51,4 +51,66 @@ describe("api.client", function()
       assert.is_nil(client.parse_next_page(headers))
     end)
   end)
+
+  describe("patch method", function()
+    it("delegates to request with patch method", function()
+      local orig_request = client.request
+      local called_method = nil
+      client.request = function(method, ...)
+        called_method = method
+        return { data = {}, status = 200, headers = {} }
+      end
+      client.patch("https://example.com", "/path", {})
+      client.request = orig_request
+      assert.equals("patch", called_method)
+    end)
+  end)
+
+  describe("parse_next_url", function()
+    it("extracts next URL from Link header", function()
+      local headers = {
+        link = '<https://api.github.com/pulls?page=2>; rel="next", <https://api.github.com/pulls?page=5>; rel="last"',
+      }
+      assert.equals("https://api.github.com/pulls?page=2", client.parse_next_url(headers))
+    end)
+
+    it("returns nil when no next link", function()
+      local headers = { link = '<https://api.github.com/pulls?page=5>; rel="last"' }
+      assert.is_nil(client.parse_next_url(headers))
+    end)
+
+    it("returns nil when link header absent", function()
+      assert.is_nil(client.parse_next_url({}))
+    end)
+  end)
+
+  describe("paginate_all_url", function()
+    it("follows next_url until exhausted", function()
+      local orig_get_url = client.get_url
+      local call_count = 0
+      client.get_url = function(url, _opts)
+        call_count = call_count + 1
+        if call_count == 1 then
+          return { data = { "a", "b" }, next_url = "https://api.example.com/page2" }
+        else
+          return { data = { "c" }, next_url = nil }
+        end
+      end
+      local result = client.paginate_all_url("https://api.example.com/page1", {})
+      client.get_url = orig_get_url
+      assert.equals(3, #result)
+      assert.equals("a", result[1])
+      assert.equals("c", result[3])
+    end)
+
+    it("returns empty table for empty response", function()
+      local orig_get_url = client.get_url
+      client.get_url = function(_url, _opts)
+        return { data = {}, next_url = nil }
+      end
+      local result = client.paginate_all_url("https://api.example.com/items", {})
+      client.get_url = orig_get_url
+      assert.equals(0, #result)
+    end)
+  end)
 end)

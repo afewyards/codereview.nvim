@@ -33,6 +33,12 @@ function M.parse_next_page(headers)
   return nil
 end
 
+function M.parse_next_url(headers)
+  local link = headers and (headers["link"] or headers["Link"])
+  if not link then return nil end
+  return link:match('<([^>]+)>%s*;%s*rel="next"')
+end
+
 local function build_params(method, base_url, path, token, token_type, opts)
   local url = M.build_url(base_url, path)
   local params = {
@@ -74,6 +80,7 @@ local function process_response(response)
     status = response.status,
     headers = response.headers,
     next_page = M.parse_next_page(response.headers),
+    next_url = M.parse_next_url(response.headers),
   }
 end
 
@@ -162,6 +169,34 @@ function M.async_get(base_url, path, opts) return M.async_request("get", base_ur
 function M.async_post(base_url, path, opts) return M.async_request("post", base_url, path, opts) end
 function M.async_put(base_url, path, opts) return M.async_request("put", base_url, path, opts) end
 function M.async_delete(base_url, path, opts) return M.async_request("delete", base_url, path, opts) end
+function M.patch(base_url, path, opts) return M.request("patch", base_url, path, opts) end
+function M.async_patch(base_url, path, opts) return M.async_request("patch", base_url, path, opts) end
+
+function M.get_url(full_url, opts)
+  opts = opts or {}
+  local auth = require("codereview.api.auth")
+  local token, token_type = auth.get_token()
+  if not token then
+    return nil, "No authentication token. Run :CodeReviewAuth"
+  end
+
+  local params = {
+    url = full_url,
+    headers = M.build_headers(token, token_type),
+    method = "get",
+  }
+
+  local response = curl.request(params)
+  if not response then
+    return nil, "Request failed: no response"
+  end
+
+  if response.status < 200 or response.status >= 300 then
+    return nil, string.format("HTTP %d: %s", response.status, response.body or "")
+  end
+
+  return process_response(response)
+end
 
 function M.paginate_all(base_url, path, opts)
   opts = vim.deepcopy(opts or {})
@@ -189,6 +224,28 @@ function M.paginate_all(base_url, path, opts)
       break
     end
     page = result.next_page
+  end
+
+  return all_data
+end
+
+function M.paginate_all_url(start_url, opts)
+  local all_data = {}
+  local current_url = start_url
+
+  while current_url do
+    local result, err = M.get_url(current_url, opts)
+    if not result then
+      return nil, err
+    end
+
+    if type(result.data) == "table" then
+      for _, item in ipairs(result.data) do
+        table.insert(all_data, item)
+      end
+    end
+
+    current_url = result.next_url
   end
 
   return all_data
