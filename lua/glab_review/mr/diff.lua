@@ -83,8 +83,28 @@ end
 function M.render_file_diff(buf, file_diff, mr, discussions)
   local parser = require("glab_review.mr.diff_parser")
   local config = require("glab_review.config")
-  local hunks = parser.parse_hunks(file_diff.diff or "")
-  local display = parser.build_display(hunks, config.get().diff.context)
+  local context = config.get().diff.context
+
+  -- Try local git diff with more context lines; fall back to API diff
+  local diff_text = file_diff.diff or ""
+  if mr.diff_refs and mr.diff_refs.base_sha and mr.diff_refs.head_sha then
+    local path = file_diff.new_path or file_diff.old_path
+    if path then
+      local result = vim.fn.system({
+        "git", "diff",
+        "-U" .. context,
+        mr.diff_refs.base_sha,
+        mr.diff_refs.head_sha,
+        "--", path,
+      })
+      if vim.v.shell_error == 0 and result ~= "" then
+        diff_text = result
+      end
+    end
+  end
+
+  local hunks = parser.parse_hunks(diff_text)
+  local display = parser.build_display(hunks, context)
 
   local lines = {}
   local line_data = {}
@@ -222,10 +242,25 @@ function M.expand_hidden(layout, state)
   local file = state.files and state.files[state.current_file]
   if not file then return end
 
-  -- Temporarily render with a large context window to show everything
+  -- Re-parse with full context from local git if available
   local parser = require("glab_review.mr.diff_parser")
-  local hunks = parser.parse_hunks(file.diff or "")
-  -- Build display with no hidden lines (large context)
+  local diff_text = file.diff or ""
+  if state.mr.diff_refs and state.mr.diff_refs.base_sha and state.mr.diff_refs.head_sha then
+    local path = file.new_path or file.old_path
+    if path then
+      local result = vim.fn.system({
+        "git", "diff",
+        "-U99999",
+        state.mr.diff_refs.base_sha,
+        state.mr.diff_refs.head_sha,
+        "--", path,
+      })
+      if vim.v.shell_error == 0 and result ~= "" then
+        diff_text = result
+      end
+    end
+  end
+  local hunks = parser.parse_hunks(diff_text)
   local display = parser.build_display(hunks, 99999)
 
   local lines = {}
