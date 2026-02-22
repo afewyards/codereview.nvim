@@ -11,8 +11,11 @@ function M.setup()
   vim.api.nvim_set_hl(0, "GlabReviewFileAdded", { fg = "#9ece6a", default = true })
   vim.api.nvim_set_hl(0, "GlabReviewFileDeleted", { fg = "#f7768e", default = true })
   vim.api.nvim_set_hl(0, "GlabReviewHidden", { fg = "#565f89", italic = true, default = true })
-  vim.fn.sign_define("GlabReviewCommentSign", { text = ">>", texthl = "GlabReviewComment" })
-  vim.fn.sign_define("GlabReviewUnresolvedSign", { text = "!!", texthl = "GlabReviewCommentUnresolved" })
+  vim.api.nvim_set_hl(0, "GlabReviewCommentBorder", { fg = "#565f89", default = true })
+  vim.api.nvim_set_hl(0, "GlabReviewCommentAuthor", { fg = "#7aa2f7", bold = true, default = true })
+  vim.api.nvim_set_hl(0, "GlabReviewCommentResolved", { fg = "#9ece6a", default = true })
+  vim.fn.sign_define("GlabReviewCommentSign", { text = "▍ ", texthl = "GlabReviewComment" })
+  vim.fn.sign_define("GlabReviewUnresolvedSign", { text = "▍ ", texthl = "GlabReviewCommentUnresolved" })
 end
 
 return M

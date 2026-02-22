@@ -4,9 +4,6 @@ function M.create(opts)
   opts = opts or {}
   local sidebar_width = opts.sidebar_width or 30
 
-  -- Create a new tab for the review
-  vim.cmd("tabnew")
-
   -- Create sidebar buffer
   local sidebar_buf = vim.api.nvim_create_buf(false, true)
   vim.bo[sidebar_buf].bufhidden = "wipe"
@@ -19,11 +16,12 @@ function M.create(opts)
   vim.bo[main_buf].buftype = "nofile"
   vim.bo[main_buf].swapfile = false
 
-  -- Set up layout: sidebar left, main right
+  -- Use current window as main
   local main_win = vim.api.nvim_get_current_win()
   vim.api.nvim_win_set_buf(main_win, main_buf)
 
-  vim.cmd("topleft " .. sidebar_width .. "vnew")
+  -- Create sidebar split to the left
+  vim.cmd("topleft " .. sidebar_width .. "vsplit")
   local sidebar_win = vim.api.nvim_get_current_win()
   vim.api.nvim_win_set_buf(sidebar_win, sidebar_buf)
 
@@ -49,17 +47,13 @@ function M.create(opts)
     sidebar_win = sidebar_win,
     main_buf = main_buf,
     main_win = main_win,
-    tab = vim.api.nvim_get_current_tabpage(),
   }
 end
 
 function M.close(layout)
-  if layout and layout.tab then
-    pcall(function()
-      local tab_nr = vim.api.nvim_tabpage_get_number(layout.tab)
-      vim.cmd("tabclose " .. tab_nr)
-    end)
-  end
+  if not layout then return end
+  pcall(vim.api.nvim_set_current_win, layout.main_win)
+  pcall(vim.api.nvim_win_close, layout.sidebar_win, true)
 end
 
 return M
