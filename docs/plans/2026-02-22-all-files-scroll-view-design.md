@@ -2,13 +2,13 @@
 
 ## Summary
 
-Concatenate all changed files into a single scrollable buffer, like GitHub's PR diff page. Toggle between per-file and all-files mode with `<C-f>`.
+Concatenate all changed files into a single scrollable buffer, like GitHub's PR diff page. Toggle between per-file and all-files mode with `<C-a>`.
 
 ## Default Mode Logic
 
 - MRs with ≤50 changed files: default to all-files scroll view
 - MRs with >50 changed files: default to per-file view
-- `<C-f>` toggles between modes regardless of MR size
+- `<C-a>` toggles between modes regardless of MR size
 
 ## Buffer Layout
 
@@ -53,7 +53,7 @@ Enables:
 
 ## Keymaps
 
-- `<C-f>` — toggle between per-file and all-files mode
+- `<C-a>` — toggle between per-file and all-files mode
 - `]f`/`[f` — jump to next/prev file header (instead of loading new buffer)
 - `]c`/`[c` — next/prev comment (works across all files naturally)
 - `cc` / visual `cc` — create comment (reverse line map)
