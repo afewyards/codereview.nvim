@@ -5,8 +5,8 @@ describe("mr.comment", function()
       local disc = {
         id = "abc",
         notes = {
-          { author = { username = "jan" }, body = "Should we make this configurable?", created_at = "2026-02-20T10:00:00Z", resolvable = true, resolved = false },
-          { author = { username = "maria" }, body = "Good point, will add.", created_at = "2026-02-20T11:00:00Z", resolvable = false, resolved = false },
+          { author = "jan", body = "Should we make this configurable?", created_at = "2026-02-20T10:00:00Z", resolvable = true, resolved = false },
+          { author = "maria", body = "Good point, will add.", created_at = "2026-02-20T11:00:00Z", resolvable = false, resolved = false },
         },
       }
       local lines = comment.build_thread_lines(disc)
@@ -19,7 +19,7 @@ describe("mr.comment", function()
       local disc = {
         id = "def",
         notes = {
-          { author = { username = "jan" }, body = "LGTM", created_at = "2026-02-20T10:00:00Z", resolvable = true, resolved = true, resolved_by = { username = "jan" } },
+          { author = "jan", body = "LGTM", created_at = "2026-02-20T10:00:00Z", resolvable = true, resolved = true, resolved_by = "jan" },
         },
       }
       local lines = comment.build_thread_lines(disc)

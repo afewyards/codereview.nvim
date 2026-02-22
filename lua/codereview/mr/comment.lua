@@ -1,9 +1,17 @@
-local client = require("codereview.api.client")
-local endpoints = require("codereview.api.endpoints")
-local git = require("codereview.git")
 local markdown = require("codereview.ui.markdown")
 local detail = require("codereview.mr.detail")
 local M = {}
+
+local function get_provider()
+  local providers = require("codereview.providers")
+  local client = require("codereview.api.client")
+  local provider, ctx, err = providers.detect()
+  if not provider then
+    vim.notify(err or "Could not detect platform", vim.log.levels.ERROR)
+    return nil, nil, nil
+  end
+  return provider, client, ctx
+end
 
 function M.build_thread_lines(disc)
   local lines = {}
@@ -16,7 +24,7 @@ function M.build_thread_lines(disc)
   local resolved_str = ""
   if first.resolvable then
     if first.resolved then
-      local by = first.resolved_by and first.resolved_by.username or "?"
+      local by = first.resolved_by or "?"
       resolved_str = "  [Resolved by @" .. by .. "]"
     else
       resolved_str = "  [Unresolved]"
@@ -25,7 +33,7 @@ function M.build_thread_lines(disc)
 
   table.insert(lines, string.format(
     "@%s (%s)%s",
-    first.author.username,
+    first.author,
     detail.format_time(first.created_at),
     resolved_str
   ))
@@ -40,7 +48,7 @@ function M.build_thread_lines(disc)
     table.insert(lines, "")
     table.insert(lines, string.format(
       "  -> @%s (%s):",
-      reply.author.username,
+      reply.author,
       detail.format_time(reply.created_at)
     ))
     for _, body_line in ipairs(markdown.to_lines(reply.body)) do
@@ -110,15 +118,9 @@ end
 function M.reply(disc, mr)
   vim.ui.input({ prompt = "Reply: " }, function(input)
     if not input or input == "" then return end
-    local base_url, project = git.detect_project()
-    if not base_url or not project then
-      vim.notify("Could not detect GitLab project", vim.log.levels.ERROR)
-      return
-    end
-    local encoded = client.encode_project(project)
-    local _, err = client.post(base_url, endpoints.discussion_notes(encoded, mr.iid, disc.id), {
-      body = { body = input },
-    })
+    local provider, client, ctx = get_provider()
+    if not provider then return end
+    local _, err = provider.reply_to_discussion(client, ctx, mr, disc.id, input)
     if err then
       vim.notify("Failed to post reply: " .. err, vim.log.levels.ERROR)
     else
@@ -131,16 +133,11 @@ function M.resolve_toggle(disc, mr, callback)
   local first = disc.notes and disc.notes[1]
   if not first then return end
 
-  local base_url, project = git.detect_project()
-  if not base_url or not project then
-    vim.notify("Could not detect GitLab project", vim.log.levels.ERROR)
-    return
-  end
-  local encoded = client.encode_project(project)
+  local provider, client, ctx = get_provider()
+  if not provider then return end
+
   local currently_resolved = first.resolved
-  local _, err = client.put(base_url, endpoints.discussion(encoded, mr.iid, disc.id), {
-    body = { resolved = not currently_resolved },
-  })
+  local _, err = provider.resolve_discussion(client, ctx, mr, disc.id, not currently_resolved)
   if err then
     vim.notify("Failed to toggle resolve: " .. err, vim.log.levels.ERROR)
   elseif callback then
@@ -151,27 +148,15 @@ end
 function M.create_inline(mr, old_path, new_path, old_line, new_line)
   vim.ui.input({ prompt = "Inline comment: " }, function(input)
     if not input or input == "" then return end
-    local base_url, project = git.detect_project()
-    if not base_url or not project then
-      vim.notify("Could not detect GitLab project", vim.log.levels.ERROR)
-      return
-    end
-    local encoded = client.encode_project(project)
-    local _, err = client.post(base_url, endpoints.discussions(encoded, mr.iid), {
-      body = {
-        body = input,
-        position = {
-          position_type = "text",
-          base_sha = mr.diff_refs and mr.diff_refs.base_sha,
-          head_sha = mr.diff_refs and mr.diff_refs.head_sha,
-          start_sha = mr.diff_refs and mr.diff_refs.start_sha,
-          old_path = old_path,
-          new_path = new_path,
-          old_line = old_line,
-          new_line = new_line,
-        },
-      },
-    })
+    local provider, client, ctx = get_provider()
+    if not provider then return end
+    local position = {
+      old_path = old_path,
+      new_path = new_path,
+      old_line = old_line,
+      new_line = new_line,
+    }
+    local _, err = provider.post_comment(client, ctx, mr, input, position)
     if err then
       vim.notify("Failed to post comment: " .. err, vim.log.levels.ERROR)
     else
@@ -183,39 +168,9 @@ end
 function M.create_inline_range(mr, old_path, new_path, start_pos, end_pos)
   vim.ui.input({ prompt = "Range comment: " }, function(input)
     if not input or input == "" then return end
-    local base_url, project = git.detect_project()
-    if not base_url or not project then
-      vim.notify("Could not detect GitLab project", vim.log.levels.ERROR)
-      return
-    end
-    local encoded = client.encode_project(project)
-    local _, err = client.post(base_url, endpoints.discussions(encoded, mr.iid), {
-      body = {
-        body = input,
-        position = {
-          position_type = "text",
-          base_sha = mr.diff_refs and mr.diff_refs.base_sha,
-          head_sha = mr.diff_refs and mr.diff_refs.head_sha,
-          start_sha = mr.diff_refs and mr.diff_refs.start_sha,
-          old_path = old_path,
-          new_path = new_path,
-          line_range = {
-            start = {
-              line_code = nil,
-              type = start_pos.type or "new",
-              old_line = start_pos.old_line,
-              new_line = start_pos.new_line,
-            },
-            ["end"] = {
-              line_code = nil,
-              type = end_pos.type or "new",
-              old_line = end_pos.old_line,
-              new_line = end_pos.new_line,
-            },
-          },
-        },
-      },
-    })
+    local provider, client, ctx = get_provider()
+    if not provider then return end
+    local _, err = provider.post_range_comment(client, ctx, mr, input, old_path, new_path, start_pos, end_pos)
     if err then
       vim.notify("Failed to post range comment: " .. err, vim.log.levels.ERROR)
     else
