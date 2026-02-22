@@ -45,6 +45,8 @@ function M.approve()
   end
   require("codereview.mr.actions").approve(mr)
 end
-function M.create_mr() vim.notify("Create MR not yet implemented (Stage 5)", vim.log.levels.WARN) end
+function M.create_mr()
+  require("codereview.mr.create").create()
+end
 
 return M
