@@ -463,4 +463,31 @@ describe("mr.diff", function()
       vim.api.nvim_buf_delete(buf, { force = true })
     end)
   end)
+
+  describe("load_diffs_into_state", function()
+    it("sets state.files when not yet loaded", function()
+      local state = {
+        mr = { iid = 1 },
+        files = nil,
+        scroll_mode = nil,
+      }
+      local files = {
+        { new_path = "a.lua", old_path = "a.lua" },
+        { new_path = "b.lua", old_path = "b.lua" },
+      }
+      diff.load_diffs_into_state(state, files)
+      assert.equals(2, #state.files)
+      assert.truthy(state.scroll_mode ~= nil)
+    end)
+
+    it("is a no-op when files already loaded", function()
+      local state = {
+        mr = { iid = 1 },
+        files = { { new_path = "existing.lua" } },
+        scroll_mode = true,
+      }
+      diff.load_diffs_into_state(state, { { new_path = "other.lua" } })
+      assert.equals("existing.lua", state.files[1].new_path)
+    end)
+  end)
 end)
