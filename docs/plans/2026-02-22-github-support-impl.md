@@ -8,7 +8,15 @@
 
 **Tech Stack:** Lua, plenary.nvim (HTTP + async), Neovim 0.10+
 
+## Phases
+
+- **Phase 1: Rename** — Task 1. Rename `glab_review` → `codereview` (dirs, requires, commands). No logic changes.
+- **Phase 2: Provider layer** — Tasks 2-7. Types, detection, GitLab provider, GitHub provider, auth refactor, client refactor. No module wiring yet — existing modules still work via old paths until Phase 3.
+- **Phase 3: Wire up + integrate** — Tasks 8-16. Rewire all modules to use providers, delete dead code, add `.codereview.json`, integration tests.
+
 ---
+
+## Phase 1: Rename
 
 ### Task 1: Rename `glab_review` → `codereview` (module paths + commands)
 
@@ -92,6 +100,8 @@ git commit -m "refactor: rename glab_review to codereview"
 ```
 
 ---
+
+## Phase 2: Provider Layer
 
 ### Task 2: Create provider types module (`providers/types.lua`)
 
@@ -1300,6 +1310,8 @@ git commit -m "refactor(client): make HTTP client provider-agnostic"
 ```
 
 ---
+
+## Phase 3: Wire Up + Integrate
 
 ### Task 8: Wire up provider in `mr/list.lua`
 
