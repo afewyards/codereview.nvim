@@ -1,11 +1,15 @@
 -- lua/codereview/ai/subprocess.lua
 local config = require("codereview.config")
+local log = require("codereview.log")
 local M = {}
 
 function M.build_cmd(claude_cmd)
-  return { claude_cmd, "-p", "--output-format", "json", "--max-turns", "1" }
+  return { claude_cmd, "-p" }
 end
 
+--- Run Claude CLI in pipe mode.
+--- @param prompt string
+--- @param callback fun(output: string|nil, err: string|nil)
 function M.run(prompt, callback)
   local cfg = config.get()
   if not cfg.ai.enabled then
@@ -14,7 +18,9 @@ function M.run(prompt, callback)
   end
 
   local cmd = M.build_cmd(cfg.ai.claude_cmd)
+  log.debug("AI subprocess: starting " .. table.concat(cmd, " "))
   local stdout_chunks = {}
+  local stderr_chunks = {}
   local done = false
 
   local job_id = vim.fn.jobstart(cmd, {
@@ -27,21 +33,40 @@ function M.run(prompt, callback)
         end
       end
     end,
+    on_stderr = function(_, data)
+      if data then
+        for _, chunk in ipairs(data) do
+          if chunk ~= "" then table.insert(stderr_chunks, chunk) end
+        end
+      end
+    end,
     on_exit = function(_, code)
       if done then return end
       done = true
       vim.schedule(function()
+        local stderr_str = table.concat(stderr_chunks, "\n")
+        if stderr_str ~= "" then
+          log.warn("AI subprocess stderr: " .. stderr_str)
+        end
+        local output = table.concat(stdout_chunks, "\n")
         if code ~= 0 then
-          callback(nil, "Claude CLI exited with code " .. code)
+          local msg = "Claude CLI exited with code " .. code
+          if output ~= "" then msg = msg .. "\n" .. output end
+          if stderr_str ~= "" then msg = msg .. "\n" .. stderr_str end
+          log.error("AI subprocess: " .. msg)
+          callback(nil, msg)
         else
-          callback(table.concat(stdout_chunks, "\n"))
+          log.debug("AI subprocess: completed, output length=" .. #output)
+          callback(output)
         end
       end)
     end,
   })
 
   if job_id <= 0 then
-    callback(nil, "Failed to start Claude CLI. Is '" .. cfg.ai.claude_cmd .. "' in your PATH?")
+    local msg = "Failed to start Claude CLI. Is '" .. cfg.ai.claude_cmd .. "' in your PATH?"
+    log.error("AI subprocess: " .. msg)
+    callback(nil, msg)
     return
   end
 
