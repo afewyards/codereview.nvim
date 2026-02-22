@@ -16,7 +16,7 @@ function M.pick_mr(entries, on_select)
           return {
             value = entry,
             display = entry.display,
-            ordinal = entry.title .. " " .. entry.author .. " " .. tostring(entry.iid),
+            ordinal = entry.title .. " " .. entry.author .. " " .. tostring(entry.id),
           }
         end,
       }),
