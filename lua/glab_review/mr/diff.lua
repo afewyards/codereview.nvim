@@ -1035,18 +1035,26 @@ function M.setup_keymaps(layout, state)
   map(main_buf, "n", "+", function() adjust_context(layout, state, 5) end)
   map(main_buf, "n", "-", function() adjust_context(layout, state, -5) end)
 
-  -- Load entire file (current file only in scroll mode)
+  -- Toggle full file (current file only in scroll mode)
   map(main_buf, "n", "<C-f>", function()
     local cursor = vim.api.nvim_win_get_cursor(layout.main_win)
     if state.scroll_mode then
       local file_idx = current_file_from_cursor(layout, state)
-      state.file_contexts[file_idx] = 99999
+      if state.file_contexts[file_idx] then
+        state.file_contexts[file_idx] = nil
+      else
+        state.file_contexts[file_idx] = 99999
+      end
       local result = M.render_all_files(layout.main_buf, state.files, state.mr, state.discussions, state.context, state.file_contexts)
       state.file_sections = result.file_sections
       state.scroll_line_data = result.line_data
       state.scroll_row_disc = result.row_discussions
     else
-      state.context = 99999
+      if state.context == 99999 then
+        state.context = config.get().diff.context
+      else
+        state.context = 99999
+      end
       local file = state.files and state.files[state.current_file]
       if not file then return end
       local ld, rd = M.render_file_diff(layout.main_buf, file, state.mr, state.discussions, state.context)
@@ -1054,7 +1062,6 @@ function M.setup_keymaps(layout, state)
       state.row_disc_cache[state.current_file] = rd
     end
     vim.api.nvim_win_set_cursor(layout.main_win, { math.min(cursor[1], vim.api.nvim_buf_line_count(layout.main_buf)), 0 })
-    vim.notify("Full file loaded", vim.log.levels.INFO)
   end)
 
   -- Refresh
