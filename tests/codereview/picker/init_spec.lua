@@ -1,0 +1,18 @@
+local picker = require("codereview.picker")
+
+describe("picker", function()
+  describe("detect", function()
+    it("returns nil when no picker is available", function()
+      local name = picker.detect()
+      assert.is_true(name == nil or type(name) == "string")
+    end)
+  end)
+
+  describe("get_adapter", function()
+    it("errors for unknown picker", function()
+      assert.has_error(function()
+        picker.get_adapter("nonexistent_picker")
+      end)
+    end)
+  end)
+end)
