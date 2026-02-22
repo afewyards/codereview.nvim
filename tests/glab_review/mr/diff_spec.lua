@@ -314,4 +314,89 @@ describe("mr.diff", function()
       vim.api.nvim_buf_delete(buf, { force = true })
     end)
   end)
+
+  describe("render_sidebar with summary button", function()
+    before_each(function()
+      -- Stub glab_review.mr.list so render_sidebar works without plenary
+      package.loaded["glab_review.mr.list"] = {
+        pipeline_icon = function(_) return "[--]" end,
+      }
+    end)
+
+    after_each(function()
+      package.loaded["glab_review.mr.list"] = nil
+    end)
+
+    it("renders Summary button as first interactive row", function()
+      local buf = vim.api.nvim_create_buf(false, true)
+      local state = {
+        mr = { iid = 1, title = "Test", source_branch = "feat", head_pipeline = nil },
+        files = {
+          { new_path = "src/a.lua", old_path = "src/a.lua" },
+        },
+        discussions = {},
+        current_file = 1,
+        collapsed_dirs = {},
+        sidebar_row_map = {},
+        view_mode = "summary",
+      }
+      diff.render_sidebar(buf, state)
+      local summary_row = nil
+      for row, entry in pairs(state.sidebar_row_map) do
+        if entry.type == "summary" then
+          summary_row = row
+          break
+        end
+      end
+      assert.truthy(summary_row, "Expected summary entry in sidebar_row_map")
+      for row, entry in pairs(state.sidebar_row_map) do
+        if entry.type == "file" then
+          assert.truthy(summary_row < row)
+        end
+      end
+      vim.api.nvim_buf_delete(buf, { force = true })
+    end)
+
+    it("shows active indicator on Summary when view_mode is summary", function()
+      local buf = vim.api.nvim_create_buf(false, true)
+      local state = {
+        mr = { iid = 1, title = "Test", source_branch = "feat", head_pipeline = nil },
+        files = { { new_path = "a.lua", old_path = "a.lua" } },
+        discussions = {},
+        current_file = 1,
+        collapsed_dirs = {},
+        sidebar_row_map = {},
+        view_mode = "summary",
+      }
+      diff.render_sidebar(buf, state)
+      local summary_row = nil
+      for row, entry in pairs(state.sidebar_row_map) do
+        if entry.type == "summary" then summary_row = row break end
+      end
+      local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+      assert.truthy(lines[summary_row]:find("▸"))
+      vim.api.nvim_buf_delete(buf, { force = true })
+    end)
+
+    it("no file gets active indicator when view_mode is summary", function()
+      local buf = vim.api.nvim_create_buf(false, true)
+      local state = {
+        mr = { iid = 1, title = "Test", source_branch = "feat", head_pipeline = nil },
+        files = { { new_path = "a.lua", old_path = "a.lua" } },
+        discussions = {},
+        current_file = 1,
+        collapsed_dirs = {},
+        sidebar_row_map = {},
+        view_mode = "summary",
+      }
+      diff.render_sidebar(buf, state)
+      for row, entry in pairs(state.sidebar_row_map) do
+        if entry.type == "file" then
+          local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+          assert.truthy(lines[row]:match("^%s%s "))
+        end
+      end
+      vim.api.nvim_buf_delete(buf, { force = true })
+    end)
+  end)
 end)

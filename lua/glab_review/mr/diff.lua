@@ -623,6 +623,12 @@ function M.render_sidebar(buf, state)
 
   state.sidebar_row_map = {}
 
+  -- Summary button
+  local summary_indicator = (state.view_mode == "summary") and "▸" or " "
+  table.insert(lines, string.format("%s ℹ Summary", summary_indicator))
+  state.sidebar_row_map[#lines] = { type = "summary" }
+  table.insert(lines, "")
+
   -- Render directories
   for _, dir in ipairs(dirs_order) do
     local collapsed = state.collapsed_dirs and state.collapsed_dirs[dir]
@@ -636,7 +642,7 @@ function M.render_sidebar(buf, state)
 
     if not collapsed then
       for _, entry in ipairs(dirs[dir]) do
-        local indicator = (entry.idx == state.current_file) and "▸" or " "
+        local indicator = (state.view_mode == "diff" and entry.idx == state.current_file) and "▸" or " "
         local ccount = count_file_comments(files[entry.idx], state.discussions)
         local cstr = ccount > 0 and (" [" .. ccount .. "]") or ""
         local name = entry.name
@@ -650,13 +656,13 @@ function M.render_sidebar(buf, state)
 
   -- Root-level files
   for _, entry in ipairs(root_files) do
-    local indicator = (entry.idx == state.current_file) and "▸" or " "
+    local indicator = (state.view_mode == "diff" and entry.idx == state.current_file) and "▸" or " "
     local ccount = count_file_comments(files[entry.idx], state.discussions)
     local cstr = ccount > 0 and (" [" .. ccount .. "]") or ""
     local name = entry.name
     local max_name = 24 - #cstr
     if #name > max_name then name = ".." .. name:sub(-(max_name - 2)) end
-    table.insert(lines, string.format("%s %s%s", indicator, name, cstr))
+    table.insert(lines, string.format("  %s %s%s", indicator, name, cstr))
     state.sidebar_row_map[#lines] = { type = "file", idx = entry.idx }
   end
 
@@ -672,10 +678,12 @@ function M.render_sidebar(buf, state)
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
   vim.bo[buf].modifiable = false
 
-  -- Highlight current file + directory headers
+  -- Highlight summary button, current file + directory headers
   vim.api.nvim_buf_clear_namespace(buf, DIFF_NS, 0, -1)
   for row, entry in pairs(state.sidebar_row_map) do
-    if entry.type == "file" and entry.idx == state.current_file then
+    if entry.type == "summary" then
+      pcall(apply_line_hl, buf, row - 1, "GlabReviewSummaryButton")
+    elseif entry.type == "file" and state.view_mode == "diff" and entry.idx == state.current_file then
       pcall(apply_line_hl, buf, row - 1, "GlabReviewFileChanged")
     elseif entry.type == "dir" then
       pcall(apply_line_hl, buf, row - 1, "GlabReviewHidden")
@@ -1326,6 +1334,7 @@ function M.open(mr, discussions)
   local config = require("glab_review.config")
   local cfg = config.get()
   local state = {
+    view_mode = "diff",
     mr = mr,
     files = files,
     current_file = 1,
