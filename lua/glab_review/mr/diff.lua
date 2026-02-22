@@ -840,6 +840,55 @@ function M.find_anchor(line_data, cursor_row, file_idx)
   return { file_idx = fi }
 end
 
+--- Find the buffer row in line_data that best matches an anchor.
+--- Priority: exact new_line (or old_line for deletes) > closest new_line > first diff line in file.
+--- @param line_data table[] target view's line_data
+--- @param anchor table { file_idx, old_line?, new_line? }
+--- @param fallback_file_idx number? override file_idx for per-file line_data
+--- @return number row 1-indexed buffer row
+function M.find_row_for_anchor(line_data, anchor, fallback_file_idx)
+  local target_fi = anchor.file_idx
+  local target_new = anchor.new_line
+  local target_old = anchor.old_line
+  local has_target = target_new or target_old
+
+  local first_diff_row = nil
+  local closest_row = nil
+  local closest_dist = math.huge
+
+  for row, data in ipairs(line_data) do
+    local fi = data.file_idx or fallback_file_idx
+    if fi == target_fi then
+      local item = data.item
+      if item then
+        if not first_diff_row then first_diff_row = row end
+
+        if has_target then
+          -- Exact match: prefer new_line; for delete-only anchors use old_line
+          if target_new and item.new_line == target_new then return row end
+          if not target_new and target_old and item.old_line == target_old then return row end
+
+          -- Closest match by new_line distance
+          local item_line = item.new_line or item.old_line
+          local anchor_line = target_new or target_old
+          if item_line and anchor_line then
+            local dist = math.abs(item_line - anchor_line)
+            if dist < closest_dist then
+              closest_dist = dist
+              closest_row = row
+            end
+          end
+        end
+      end
+    end
+  end
+
+  if not has_target and first_diff_row then return first_diff_row end
+  if closest_row then return closest_row end
+  if first_diff_row then return first_diff_row end
+  return 1
+end
+
 -- ─── Scroll mode helpers ──────────────────────────────────────────────────────
 
 local function current_file_from_cursor(layout, state)
