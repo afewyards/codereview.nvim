@@ -14,10 +14,6 @@ function M.format_line_number(old_nr, new_nr)
   return old_str .. " | " .. new_str .. " "
 end
 
-function M.format_hidden_line(count)
-  return string.format("... %d lines hidden (press <CR> to expand) ...", count)
-end
-
 -- ─── Highlight application ────────────────────────────────────────────────────
 
 local function apply_line_hl(buf, row, hl_group)
@@ -30,6 +26,38 @@ local function apply_word_hl(buf, row, col_start, col_end, hl_group)
     end_col = col_end,
     hl_group = hl_group,
   })
+end
+
+-- ─── Text helpers ───────────────────────────────────────────────────────────
+
+local function wrap_text(text, width)
+  local result = {}
+  for _, paragraph in ipairs(vim.split(text or "", "\n")) do
+    if paragraph == "" then
+      table.insert(result, "")
+    elseif #paragraph <= width then
+      table.insert(result, paragraph)
+    else
+      local line = ""
+      for word in paragraph:gmatch("%S+") do
+        if line ~= "" and #line + #word + 1 > width then
+          table.insert(result, line)
+          line = word
+        else
+          line = line == "" and word or (line .. " " .. word)
+        end
+      end
+      if line ~= "" then table.insert(result, line) end
+    end
+  end
+  return result
+end
+
+local function format_time_short(iso_str)
+  if not iso_str then return "" end
+  local mo, d, h, mi = iso_str:match("%d+-(%d+)-(%d+)T(%d+):(%d+)")
+  if not mo then return "" end
+  return string.format("%s/%s %s:%s", mo, d, h, mi)
 end
 
 -- ─── Sign helpers ─────────────────────────────────────────────────────────────
@@ -74,20 +102,68 @@ function M.place_comment_signs(buf, line_data, discussions, file_diff)
               or "GlabReviewUnresolvedSign"
             pcall(vim.fn.sign_place, 0, "GlabReview", sign_name, buf, { lnum = row })
 
-            -- Render comment preview as virtual lines
-            local note = discussion.notes[1]
-            if note then
-              local hl = is_resolved(discussion) and "GlabReviewComment" or "GlabReviewCommentUnresolved"
-              local body_preview = (note.body or ""):gsub("\n", " "):sub(1, 80)
-              local virt_lines = {
-                { { string.format("  >> @%s: %s", note.author.username, body_preview), hl } },
-              }
-              if #discussion.notes > 1 then
-                local reply_count = #discussion.notes - 1
+            -- Render full comment thread inline
+            local notes = discussion.notes
+            if notes and #notes > 0 then
+              local first = notes[1]
+              local resolved = is_resolved(discussion)
+              local bdr = "GlabReviewCommentBorder"
+              local aut = "GlabReviewCommentAuthor"
+              local body_hl = resolved and "GlabReviewComment" or "GlabReviewCommentUnresolved"
+              local status_hl = resolved and "GlabReviewCommentResolved" or "GlabReviewCommentUnresolved"
+              local status_str = resolved and " Resolved " or " Unresolved "
+              local time_str = format_time_short(first.created_at)
+              local header_meta = time_str ~= "" and (" · " .. time_str) or ""
+              local header_text = "@" .. first.author.username
+              local fill = math.max(0, 62 - #header_text - #header_meta - #status_str)
+
+              local virt_lines = {}
+
+              -- ┌ @author · 02/15 14:30 · Unresolved ─────────
+              table.insert(virt_lines, {
+                { "  ┌ ", bdr },
+                { header_text, aut },
+                { header_meta, bdr },
+                { status_str, status_hl },
+                { string.rep("─", fill), bdr },
+              })
+
+              -- Comment body (wrapped, full)
+              for _, bl in ipairs(wrap_text(first.body, 64)) do
                 table.insert(virt_lines, {
-                  { string.format("     ... %d more %s (Enter to view)", reply_count, reply_count == 1 and "reply" or "replies"), hl },
+                  { "  │ ", bdr },
+                  { bl, body_hl },
                 })
               end
+
+              -- Replies
+              for i = 2, #notes do
+                local reply = notes[i]
+                if not reply.system then
+                  local rt = format_time_short(reply.created_at)
+                  local rmeta = rt ~= "" and (" · " .. rt) or ""
+                  table.insert(virt_lines, { { "  │", bdr } })
+                  table.insert(virt_lines, {
+                    { "  │  ↪ ", bdr },
+                    { "@" .. reply.author.username, aut },
+                    { rmeta, bdr },
+                  })
+                  for _, rl in ipairs(wrap_text(reply.body, 58)) do
+                    table.insert(virt_lines, {
+                      { "  │    ", bdr },
+                      { rl, body_hl },
+                    })
+                  end
+                end
+              end
+
+              -- └ Enter: reply/resolve ──────────────────────
+              table.insert(virt_lines, {
+                { "  └ ", bdr },
+                { "r:reply  gt:un/resolve", body_hl },
+                { " " .. string.rep("─", 44), bdr },
+              })
+
               pcall(vim.api.nvim_buf_set_extmark, buf, DIFF_NS, row - 1, 0, {
                 virt_lines = virt_lines,
                 virt_lines_above = false,
@@ -134,7 +210,7 @@ function M.render_file_diff(buf, file_diff, mr, discussions, context)
   end
 
   local hunks = parser.parse_hunks(diff_text)
-  local display = parser.build_display(hunks, context)
+  local display = parser.build_display(hunks, 99999)
 
   -- Get file line count for BOF/EOF detection
   local file_line_count
@@ -159,14 +235,9 @@ function M.render_file_diff(buf, file_diff, mr, discussions, context)
   end
 
   for _, item in ipairs(display) do
-    if item.type == "hidden" then
-      table.insert(lines, M.format_hidden_line(item.count))
-      table.insert(line_data, { type = "hidden", item = item })
-    else
-      local prefix = M.format_line_number(item.old_line, item.new_line)
-      table.insert(lines, prefix .. (item.text or ""))
-      table.insert(line_data, { type = item.type, item = item })
-    end
+    local prefix = M.format_line_number(item.old_line, item.new_line)
+    table.insert(lines, prefix .. (item.text or ""))
+    table.insert(line_data, { type = item.type, item = item })
   end
 
   -- "Load more below" — only if last displayed line doesn't reach EOF
@@ -224,7 +295,7 @@ function M.render_file_diff(buf, file_diff, mr, discussions, context)
       apply_line_hl(buf, row, "GlabReviewDiffDelete")
       prev_delete_row = row
       prev_delete_text = data.item.text or ""
-    elseif data.type == "hidden" or data.type == "load_more" then
+    elseif data.type == "load_more" then
       apply_line_hl(buf, row, "GlabReviewHidden")
       prev_delete_row = nil
       prev_delete_text = nil
@@ -244,6 +315,14 @@ end
 
 -- ─── Sidebar rendering ────────────────────────────────────────────────────────
 
+local function count_file_comments(file, discussions)
+  local n = 0
+  for _, disc in ipairs(discussions or {}) do
+    if discussion_matches_file(disc, file) then n = n + 1 end
+  end
+  return n
+end
+
 function M.render_sidebar(buf, state)
   local list = require("glab_review.mr.list")
   local mr = state.mr
@@ -260,101 +339,85 @@ function M.render_sidebar(buf, state)
   table.insert(lines, string.format("%d files changed", #files))
   table.insert(lines, "")
 
-  -- File list
+  -- Build directory grouping (preserving original order)
+  local dirs_order = {}
+  local dirs = {}
+  local root_files = {}
+
   for i, file in ipairs(files) do
-    local indicator = (i == state.current_file) and ">" or " "
     local path = file.new_path or file.old_path or "unknown"
-    -- Count discussions for this file
-    local comment_count = 0
-    for _, disc in ipairs(state.discussions or {}) do
-      if discussion_matches_file(disc, file) then
-        comment_count = comment_count + 1
+    local dir = vim.fn.fnamemodify(path, ":h")
+    local name = vim.fn.fnamemodify(path, ":t")
+    if dir == "." or dir == "" then
+      table.insert(root_files, { idx = i, name = name })
+    else
+      if not dirs[dir] then
+        dirs[dir] = {}
+        table.insert(dirs_order, dir)
+      end
+      table.insert(dirs[dir], { idx = i, name = name })
+    end
+  end
+
+  state.sidebar_row_map = {}
+
+  -- Render directories
+  for _, dir in ipairs(dirs_order) do
+    local collapsed = state.collapsed_dirs and state.collapsed_dirs[dir]
+    local icon = collapsed and "▸" or "▾"
+    local dir_display = dir
+    if #dir_display > 24 then
+      dir_display = ".." .. dir_display:sub(-22)
+    end
+    table.insert(lines, string.format("%s %s/", icon, dir_display))
+    state.sidebar_row_map[#lines] = { type = "dir", path = dir }
+
+    if not collapsed then
+      for _, entry in ipairs(dirs[dir]) do
+        local indicator = (entry.idx == state.current_file) and "▸" or " "
+        local ccount = count_file_comments(files[entry.idx], state.discussions)
+        local cstr = ccount > 0 and (" [" .. ccount .. "]") or ""
+        local name = entry.name
+        local max_name = 22 - #cstr
+        if #name > max_name then name = ".." .. name:sub(-(max_name - 2)) end
+        table.insert(lines, string.format("  %s %s%s", indicator, name, cstr))
+        state.sidebar_row_map[#lines] = { type = "file", idx = entry.idx }
       end
     end
-    local comment_str = comment_count > 0 and (" [" .. comment_count .. "]") or ""
-    -- Truncate path to fit sidebar
-    local max_path = 26 - #comment_str
-    if #path > max_path then
-      path = ".." .. path:sub(-(max_path - 2))
-    end
-    table.insert(lines, string.format("%s %s%s", indicator, path, comment_str))
+  end
+
+  -- Root-level files
+  for _, entry in ipairs(root_files) do
+    local indicator = (entry.idx == state.current_file) and "▸" or " "
+    local ccount = count_file_comments(files[entry.idx], state.discussions)
+    local cstr = ccount > 0 and (" [" .. ccount .. "]") or ""
+    local name = entry.name
+    local max_name = 24 - #cstr
+    if #name > max_name then name = ".." .. name:sub(-(max_name - 2)) end
+    table.insert(lines, string.format("%s %s%s", indicator, name, cstr))
+    state.sidebar_row_map[#lines] = { type = "file", idx = entry.idx }
   end
 
   table.insert(lines, "")
   table.insert(lines, string.rep("─", 30))
-  table.insert(lines, "]f/[f files  ]c/[c cmts")
-  table.insert(lines, "cc:comment  R:refresh  q:quit")
+  table.insert(lines, "]f/[f  ]c/[c  cc:comment")
+  table.insert(lines, "r:reply  gt:un/resolve")
+  table.insert(lines, "s:summary  R:refresh  q:quit")
   table.insert(lines, "+/- context  gf:full file")
 
   vim.bo[buf].modifiable = true
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
   vim.bo[buf].modifiable = false
 
-  -- Highlight current file line
-  local file_start_row = 6  -- 0-indexed: header takes rows 0-5
-  local current_row = file_start_row + (state.current_file - 1)
+  -- Highlight current file + directory headers
   vim.api.nvim_buf_clear_namespace(buf, DIFF_NS, 0, -1)
-  pcall(apply_line_hl, buf, current_row, "GlabReviewFileChanged")
-end
-
--- ─── Expand hidden ────────────────────────────────────────────────────────────
-
-function M.expand_hidden(layout, state)
-  local main_buf = layout.main_buf
-  local cursor = vim.api.nvim_win_get_cursor(layout.main_win)
-  local row = cursor[1]  -- 1-indexed
-
-  -- Re-render current file without context collapsing (show all lines)
-  local file = state.files and state.files[state.current_file]
-  if not file then return end
-
-  -- Re-parse with full context from local git if available
-  local parser = require("glab_review.mr.diff_parser")
-  local diff_text = file.diff or ""
-  if state.mr.diff_refs and state.mr.diff_refs.base_sha and state.mr.diff_refs.head_sha then
-    local path = file.new_path or file.old_path
-    if path then
-      local result = vim.fn.system({
-        "git", "diff",
-        "-U99999",
-        state.mr.diff_refs.base_sha,
-        state.mr.diff_refs.head_sha,
-        "--", path,
-      })
-      if vim.v.shell_error == 0 and result ~= "" then
-        diff_text = result
-      end
+  for row, entry in pairs(state.sidebar_row_map) do
+    if entry.type == "file" and entry.idx == state.current_file then
+      pcall(apply_line_hl, buf, row - 1, "GlabReviewFileChanged")
+    elseif entry.type == "dir" then
+      pcall(apply_line_hl, buf, row - 1, "GlabReviewHidden")
     end
   end
-  local hunks = parser.parse_hunks(diff_text)
-  local display = parser.build_display(hunks, 99999)
-
-  local lines = {}
-  local line_data = {}
-  for _, item in ipairs(display) do
-    local prefix = M.format_line_number(item.old_line, item.new_line)
-    table.insert(lines, prefix .. (item.text or ""))
-    table.insert(line_data, { type = item.type, item = item })
-  end
-
-  vim.bo[main_buf].modifiable = true
-  vim.api.nvim_buf_set_lines(main_buf, 0, -1, false, lines)
-  vim.bo[main_buf].modifiable = false
-  state.line_data_cache[state.current_file] = line_data
-
-  -- Re-apply highlights
-  vim.api.nvim_buf_clear_namespace(main_buf, DIFF_NS, 0, -1)
-  for i, data in ipairs(line_data) do
-    local r = i - 1
-    if data.type == "add" then
-      apply_line_hl(main_buf, r, "GlabReviewDiffAdd")
-    elseif data.type == "delete" then
-      apply_line_hl(main_buf, r, "GlabReviewDiffDelete")
-    end
-  end
-
-  M.place_comment_signs(main_buf, line_data, state.discussions, file)
-  vim.api.nvim_win_set_cursor(layout.main_win, { math.min(row, #lines), 0 })
 end
 
 -- ─── Comment creation ─────────────────────────────────────────────────────────
@@ -417,36 +480,76 @@ local function nav_file(layout, state, delta)
   vim.api.nvim_win_set_cursor(layout.main_win, { 1, 0 })
 end
 
+local function get_comment_rows(state, file_idx)
+  local rd = state.row_disc_cache[file_idx]
+  if not rd then return {} end
+  local rows = {}
+  for r, _ in pairs(rd) do table.insert(rows, r) end
+  table.sort(rows)
+  return rows
+end
+
+local function file_has_comments(state, file_idx)
+  local files = state.files or {}
+  for _, disc in ipairs(state.discussions or {}) do
+    if discussion_matches_file(disc, files[file_idx]) then return true end
+  end
+  return false
+end
+
+local function switch_to_file(layout, state, idx)
+  state.current_file = idx
+  M.render_sidebar(layout.sidebar_buf, state)
+  local ld, rd = M.render_file_diff(
+    layout.main_buf, state.files[idx], state.mr, state.discussions, state.context)
+  state.line_data_cache[idx] = ld
+  state.row_disc_cache[idx] = rd
+end
+
 local function nav_comment(layout, state, delta)
-  local line_data = state.line_data_cache[state.current_file]
-  if not line_data then return end
+  local files = state.files or {}
   local cursor = vim.api.nvim_win_get_cursor(layout.main_win)
   local current_row = cursor[1]
-  local comment_rows = {}
-  for i, data in ipairs(line_data) do
-    if data.type == "add" or data.type == "delete" or data.type == "context" then
-      -- Check if there's a sign on this row
-      local signs = vim.fn.sign_getplaced(layout.main_buf, { group = "GlabReview", lnum = i })
-      if signs and signs[1] and #signs[1].signs > 0 then
-        table.insert(comment_rows, i)
+  local comment_rows = get_comment_rows(state, state.current_file)
+
+  if delta > 0 then
+    -- Next comment in current file
+    for _, r in ipairs(comment_rows) do
+      if r > current_row then
+        vim.api.nvim_win_set_cursor(layout.main_win, { r, 0 })
+        return
       end
     end
-  end
-  if #comment_rows == 0 then return end
-  local target = nil
-  if delta > 0 then
-    for _, r in ipairs(comment_rows) do
-      if r > current_row then target = r; break end
+    -- Move to next file with comments
+    for i = state.current_file + 1, #files do
+      if file_has_comments(state, i) then
+        switch_to_file(layout, state, i)
+        local rows = get_comment_rows(state, i)
+        if #rows > 0 then
+          vim.api.nvim_win_set_cursor(layout.main_win, { rows[1], 0 })
+        end
+        return
+      end
     end
-    if not target then target = comment_rows[1] end
   else
+    -- Prev comment in current file
     for i = #comment_rows, 1, -1 do
-      if comment_rows[i] < current_row then target = comment_rows[i]; break end
+      if comment_rows[i] < current_row then
+        vim.api.nvim_win_set_cursor(layout.main_win, { comment_rows[i], 0 })
+        return
+      end
     end
-    if not target then target = comment_rows[#comment_rows] end
-  end
-  if target then
-    vim.api.nvim_win_set_cursor(layout.main_win, { target, 0 })
+    -- Move to prev file with comments
+    for i = state.current_file - 1, 1, -1 do
+      if file_has_comments(state, i) then
+        switch_to_file(layout, state, i)
+        local rows = get_comment_rows(state, i)
+        if #rows > 0 then
+          vim.api.nvim_win_set_cursor(layout.main_win, { rows[#rows], 0 })
+        end
+        return
+      end
+    end
   end
 end
 
@@ -490,23 +593,49 @@ function M.setup_keymaps(layout, state)
   map(main_buf, "n", "cc", function() M.create_comment_at_cursor(layout, state) end)
   map(main_buf, "v", "cc", function() M.create_comment_range(layout, state) end)
 
-  -- Expand hidden lines / load more context / open comment thread
+  -- Load more context
   map(main_buf, "n", "<CR>", function()
     local cursor = vim.api.nvim_win_get_cursor(layout.main_win)
     local row = cursor[1]
     local line_data = state.line_data_cache[state.current_file]
     if not line_data or not line_data[row] then return end
-    if line_data[row].type == "hidden" then
-      M.expand_hidden(layout, state)
-    elseif line_data[row].type == "load_more" then
+    if line_data[row].type == "load_more" then
       adjust_context(layout, state, 10)
-    else
-      -- Check if this row has a discussion thread
-      local row_disc = state.row_disc_cache[state.current_file]
-      if row_disc and row_disc[row] then
-        local comment = require("glab_review.mr.comment")
-        comment.show_thread(row_disc[row][1], state.mr)
-      end
+    end
+  end)
+
+  -- Reply to comment thread on current line
+  local function get_cursor_disc()
+    local cursor = vim.api.nvim_win_get_cursor(layout.main_win)
+    local row_disc = state.row_disc_cache[state.current_file]
+    if row_disc and row_disc[cursor[1]] then
+      return row_disc[cursor[1]][1]
+    end
+  end
+
+  map(main_buf, "n", "r", function()
+    local disc = get_cursor_disc()
+    if disc then
+      local comment = require("glab_review.mr.comment")
+      comment.reply(disc, state.mr)
+    end
+  end)
+
+  map(main_buf, "n", "gt", function()
+    local disc = get_cursor_disc()
+    if disc then
+      local comment = require("glab_review.mr.comment")
+      comment.resolve_toggle(disc, state.mr, function()
+        -- Re-render to update resolved status
+        local file = state.files and state.files[state.current_file]
+        if file then
+          local ld, rd = M.render_file_diff(
+            layout.main_buf, file, state.mr, state.discussions, state.context)
+          state.line_data_cache[state.current_file] = ld
+          state.row_disc_cache[state.current_file] = rd
+        end
+        vim.notify("Resolve status toggled", vim.log.levels.INFO)
+      end)
     end
   end)
 
@@ -535,30 +664,87 @@ function M.setup_keymaps(layout, state)
     M.open(state.mr, nil)
   end)
 
+  -- Back to detail view
+  local function back()
+    local split = require("glab_review.ui.split")
+    split.close(layout)
+    local detail = require("glab_review.mr.detail")
+    detail.open(state.mr)
+  end
+  map(main_buf, "n", "s", back)
+  map(sidebar_buf, "n", "s", back)
+
   -- Quit
   local function quit()
     local split = require("glab_review.ui.split")
     split.close(layout)
+    pcall(vim.api.nvim_buf_delete, layout.main_buf, { force = true })
   end
   map(main_buf, "n", "q", quit)
   map(sidebar_buf, "n", "q", quit)
 
-  -- Sidebar: <CR> to jump to file
+  -- Sidebar: <CR> to select file or toggle directory
   map(sidebar_buf, "n", "<CR>", function()
     local cursor = vim.api.nvim_win_get_cursor(layout.sidebar_win)
     local row = cursor[1]
-    local file_start_row = 7  -- 1-indexed: header takes rows 1-6
-    local idx = row - file_start_row + 1
-    if idx >= 1 and idx <= #(state.files or {}) then
-      state.current_file = idx
+    local entry = state.sidebar_row_map and state.sidebar_row_map[row]
+    if not entry then return end
+
+    if entry.type == "dir" then
+      if not state.collapsed_dirs then state.collapsed_dirs = {} end
+      if state.collapsed_dirs[entry.path] then
+        state.collapsed_dirs[entry.path] = nil
+      else
+        state.collapsed_dirs[entry.path] = true
+      end
+      M.render_sidebar(layout.sidebar_buf, state)
+      -- Keep cursor on the same directory row after re-render
+      pcall(vim.api.nvim_win_set_cursor, layout.sidebar_win, { row, 0 })
+    elseif entry.type == "file" then
+      state.current_file = entry.idx
       M.render_sidebar(layout.sidebar_buf, state)
       local line_data, row_disc = M.render_file_diff(
-        layout.main_buf, state.files[idx], state.mr, state.discussions, state.context)
-      state.line_data_cache[idx] = line_data
-      state.row_disc_cache[idx] = row_disc
+        layout.main_buf, state.files[entry.idx], state.mr, state.discussions, state.context)
+      state.line_data_cache[entry.idx] = line_data
+      state.row_disc_cache[entry.idx] = row_disc
       vim.api.nvim_set_current_win(layout.main_win)
     end
   end)
+
+  -- Restrict sidebar cursor to file/directory rows
+  local prev_sb_row = nil
+  vim.api.nvim_create_autocmd("CursorMoved", {
+    buffer = sidebar_buf,
+    callback = function()
+      local ok, cur = pcall(vim.api.nvim_win_get_cursor, layout.sidebar_win)
+      if not ok then return end
+      local row = cur[1]
+      if state.sidebar_row_map[row] then
+        prev_sb_row = row
+        return
+      end
+      -- Snap to nearest valid row in direction of movement
+      local dir = (prev_sb_row and row > prev_sb_row) and 1 or -1
+      local total = vim.api.nvim_buf_line_count(sidebar_buf)
+      local target = row + dir
+      while target >= 1 and target <= total do
+        if state.sidebar_row_map[target] then break end
+        target = target + dir
+      end
+      -- Fallback: try other direction
+      if not state.sidebar_row_map[target] then
+        target = row - dir
+        while target >= 1 and target <= total do
+          if state.sidebar_row_map[target] then break end
+          target = target - dir
+        end
+      end
+      if state.sidebar_row_map[target] then
+        vim.api.nvim_win_set_cursor(layout.sidebar_win, { target, 0 })
+        prev_sb_row = target
+      end
+    end,
+  })
 end
 
 -- ─── Main entry point ─────────────────────────────────────────────────────────
@@ -596,6 +782,8 @@ function M.open(mr, discussions)
     discussions = discussions or {},
     line_data_cache = {},
     row_disc_cache = {},
+    sidebar_row_map = {},
+    collapsed_dirs = {},
     context = config.get().diff.context,
   }
 

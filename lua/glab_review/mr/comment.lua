@@ -56,7 +56,7 @@ function M.show_thread(disc, mr)
 
   local hints = {
     "",
-    "[r] reply  [R] toggle resolve  [o] open browser  [q] close",
+    "[r] reply  [R] un/resolve  [o] open browser  [q] close",
   }
 
   local all_lines = {}
