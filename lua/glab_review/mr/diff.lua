@@ -1329,6 +1329,7 @@ function M.setup_keymaps(layout, state)
       state.view_mode = "summary"
       M.render_sidebar(layout.sidebar_buf, state)
       M.render_summary(layout.main_buf, state)
+      vim.api.nvim_win_set_cursor(layout.main_win, { 1, 0 })
       vim.api.nvim_set_current_win(layout.main_win)
 
     elseif entry.type == "dir" then
