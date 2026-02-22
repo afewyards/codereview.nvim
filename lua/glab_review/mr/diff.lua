@@ -861,12 +861,79 @@ function M.setup_keymaps(layout, state)
   map(sidebar_buf, "n", "[f", function() nav_file(layout, state, -1) end)
 
   -- Comment navigation
-  map(main_buf, "n", "]c", function() nav_comment(layout, state, 1) end)
-  map(main_buf, "n", "[c", function() nav_comment(layout, state, -1) end)
+  map(main_buf, "n", "]c", function()
+    if state.scroll_mode then
+      local cursor = vim.api.nvim_win_get_cursor(layout.main_win)[1]
+      local rows = {}
+      for r in pairs(state.scroll_row_disc or {}) do table.insert(rows, r) end
+      table.sort(rows)
+      for _, r in ipairs(rows) do
+        if r > cursor then
+          vim.api.nvim_win_set_cursor(layout.main_win, { r, 0 })
+          return
+        end
+      end
+    else
+      nav_comment(layout, state, 1)
+    end
+  end)
+  map(main_buf, "n", "[c", function()
+    if state.scroll_mode then
+      local cursor = vim.api.nvim_win_get_cursor(layout.main_win)[1]
+      local rows = {}
+      for r in pairs(state.scroll_row_disc or {}) do table.insert(rows, r) end
+      table.sort(rows)
+      for i = #rows, 1, -1 do
+        if rows[i] < cursor then
+          vim.api.nvim_win_set_cursor(layout.main_win, { rows[i], 0 })
+          return
+        end
+      end
+    else
+      nav_comment(layout, state, -1)
+    end
+  end)
 
   -- Comment creation
-  map(main_buf, "n", "cc", function() M.create_comment_at_cursor(layout, state) end)
-  map(main_buf, "v", "cc", function() M.create_comment_range(layout, state) end)
+  map(main_buf, "n", "cc", function()
+    if state.scroll_mode then
+      local cursor = vim.api.nvim_win_get_cursor(layout.main_win)
+      local row = cursor[1]
+      local data = state.scroll_line_data[row]
+      if not data or not data.item then
+        vim.notify("No diff line at cursor", vim.log.levels.WARN)
+        return
+      end
+      local file = state.files[data.file_idx]
+      local comment = require("glab_review.mr.comment")
+      comment.create_inline(state.mr, file.old_path, file.new_path, data.item.old_line, data.item.new_line)
+    else
+      M.create_comment_at_cursor(layout, state)
+    end
+  end)
+  map(main_buf, "v", "cc", function()
+    if state.scroll_mode then
+      local start_row = vim.fn.line("'<")
+      local end_row = vim.fn.line("'>")
+      local start_data = state.scroll_line_data[start_row]
+      local end_data = state.scroll_line_data[end_row]
+      if not start_data or not start_data.item or not end_data or not end_data.item then
+        vim.notify("Invalid selection range", vim.log.levels.WARN)
+        return
+      end
+      local file = state.files[start_data.file_idx]
+      local comment = require("glab_review.mr.comment")
+      comment.create_inline_range(
+        state.mr,
+        file.old_path,
+        file.new_path,
+        { old_line = start_data.item.old_line, new_line = start_data.item.new_line },
+        { old_line = end_data.item.old_line, new_line = end_data.item.new_line }
+      )
+    else
+      M.create_comment_range(layout, state)
+    end
+  end)
 
   -- Load more context
   map(main_buf, "n", "<CR>", function()
@@ -882,9 +949,15 @@ function M.setup_keymaps(layout, state)
   -- Reply to comment thread on current line
   local function get_cursor_disc()
     local cursor = vim.api.nvim_win_get_cursor(layout.main_win)
-    local row_disc = state.row_disc_cache[state.current_file]
-    if row_disc and row_disc[cursor[1]] then
-      return row_disc[cursor[1]][1]
+    if state.scroll_mode then
+      if state.scroll_row_disc and state.scroll_row_disc[cursor[1]] then
+        return state.scroll_row_disc[cursor[1]][1]
+      end
+    else
+      local row_disc = state.row_disc_cache[state.current_file]
+      if row_disc and row_disc[cursor[1]] then
+        return row_disc[cursor[1]][1]
+      end
     end
   end
 
@@ -902,12 +975,21 @@ function M.setup_keymaps(layout, state)
       local comment = require("glab_review.mr.comment")
       comment.resolve_toggle(disc, state.mr, function()
         -- Re-render to update resolved status
-        local file = state.files and state.files[state.current_file]
-        if file then
-          local ld, rd = M.render_file_diff(
-            layout.main_buf, file, state.mr, state.discussions, state.context)
-          state.line_data_cache[state.current_file] = ld
-          state.row_disc_cache[state.current_file] = rd
+        if state.scroll_mode then
+          local cursor = vim.api.nvim_win_get_cursor(layout.main_win)
+          local result = M.render_all_files(layout.main_buf, state.files, state.mr, state.discussions, state.context)
+          state.file_sections = result.file_sections
+          state.scroll_line_data = result.line_data
+          state.scroll_row_disc = result.row_discussions
+          vim.api.nvim_win_set_cursor(layout.main_win, { math.min(cursor[1], vim.api.nvim_buf_line_count(layout.main_buf)), 0 })
+        else
+          local file = state.files and state.files[state.current_file]
+          if file then
+            local ld, rd = M.render_file_diff(
+              layout.main_buf, file, state.mr, state.discussions, state.context)
+            state.line_data_cache[state.current_file] = ld
+            state.row_disc_cache[state.current_file] = rd
+          end
         end
         vim.notify("Resolve status toggled", vim.log.levels.INFO)
       end)
@@ -920,13 +1002,20 @@ function M.setup_keymaps(layout, state)
 
   -- Load entire file
   map(main_buf, "n", "gf", function()
-    state.context = 99999
-    local file = state.files and state.files[state.current_file]
-    if not file then return end
     local cursor = vim.api.nvim_win_get_cursor(layout.main_win)
-    local ld, rd = M.render_file_diff(layout.main_buf, file, state.mr, state.discussions, state.context)
-    state.line_data_cache[state.current_file] = ld
-    state.row_disc_cache[state.current_file] = rd
+    state.context = 99999
+    if state.scroll_mode then
+      local result = M.render_all_files(layout.main_buf, state.files, state.mr, state.discussions, state.context)
+      state.file_sections = result.file_sections
+      state.scroll_line_data = result.line_data
+      state.scroll_row_disc = result.row_discussions
+    else
+      local file = state.files and state.files[state.current_file]
+      if not file then return end
+      local ld, rd = M.render_file_diff(layout.main_buf, file, state.mr, state.discussions, state.context)
+      state.line_data_cache[state.current_file] = ld
+      state.row_disc_cache[state.current_file] = rd
+    end
     vim.api.nvim_win_set_cursor(layout.main_win, { math.min(cursor[1], vim.api.nvim_buf_line_count(layout.main_buf)), 0 })
     vim.notify("Full file loaded", vim.log.levels.INFO)
   end)
@@ -976,13 +1065,25 @@ function M.setup_keymaps(layout, state)
       -- Keep cursor on the same directory row after re-render
       pcall(vim.api.nvim_win_set_cursor, layout.sidebar_win, { row, 0 })
     elseif entry.type == "file" then
-      state.current_file = entry.idx
-      M.render_sidebar(layout.sidebar_buf, state)
-      local line_data, row_disc = M.render_file_diff(
-        layout.main_buf, state.files[entry.idx], state.mr, state.discussions, state.context)
-      state.line_data_cache[entry.idx] = line_data
-      state.row_disc_cache[entry.idx] = row_disc
-      vim.api.nvim_set_current_win(layout.main_win)
+      if state.scroll_mode then
+        for _, sec in ipairs(state.file_sections) do
+          if sec.file_idx == entry.idx then
+            state.current_file = entry.idx
+            M.render_sidebar(layout.sidebar_buf, state)
+            vim.api.nvim_win_set_cursor(layout.main_win, { sec.start_line, 0 })
+            vim.api.nvim_set_current_win(layout.main_win)
+            return
+          end
+        end
+      else
+        state.current_file = entry.idx
+        M.render_sidebar(layout.sidebar_buf, state)
+        local line_data, row_disc = M.render_file_diff(
+          layout.main_buf, state.files[entry.idx], state.mr, state.discussions, state.context)
+        state.line_data_cache[entry.idx] = line_data
+        state.row_disc_cache[entry.idx] = row_disc
+        vim.api.nvim_set_current_win(layout.main_win)
+      end
     end
   end)
 
@@ -1017,6 +1118,19 @@ function M.setup_keymaps(layout, state)
       if state.sidebar_row_map[target] then
         vim.api.nvim_win_set_cursor(layout.sidebar_win, { target, 0 })
         prev_sb_row = target
+      end
+    end,
+  })
+
+  -- Sync sidebar highlight with current file as cursor moves in scroll mode
+  vim.api.nvim_create_autocmd("CursorMoved", {
+    buffer = main_buf,
+    callback = function()
+      if not state.scroll_mode or #state.file_sections == 0 then return end
+      local file_idx = current_file_from_cursor(layout, state)
+      if file_idx ~= state.current_file then
+        state.current_file = file_idx
+        M.render_sidebar(layout.sidebar_buf, state)
       end
     end,
   })
