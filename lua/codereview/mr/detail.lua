@@ -2,6 +2,7 @@ local providers = require("codereview.providers")
 local client = require("codereview.api.client")
 local markdown = require("codereview.ui.markdown")
 local list_mod = require("codereview.mr.list")
+local spinner = require("codereview.ui.spinner")
 local M = {}
 
 function M.format_time(iso_str)
@@ -119,15 +120,19 @@ function M.count_discussions(discussions)
 end
 
 function M.open(entry)
-  vim.notify("Loading MR details...", vim.log.levels.INFO)
+  local win = vim.api.nvim_get_current_win()
+  spinner.start(win, "Loading MR details…")
+
   local provider, ctx, err = providers.detect()
   if not provider then
+    spinner.stop(win)
     vim.notify(err or "Could not detect platform", vim.log.levels.ERROR)
     return
   end
 
   local review, review_err = provider.get_review(client, ctx, entry.id)
   if not review then
+    spinner.stop(win)
     vim.notify("Failed to load MR: " .. (review_err or "unknown error"), vim.log.levels.ERROR)
     return
   end
@@ -143,6 +148,8 @@ function M.open(entry)
     vim.notify("Failed to load diffs: " .. (diffs_err or "unknown error"), vim.log.levels.WARN)
     files = {}
   end
+
+  spinner.stop(win)
 
   local diff = require("codereview.mr.diff")
   local split = require("codereview.ui.split")
