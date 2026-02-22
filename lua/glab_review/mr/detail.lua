@@ -69,7 +69,7 @@ function M.build_activity_lines(discussions)
       table.insert(lines, string.format(
         "  - @%s %s (%s)",
         first_note.author.username,
-        first_note.body,
+        first_note.body:gsub("\n", " "):sub(1, 80),
         M.format_time(first_note.created_at)
       ))
     else
@@ -154,33 +154,21 @@ function M.open(mr_entry)
   table.insert(lines, "")
   table.insert(lines, "  [d]iff  [c]omment  [a]pprove  [A]I review  [p]ipeline  [m]erge  [R]efresh  [q]uit")
 
-  local width = math.min(80, vim.o.columns - 10)
-  local height = math.min(#lines, vim.o.lines - 6)
   local buf = vim.api.nvim_create_buf(false, true)
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
   markdown.set_buf_markdown(buf)
   vim.bo[buf].modifiable = false
   vim.bo[buf].bufhidden = "wipe"
+  vim.api.nvim_buf_set_name(buf, string.format("glab://mr/%d", mr.iid))
 
-  local win = vim.api.nvim_open_win(buf, true, {
-    relative = "editor",
-    width = width,
-    height = height,
-    col = math.floor((vim.o.columns - width) / 2),
-    row = math.floor((vim.o.lines - height) / 2),
-    style = "minimal",
-    border = "rounded",
-    title = string.format(" MR !%d ", mr.iid),
-    title_pos = "center",
-  })
+  vim.cmd("buffer " .. buf)
 
   vim.b[buf].glab_review_mr = mr
   vim.b[buf].glab_review_discussions = discussions
 
   local map_opts = { buffer = buf, nowait = true }
-  vim.keymap.set("n", "q", function() vim.api.nvim_win_close(win, true) end, map_opts)
+  vim.keymap.set("n", "q", function() vim.cmd("bdelete") end, map_opts)
   vim.keymap.set("n", "d", function()
-    vim.api.nvim_win_close(win, true)
     vim.notify("Diff view (Stage 3)", vim.log.levels.WARN)
   end, map_opts)
   vim.keymap.set("n", "p", function()
@@ -227,7 +215,7 @@ function M.open(mr_entry)
     end)
   end, map_opts)
   vim.keymap.set("n", "R", function()
-    vim.api.nvim_win_close(win, true)
+    vim.cmd("bdelete")
     M.open(mr_entry)
   end, map_opts)
 end

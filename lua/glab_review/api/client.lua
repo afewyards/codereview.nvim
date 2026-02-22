@@ -174,7 +174,7 @@ function M.paginate_all(base_url, path, opts)
     opts.query.page = page
     opts.query.per_page = per_page
 
-    local result, err = M.async_get(base_url, path, opts)
+    local result, err = M.get(base_url, path, opts)
     if not result then
       return nil, err
     end

@@ -1,7 +1,13 @@
 local M = {}
 
+function M.strip_links(text)
+  -- [label](url) -> label
+  return text:gsub("%[([^%]]+)%]%(([^%)]+)%)", "%1")
+end
+
 function M.to_lines(text)
   if not text then return {} end
+  text = M.strip_links(text)
   local lines = {}
   for line in (text .. "\n"):gmatch("(.-)\n") do
     table.insert(lines, line)
