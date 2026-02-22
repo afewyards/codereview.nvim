@@ -3,32 +3,32 @@ local list = require("codereview.mr.list")
 describe("mr.list", function()
   describe("format_mr_entry", function()
     it("formats MR for picker display", function()
-      local mr = {
-        iid = 42,
+      local review = {
+        id = 42,
         title = "Fix auth",
-        author = { username = "maria" },
+        author = "maria",
         source_branch = "fix/auth",
-        head_pipeline = { status = "success" },
+        pipeline_status = "success",
         upvotes = 1,
         approvals_required = 2,
       }
-      local entry = list.format_mr_entry(mr)
-      assert.truthy(entry.display:find("!42"))
+      local entry = list.format_mr_entry(review)
+      assert.truthy(entry.display:find("#42"))
       assert.truthy(entry.display:find("Fix auth"))
       assert.truthy(entry.display:find("maria"))
-      assert.equals(42, entry.iid)
+      assert.equals(42, entry.id)
     end)
 
     it("handles MR without pipeline", function()
-      local mr = {
-        iid = 10,
+      local review = {
+        id = 10,
         title = "Draft: WIP",
-        author = { username = "jan" },
+        author = "jan",
         source_branch = "wip",
-        head_pipeline = nil,
+        pipeline_status = nil,
       }
-      local entry = list.format_mr_entry(mr)
-      assert.truthy(entry.display:find("!10"))
+      local entry = list.format_mr_entry(review)
+      assert.truthy(entry.display:find("#10"))
     end)
   end)
 
