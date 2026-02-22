@@ -3,15 +3,7 @@ local async = require("plenary.async")
 local async_util = require("plenary.async.util")
 local M = {}
 
-function M.encode_project(project_path)
-  return project_path:gsub("/", "%%2F")
-end
-
-function M.build_url(base_url, path)
-  return base_url .. "/api/v4" .. path
-end
-
-function M.build_headers(token, token_type)
+local function build_headers(token, token_type)
   if token_type == "oauth" then
     return {
       ["Authorization"] = "Bearer " .. token,
@@ -25,7 +17,7 @@ function M.build_headers(token, token_type)
   end
 end
 
-function M.parse_next_page(headers)
+local function parse_next_page(headers)
   local next_page = headers and headers["x-next-page"]
   if next_page and next_page ~= "" then
     return tonumber(next_page)
@@ -39,11 +31,15 @@ function M.parse_next_url(headers)
   return link:match('<([^>]+)>%s*;%s*rel="next"')
 end
 
-local function build_params(method, base_url, path, token, token_type, opts)
+function M.build_url(base_url, path)
+  return base_url .. path
+end
+
+local function build_params(method, base_url, path, opts)
   local url = M.build_url(base_url, path)
   local params = {
     url = url,
-    headers = M.build_headers(token, token_type),
+    headers = opts.headers or {},
     method = method,
   }
 
@@ -79,20 +75,25 @@ local function process_response(response)
     data = body,
     status = response.status,
     headers = response.headers,
-    next_page = M.parse_next_page(response.headers),
+    next_page = parse_next_page(response.headers),
     next_url = M.parse_next_url(response.headers),
   }
 end
 
 function M.request(method, base_url, path, opts)
   opts = opts or {}
-  local auth = require("codereview.api.auth")
-  local token, token_type = auth.get_token()
-  if not token then
-    return nil, "No authentication token. Run :CodeReviewAuth"
+
+  -- Fall back to token auth if no headers provided (legacy support)
+  if not opts.headers then
+    local auth = require("codereview.api.auth")
+    local token, token_type = auth.get_token()
+    if not token then
+      return nil, "No authentication token. Run :CodeReviewAuth"
+    end
+    opts = vim.tbl_extend("keep", opts, { headers = build_headers(token, token_type) })
   end
 
-  local params = build_params(method, base_url, path, token, token_type, opts)
+  local params = build_params(method, base_url, path, opts)
 
   local response = curl.request(params)
   if not response then
@@ -106,14 +107,6 @@ function M.request(method, base_url, path, opts)
     response = curl.request(params)
   end
 
-  if response.status == 401 then
-    local new_token, new_type = auth.refresh()
-    if new_token then
-      params.headers = M.build_headers(new_token, new_type)
-      response = curl.request(params)
-    end
-  end
-
   if response.status < 200 or response.status >= 300 then
     return nil, string.format("HTTP %d: %s", response.status, response.body or "")
   end
@@ -123,13 +116,18 @@ end
 
 function M.async_request(method, base_url, path, opts)
   opts = opts or {}
-  local auth = require("codereview.api.auth")
-  local token, token_type = auth.get_token()
-  if not token then
-    return nil, "No authentication token. Run :CodeReviewAuth"
+
+  -- Fall back to token auth if no headers provided (legacy support)
+  if not opts.headers then
+    local auth = require("codereview.api.auth")
+    local token, token_type = auth.get_token()
+    if not token then
+      return nil, "No authentication token. Run :CodeReviewAuth"
+    end
+    opts = vim.tbl_extend("keep", opts, { headers = build_headers(token, token_type) })
   end
 
-  local params = build_params(method, base_url, path, token, token_type, opts)
+  local params = build_params(method, base_url, path, opts)
 
   local response = async_util.wrap(curl.request, 2)(params)
   if not response then
@@ -143,14 +141,6 @@ function M.async_request(method, base_url, path, opts)
     end)
     async_util.sleep(retry_after * 1000)
     response = async_util.wrap(curl.request, 2)(params)
-  end
-
-  if response.status == 401 then
-    local new_token, new_type = auth.refresh()
-    if new_token then
-      params.headers = M.build_headers(new_token, new_type)
-      response = async_util.wrap(curl.request, 2)(params)
-    end
   end
 
   if response.status < 200 or response.status >= 300 then
@@ -174,15 +164,20 @@ function M.async_patch(base_url, path, opts) return M.async_request("patch", bas
 
 function M.get_url(full_url, opts)
   opts = opts or {}
-  local auth = require("codereview.api.auth")
-  local token, token_type = auth.get_token()
-  if not token then
-    return nil, "No authentication token. Run :CodeReviewAuth"
+
+  -- Fall back to token auth if no headers provided (legacy support)
+  if not opts.headers then
+    local auth = require("codereview.api.auth")
+    local token, token_type = auth.get_token()
+    if not token then
+      return nil, "No authentication token. Run :CodeReviewAuth"
+    end
+    opts = vim.tbl_extend("keep", opts, { headers = build_headers(token, token_type) })
   end
 
   local params = {
     url = full_url,
-    headers = M.build_headers(token, token_type),
+    headers = opts.headers,
     method = "get",
   }
 
