@@ -48,4 +48,23 @@ describe("auth", function()
       assert.is_nil(token)
     end)
   end)
+
+  describe("get_token with platform", function()
+    before_each(function() auth.reset() end)
+    it("reads GITHUB_TOKEN for github", function()
+      vim.env.GITHUB_TOKEN = "ghp_test"
+      assert.equal("ghp_test", auth.get_token("github"))
+      vim.env.GITHUB_TOKEN = nil
+    end)
+    it("reads GITLAB_TOKEN for gitlab", function()
+      vim.env.GITLAB_TOKEN = "glpat_test"
+      assert.equal("glpat_test", auth.get_token("gitlab"))
+      vim.env.GITLAB_TOKEN = nil
+    end)
+    it("defaults to gitlab when no platform arg", function()
+      vim.env.GITLAB_TOKEN = "glpat_test"
+      assert.equal("glpat_test", auth.get_token())
+      vim.env.GITLAB_TOKEN = nil
+    end)
+  end)
 end)
