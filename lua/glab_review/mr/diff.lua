@@ -530,6 +530,8 @@ function M.render_sidebar(buf, state)
   table.insert(lines, list.pipeline_icon(pipeline_status) .. " " .. (mr.source_branch or ""))
   table.insert(lines, string.rep("─", 30))
   table.insert(lines, string.format("%d files changed", #files))
+  local mode_str = state.scroll_mode and "All files" or "Per file"
+  table.insert(lines, mode_str)
   table.insert(lines, "")
 
   -- Build directory grouping (preserving original order)
@@ -597,6 +599,7 @@ function M.render_sidebar(buf, state)
   table.insert(lines, "r:reply  gt:un/resolve")
   table.insert(lines, "s:summary  R:refresh  q:quit")
   table.insert(lines, "+/- context  gf:full file")
+  table.insert(lines, "<C-a>:toggle view")
 
   vim.bo[buf].modifiable = true
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
@@ -751,12 +754,19 @@ end
 local function adjust_context(layout, state, delta)
   local cursor = vim.api.nvim_win_get_cursor(layout.main_win)
   state.context = math.max(1, state.context + delta)
-  local file = state.files and state.files[state.current_file]
-  if not file then return end
-  local line_data, row_disc = M.render_file_diff(
-    layout.main_buf, file, state.mr, state.discussions, state.context)
-  state.line_data_cache[state.current_file] = line_data
-  state.row_disc_cache[state.current_file] = row_disc
+  if state.scroll_mode then
+    local result = M.render_all_files(layout.main_buf, state.files, state.mr, state.discussions, state.context)
+    state.file_sections = result.file_sections
+    state.scroll_line_data = result.line_data
+    state.scroll_row_disc = result.row_discussions
+  else
+    local file = state.files and state.files[state.current_file]
+    if not file then return end
+    local line_data, row_disc = M.render_file_diff(
+      layout.main_buf, file, state.mr, state.discussions, state.context)
+    state.line_data_cache[state.current_file] = line_data
+    state.row_disc_cache[state.current_file] = row_disc
+  end
   vim.api.nvim_win_set_cursor(layout.main_win, { math.min(cursor[1], vim.api.nvim_buf_line_count(layout.main_buf)), 0 })
   vim.notify("Context: " .. state.context .. " lines", vim.log.levels.INFO)
 end
@@ -812,9 +822,41 @@ function M.setup_keymaps(layout, state)
     vim.keymap.set(mode, lhs, fn, vim.tbl_extend("force", opts, { buffer = buf }))
   end
 
+  -- Scroll mode toggle
+  map(main_buf, "n", "<C-a>", function() toggle_scroll_mode(layout, state) end)
+  map(sidebar_buf, "n", "<C-a>", function() toggle_scroll_mode(layout, state) end)
+
   -- File navigation
-  map(main_buf, "n", "]f", function() nav_file(layout, state, 1) end)
-  map(main_buf, "n", "[f", function() nav_file(layout, state, -1) end)
+  map(main_buf, "n", "]f", function()
+    if state.scroll_mode then
+      local cursor = vim.api.nvim_win_get_cursor(layout.main_win)[1]
+      for _, sec in ipairs(state.file_sections) do
+        if sec.start_line > cursor then
+          vim.api.nvim_win_set_cursor(layout.main_win, { sec.start_line, 0 })
+          state.current_file = sec.file_idx
+          M.render_sidebar(layout.sidebar_buf, state)
+          return
+        end
+      end
+    else
+      nav_file(layout, state, 1)
+    end
+  end)
+  map(main_buf, "n", "[f", function()
+    if state.scroll_mode then
+      local cursor = vim.api.nvim_win_get_cursor(layout.main_win)[1]
+      for i = #state.file_sections, 1, -1 do
+        if state.file_sections[i].start_line < cursor then
+          vim.api.nvim_win_set_cursor(layout.main_win, { state.file_sections[i].start_line, 0 })
+          state.current_file = state.file_sections[i].file_idx
+          M.render_sidebar(layout.sidebar_buf, state)
+          return
+        end
+      end
+    else
+      nav_file(layout, state, -1)
+    end
+  end)
   map(sidebar_buf, "n", "]f", function() nav_file(layout, state, 1) end)
   map(sidebar_buf, "n", "[f", function() nav_file(layout, state, -1) end)
 
