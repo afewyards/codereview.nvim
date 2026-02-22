@@ -150,4 +150,100 @@ describe("mr.diff", function()
       vim.api.nvim_buf_delete(buf, { force = true })
     end)
   end)
+
+  describe("find_anchor", function()
+    it("extracts old_line/new_line from a diff line", function()
+      local line_data = {
+        { type = "file_header", file_idx = 1 },
+        { type = "context", item = { old_line = 10, new_line = 10, text = "ctx" }, file_idx = 1 },
+        { type = "delete", item = { old_line = 11, new_line = nil, text = "old" }, file_idx = 1 },
+        { type = "add", item = { old_line = nil, new_line = 11, text = "new" }, file_idx = 1 },
+      }
+      local anchor = diff.find_anchor(line_data, 2, 1)
+      assert.equals(1, anchor.file_idx)
+      assert.equals(10, anchor.old_line)
+      assert.equals(10, anchor.new_line)
+    end)
+
+    it("returns file_idx only for non-diff lines", function()
+      local line_data = {
+        { type = "file_header", file_idx = 1 },
+        { type = "add", item = { old_line = nil, new_line = 5, text = "x" }, file_idx = 1 },
+      }
+      local anchor = diff.find_anchor(line_data, 1, 1)
+      assert.equals(1, anchor.file_idx)
+      assert.is_nil(anchor.old_line)
+      assert.is_nil(anchor.new_line)
+    end)
+
+    it("uses explicit file_idx for per-file line_data (no file_idx field)", function()
+      local line_data = {
+        { type = "context", item = { old_line = 5, new_line = 5, text = "x" } },
+      }
+      local anchor = diff.find_anchor(line_data, 1, 3)
+      assert.equals(3, anchor.file_idx)
+      assert.equals(5, anchor.old_line)
+    end)
+  end)
+
+  describe("find_row_for_anchor", function()
+    it("finds exact new_line match", function()
+      local line_data = {
+        { type = "file_header", file_idx = 1 },
+        { type = "context", item = { old_line = 10, new_line = 10 }, file_idx = 1 },
+        { type = "add", item = { old_line = nil, new_line = 11 }, file_idx = 1 },
+      }
+      local row = diff.find_row_for_anchor(line_data, { file_idx = 1, new_line = 11 })
+      assert.equals(3, row)
+    end)
+
+    it("finds exact old_line match for delete-only anchor", function()
+      local line_data = {
+        { type = "file_header", file_idx = 1 },
+        { type = "delete", item = { old_line = 20, new_line = nil }, file_idx = 1 },
+        { type = "context", item = { old_line = 21, new_line = 20 }, file_idx = 1 },
+      }
+      local row = diff.find_row_for_anchor(line_data, { file_idx = 1, old_line = 20, new_line = nil })
+      assert.equals(2, row)
+    end)
+
+    it("falls back to closest new_line in same file", function()
+      local line_data = {
+        { type = "file_header", file_idx = 1 },
+        { type = "context", item = { old_line = 5, new_line = 5 }, file_idx = 1 },
+        { type = "context", item = { old_line = 50, new_line = 50 }, file_idx = 1 },
+      }
+      -- Anchor line 8 doesn't exist; line 5 is closer than line 50
+      local row = diff.find_row_for_anchor(line_data, { file_idx = 1, new_line = 8 })
+      assert.equals(2, row)
+    end)
+
+    it("falls back to first diff line when anchor has no line numbers", function()
+      local line_data = {
+        { type = "file_header", file_idx = 1 },
+        { type = "context", item = { old_line = 1, new_line = 1 }, file_idx = 1 },
+        { type = "file_header", file_idx = 2 },
+        { type = "context", item = { old_line = 1, new_line = 1 }, file_idx = 2 },
+      }
+      local row = diff.find_row_for_anchor(line_data, { file_idx = 2 })
+      assert.equals(4, row)
+    end)
+
+    it("returns 1 when nothing matches", function()
+      local line_data = {
+        { type = "file_header", file_idx = 1 },
+      }
+      local row = diff.find_row_for_anchor(line_data, { file_idx = 5, new_line = 99 })
+      assert.equals(1, row)
+    end)
+
+    it("matches correct file_idx in multi-file scroll data", function()
+      local line_data = {
+        { type = "context", item = { old_line = 10, new_line = 10 }, file_idx = 1 },
+        { type = "context", item = { old_line = 10, new_line = 10 }, file_idx = 2 },
+      }
+      local row = diff.find_row_for_anchor(line_data, { file_idx = 2, new_line = 10 })
+      assert.equals(2, row)
+    end)
+  end)
 end)

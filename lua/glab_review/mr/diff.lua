@@ -824,6 +824,22 @@ local function adjust_context(layout, state, delta)
   vim.notify("Context: " .. state.context .. " lines", vim.log.levels.INFO)
 end
 
+--- Extract a position anchor from line_data at cursor_row.
+--- @param line_data table[] line_data array (per-file or scroll mode)
+--- @param cursor_row number 1-indexed buffer row
+--- @param file_idx number? fallback file_idx (for per-file line_data which lacks file_idx)
+--- @return table anchor { file_idx, old_line?, new_line? }
+function M.find_anchor(line_data, cursor_row, file_idx)
+  local data = line_data[cursor_row]
+  if not data then return { file_idx = file_idx or 1 } end
+  local fi = data.file_idx or file_idx or 1
+  local item = data.item
+  if item then
+    return { file_idx = fi, old_line = item.old_line, new_line = item.new_line }
+  end
+  return { file_idx = fi }
+end
+
 -- ─── Scroll mode helpers ──────────────────────────────────────────────────────
 
 local function current_file_from_cursor(layout, state)
