@@ -80,10 +80,11 @@ end
 
 -- ─── Diff rendering ───────────────────────────────────────────────────────────
 
-function M.render_file_diff(buf, file_diff, mr, discussions)
+function M.render_file_diff(buf, file_diff, mr, discussions, context)
   local parser = require("glab_review.mr.diff_parser")
-  local config = require("glab_review.config")
-  local context = config.get().diff.context
+  if not context then
+    context = require("glab_review.config").get().diff.context
+  end
 
   -- Try local git diff with more context lines; fall back to API diff
   local diff_text = file_diff.diff or ""
@@ -219,6 +220,7 @@ function M.render_sidebar(buf, state)
   table.insert(lines, string.rep("─", 30))
   table.insert(lines, "]f/[f files  ]c/[c cmts")
   table.insert(lines, "cc:comment  R:refresh  q:quit")
+  table.insert(lines, "+/- context lines")
 
   vim.bo[buf].modifiable = true
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
@@ -345,7 +347,7 @@ local function nav_file(layout, state, delta)
   if next_idx < 1 or next_idx > #files then return end
   state.current_file = next_idx
   M.render_sidebar(layout.sidebar_buf, state)
-  local line_data = M.render_file_diff(layout.main_buf, files[next_idx], state.mr, state.discussions)
+  local line_data = M.render_file_diff(layout.main_buf, files[next_idx], state.mr, state.discussions, state.context)
   state.line_data_cache[next_idx] = line_data
   vim.api.nvim_win_set_cursor(layout.main_win, { 1, 0 })
 end
@@ -383,6 +385,20 @@ local function nav_comment(layout, state, delta)
   end
 end
 
+-- ─── Context adjustment ─────────────────────────────────────────────────────
+
+local function adjust_context(layout, state, delta)
+  local cursor = vim.api.nvim_win_get_cursor(layout.main_win)
+  state.context = math.max(1, state.context + delta)
+  local file = state.files and state.files[state.current_file]
+  if not file then return end
+  local line_data = M.render_file_diff(
+    layout.main_buf, file, state.mr, state.discussions, state.context)
+  state.line_data_cache[state.current_file] = line_data
+  vim.api.nvim_win_set_cursor(layout.main_win, { math.min(cursor[1], vim.api.nvim_buf_line_count(layout.main_buf)), 0 })
+  vim.notify("Context: " .. state.context .. " lines", vim.log.levels.INFO)
+end
+
 -- ─── Keymaps ─────────────────────────────────────────────────────────────────
 
 function M.setup_keymaps(layout, state)
@@ -418,6 +434,10 @@ function M.setup_keymaps(layout, state)
     end
   end)
 
+  -- Context adjustment
+  map(main_buf, "n", "+", function() adjust_context(layout, state, 5) end)
+  map(main_buf, "n", "-", function() adjust_context(layout, state, -5) end)
+
   -- Refresh
   map(main_buf, "n", "R", function()
     M.open(state.mr, nil)
@@ -444,7 +464,7 @@ function M.setup_keymaps(layout, state)
       state.current_file = idx
       M.render_sidebar(layout.sidebar_buf, state)
       local line_data = M.render_file_diff(
-        layout.main_buf, state.files[idx], state.mr, state.discussions)
+        layout.main_buf, state.files[idx], state.mr, state.discussions, state.context)
       state.line_data_cache[idx] = line_data
       vim.api.nvim_set_current_win(layout.main_win)
     end
@@ -477,6 +497,7 @@ function M.open(mr, discussions)
 
   local layout = split.create()
 
+  local config = require("glab_review.config")
   local state = {
     mr = mr,
     files = files,
@@ -484,12 +505,13 @@ function M.open(mr, discussions)
     layout = layout,
     discussions = discussions or {},
     line_data_cache = {},
+    context = config.get().diff.context,
   }
 
   M.render_sidebar(layout.sidebar_buf, state)
 
   if #files > 0 then
-    local line_data = M.render_file_diff(layout.main_buf, files[1], mr, state.discussions)
+    local line_data = M.render_file_diff(layout.main_buf, files[1], mr, state.discussions, state.context)
     state.line_data_cache[1] = line_data
   else
     vim.bo[layout.main_buf].modifiable = true
