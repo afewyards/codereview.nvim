@@ -26,6 +26,24 @@ function M.clamp_cursor_to_content(buf, win)
     end,
   })
 
+  vim.api.nvim_create_autocmd("TextYankPost", {
+    buffer = buf,
+    callback = function()
+      local event = vim.v.event
+      local contents = event.regcontents
+      if not contents or #contents == 0 then return end
+      local stripped = {}
+      for _, line in ipairs(contents) do
+        if #line > LINE_NR_WIDTH then
+          table.insert(stripped, line:sub(LINE_NR_WIDTH + 1))
+        else
+          table.insert(stripped, line)
+        end
+      end
+      vim.fn.setreg(event.regname, stripped, event.regtype)
+    end,
+  })
+
   local clamp_keys = { "0", "^", "h", "<Left>", "<BS>" }
   local opts = { noremap = true, silent = true, buffer = buf }
   for _, key in ipairs(clamp_keys) do
