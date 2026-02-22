@@ -1,5 +1,6 @@
 local providers = require("codereview.providers")
 local client = require("codereview.api.client")
+local spinner = require("codereview.ui.spinner")
 local M = {}
 
 local PIPELINE_ICONS = {
@@ -43,14 +44,19 @@ end
 
 function M.fetch(opts, callback)
   opts = opts or {}
-  vim.notify("Fetching merge requests...", vim.log.levels.INFO)
+  local win = vim.api.nvim_get_current_win()
+  spinner.start(win, "Fetching merge requests…")
+
   local provider, ctx, err = providers.detect()
   if not provider then
+    spinner.stop(win)
     callback(nil, err)
     return
   end
 
   local reviews, fetch_err = provider.list_reviews(client, ctx, opts)
+  spinner.stop(win)
+
   if not reviews then
     callback(nil, fetch_err)
     return
@@ -60,7 +66,6 @@ function M.fetch(opts, callback)
   for _, review in ipairs(reviews) do
     table.insert(entries, M.format_mr_entry(review))
   end
-
   callback(entries)
 end
 
