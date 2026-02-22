@@ -313,6 +313,199 @@ function M.render_file_diff(buf, file_diff, mr, discussions, context)
   return line_data, row_discussions
 end
 
+-- ─── All-files scroll view ────────────────────────────────────────────────────
+
+function M.render_all_files(buf, files, mr, discussions, context)
+  local parser = require("glab_review.mr.diff_parser")
+  local config = require("glab_review.config")
+  context = context or config.get().diff.context
+
+  local all_lines = {}
+  local all_line_data = {}
+  local file_sections = {}
+
+  for file_idx, file_diff in ipairs(files) do
+    local section_start = #all_lines + 1
+
+    -- File header separator
+    local path = file_diff.new_path or file_diff.old_path or "unknown"
+    local label = path
+    if file_diff.renamed_file then
+      label = (file_diff.old_path or "") .. " → " .. (file_diff.new_path or "")
+    elseif file_diff.new_file then
+      label = path .. " (new file)"
+    elseif file_diff.deleted_file then
+      label = path .. " (deleted)"
+    end
+    local header = "─── " .. label .. " " .. string.rep("─", math.max(0, 60 - #label - 5))
+    table.insert(all_lines, header)
+    table.insert(all_line_data, { type = "file_header", file_idx = file_idx })
+
+    -- Parse and build display for this file
+    local diff_text = file_diff.diff or ""
+    if mr.diff_refs and mr.diff_refs.base_sha and mr.diff_refs.head_sha then
+      local fpath = file_diff.new_path or file_diff.old_path
+      if fpath then
+        local result = vim.fn.system({
+          "git", "diff", "-U" .. context,
+          mr.diff_refs.base_sha, mr.diff_refs.head_sha, "--", fpath,
+        })
+        if vim.v.shell_error == 0 and result ~= "" then
+          diff_text = result
+        end
+      end
+    end
+
+    local hunks = parser.parse_hunks(diff_text)
+    local display = parser.build_display(hunks, context)
+
+    if #display == 0 then
+      table.insert(all_lines, "  (no changes)")
+      table.insert(all_line_data, { type = "empty", file_idx = file_idx })
+    else
+      for _, item in ipairs(display) do
+        local prefix = M.format_line_number(item.old_line, item.new_line)
+        table.insert(all_lines, prefix .. (item.text or ""))
+        table.insert(all_line_data, { type = item.type, item = item, file_idx = file_idx })
+      end
+    end
+
+    local section_end = #all_lines
+
+    -- Blank line between files (except after last)
+    if file_idx < #files then
+      table.insert(all_lines, "")
+      table.insert(all_line_data, { type = "separator", file_idx = file_idx })
+    end
+
+    table.insert(file_sections, {
+      start_line = section_start,
+      end_line = section_end,
+      file_idx = file_idx,
+      file = file_diff,
+    })
+  end
+
+  -- Set buffer content
+  vim.bo[buf].modifiable = true
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, all_lines)
+  vim.bo[buf].modifiable = false
+
+  -- Clear previous highlights
+  vim.api.nvim_buf_clear_namespace(buf, DIFF_NS, 0, -1)
+
+  -- Apply extmarks
+  local prev_delete_row = nil
+  local prev_delete_text = nil
+
+  for i, data in ipairs(all_line_data) do
+    local row = i - 1
+    if data.type == "file_header" then
+      apply_line_hl(buf, row, "GlabReviewFileHeader")
+      prev_delete_row = nil
+      prev_delete_text = nil
+    elseif data.type == "add" then
+      apply_line_hl(buf, row, "GlabReviewDiffAdd")
+      if prev_delete_row == row - 1 and prev_delete_text then
+        local segments = parser.word_diff(prev_delete_text, data.item.text or "")
+        for _, seg in ipairs(segments) do
+          apply_word_hl(buf, prev_delete_row,
+            LINE_NR_WIDTH + seg.old_start, LINE_NR_WIDTH + seg.old_end,
+            "GlabReviewDiffDeleteWord")
+          apply_word_hl(buf, row,
+            LINE_NR_WIDTH + seg.new_start, LINE_NR_WIDTH + seg.new_end,
+            "GlabReviewDiffAddWord")
+        end
+      end
+      prev_delete_row = nil
+      prev_delete_text = nil
+    elseif data.type == "delete" then
+      apply_line_hl(buf, row, "GlabReviewDiffDelete")
+      prev_delete_row = row
+      prev_delete_text = data.item.text or ""
+    else
+      prev_delete_row = nil
+      prev_delete_text = nil
+    end
+  end
+
+  -- Place comment signs and inline threads per file section
+  local all_row_discussions = {}
+  for _, section in ipairs(file_sections) do
+    for _, disc in ipairs(discussions or {}) do
+      if discussion_matches_file(disc, section.file) then
+        local target_line = discussion_line(disc)
+        if target_line then
+          for i = section.start_line, section.end_line do
+            local data = all_line_data[i]
+            if data.item and (data.item.new_line == target_line or data.item.old_line == target_line) then
+              local sign_name = is_resolved(disc) and "GlabReviewCommentSign"
+                or "GlabReviewUnresolvedSign"
+              pcall(vim.fn.sign_place, 0, "GlabReview", sign_name, buf, { lnum = i })
+
+              local notes = disc.notes
+              if notes and #notes > 0 then
+                local first = notes[1]
+                local resolved = is_resolved(disc)
+                local bdr = "GlabReviewCommentBorder"
+                local aut = "GlabReviewCommentAuthor"
+                local body_hl = resolved and "GlabReviewComment" or "GlabReviewCommentUnresolved"
+                local status_hl = resolved and "GlabReviewCommentResolved" or "GlabReviewCommentUnresolved"
+                local status_str = resolved and " Resolved " or " Unresolved "
+                local time_str = format_time_short(first.created_at)
+                local header_meta = time_str ~= "" and (" · " .. time_str) or ""
+                local header_text = "@" .. first.author.username
+                local fill = math.max(0, 62 - #header_text - #header_meta - #status_str)
+
+                local virt_lines = {}
+                table.insert(virt_lines, {
+                  { "  ┌ ", bdr }, { header_text, aut },
+                  { header_meta, bdr }, { status_str, status_hl },
+                  { string.rep("─", fill), bdr },
+                })
+                for _, bl in ipairs(wrap_text(first.body, 64)) do
+                  table.insert(virt_lines, { { "  │ ", bdr }, { bl, body_hl } })
+                end
+                for ni = 2, #notes do
+                  local reply = notes[ni]
+                  if not reply.system then
+                    local rt = format_time_short(reply.created_at)
+                    local rmeta = rt ~= "" and (" · " .. rt) or ""
+                    table.insert(virt_lines, { { "  │", bdr } })
+                    table.insert(virt_lines, {
+                      { "  │  ↪ ", bdr }, { "@" .. reply.author.username, aut }, { rmeta, bdr },
+                    })
+                    for _, rl in ipairs(wrap_text(reply.body, 58)) do
+                      table.insert(virt_lines, { { "  │    ", bdr }, { rl, body_hl } })
+                    end
+                  end
+                end
+                table.insert(virt_lines, {
+                  { "  └ ", bdr }, { "r:reply  gt:un/resolve", body_hl },
+                  { " " .. string.rep("─", 44), bdr },
+                })
+                pcall(vim.api.nvim_buf_set_extmark, buf, DIFF_NS, i - 1, 0, {
+                  virt_lines = virt_lines, virt_lines_above = false,
+                })
+              end
+
+              if not all_row_discussions[i] then all_row_discussions[i] = {} end
+              table.insert(all_row_discussions[i], disc)
+              break
+            end
+          end
+        end
+      end
+    end
+  end
+
+  return {
+    file_sections = file_sections,
+    line_data = all_line_data,
+    row_discussions = all_row_discussions,
+  }
+end
+
 -- ─── Sidebar rendering ────────────────────────────────────────────────────────
 
 local function count_file_comments(file, discussions)

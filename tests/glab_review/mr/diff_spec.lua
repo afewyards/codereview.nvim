@@ -26,4 +26,102 @@ describe("mr.diff", function()
       assert.equals(14, #text)
     end)
   end)
+
+  describe("render_all_files", function()
+    it("returns file_sections with correct boundaries", function()
+      local buf = vim.api.nvim_create_buf(false, true)
+      local files = {
+        { new_path = "a.lua", old_path = "a.lua", diff = "@@ -1,2 +1,2 @@\n ctx\n-old\n+new\n" },
+        { new_path = "b.lua", old_path = "b.lua", diff = "@@ -5,2 +5,2 @@\n ctx\n-old2\n+new2\n" },
+      }
+      local mr = { diff_refs = nil }
+      local discussions = {}
+
+      local result = diff.render_all_files(buf, files, mr, discussions, 8)
+
+      assert.equals(2, #result.file_sections)
+      assert.truthy(result.file_sections[1].start_line >= 1)
+      assert.truthy(result.file_sections[2].start_line > result.file_sections[1].end_line)
+      assert.equals(1, result.file_sections[1].file_idx)
+      assert.equals(2, result.file_sections[2].file_idx)
+      assert.truthy(#result.line_data > 0)
+      assert.truthy(vim.api.nvim_buf_line_count(buf) > 1)
+
+      vim.api.nvim_buf_delete(buf, { force = true })
+    end)
+
+    it("renders file header lines with path", function()
+      local buf = vim.api.nvim_create_buf(false, true)
+      local files = {
+        { new_path = "src/foo.lua", old_path = "src/foo.lua", diff = "@@ -1,1 +1,1 @@\n-a\n+b\n" },
+      }
+      local result = diff.render_all_files(buf, files, { diff_refs = nil }, {}, 8)
+
+      local first_line = vim.api.nvim_buf_get_lines(buf, 0, 1, false)[1]
+      assert.truthy(first_line:find("src/foo.lua"))
+
+      vim.api.nvim_buf_delete(buf, { force = true })
+    end)
+
+    it("handles empty files list", function()
+      local buf = vim.api.nvim_create_buf(false, true)
+      local result = diff.render_all_files(buf, {}, { diff_refs = nil }, {}, 8)
+      assert.equals(0, #result.file_sections)
+      vim.api.nvim_buf_delete(buf, { force = true })
+    end)
+
+    it("file_sections reverse-maps buffer line to correct file", function()
+      local buf = vim.api.nvim_create_buf(false, true)
+      local files = {
+        { new_path = "a.lua", old_path = "a.lua", diff = "@@ -1,2 +1,2 @@\n ctx\n-old\n+new\n" },
+        { new_path = "b.lua", old_path = "b.lua", diff = "@@ -1,1 +1,1 @@\n-x\n+y\n" },
+      }
+      local result = diff.render_all_files(buf, files, { diff_refs = nil }, {}, 8)
+
+      for _, sec in ipairs(result.file_sections) do
+        for i = sec.start_line, sec.end_line do
+          assert.equals(sec.file_idx, result.line_data[i].file_idx)
+        end
+      end
+
+      vim.api.nvim_buf_delete(buf, { force = true })
+    end)
+
+    it("handles renamed files in header", function()
+      local buf = vim.api.nvim_create_buf(false, true)
+      local files = {
+        { new_path = "new.lua", old_path = "old.lua", renamed_file = true, diff = "@@ -1,1 +1,1 @@\n ctx\n" },
+      }
+      local result = diff.render_all_files(buf, files, { diff_refs = nil }, {}, 8)
+      local first_line = vim.api.nvim_buf_get_lines(buf, 0, 1, false)[1]
+      assert.truthy(first_line:find("old.lua"))
+      assert.truthy(first_line:find("new.lua"))
+      vim.api.nvim_buf_delete(buf, { force = true })
+    end)
+
+    it("shows no-changes placeholder when diff is empty", function()
+      local buf = vim.api.nvim_create_buf(false, true)
+      local files = { { new_path = "c.lua", old_path = "c.lua", diff = "" } }
+      local result = diff.render_all_files(buf, files, { diff_refs = nil }, {}, 8)
+      local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+      local found = false
+      for _, l in ipairs(lines) do
+        if l:find("no changes") then found = true end
+      end
+      assert.truthy(found)
+      vim.api.nvim_buf_delete(buf, { force = true })
+    end)
+
+    it("has no trailing blank line after last file", function()
+      local buf = vim.api.nvim_create_buf(false, true)
+      local files = {
+        { new_path = "a.lua", old_path = "a.lua", diff = "@@ -1,1 +1,1 @@\n-a\n+b\n" },
+        { new_path = "b.lua", old_path = "b.lua", diff = "@@ -1,1 +1,1 @@\n-x\n+y\n" },
+      }
+      local result = diff.render_all_files(buf, files, { diff_refs = nil }, {}, 8)
+      local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+      assert.not_equals("", lines[#lines])
+      vim.api.nvim_buf_delete(buf, { force = true })
+    end)
+  end)
 end)
