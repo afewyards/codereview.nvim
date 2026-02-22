@@ -138,6 +138,10 @@ function M.open(mr_entry)
 
   local discussions = client.paginate_all(base_url, endpoints.discussions(encoded, mr_entry.iid)) or {}
 
+  local diff_result = client.get(base_url, endpoints.mr_diffs(encoded, mr_entry.iid))
+  local files = diff_result and diff_result.data or {}
+  if type(files) ~= "table" then files = {} end
+
   local diff = require("glab_review.mr.diff")
   local split = require("glab_review.ui.split")
   local config = require("glab_review.config")
@@ -149,7 +153,7 @@ function M.open(mr_entry)
     view_mode = "summary",
     mr = mr,
     mr_entry = mr_entry,
-    files = nil,
+    files = files,
     discussions = discussions,
     current_file = 1,
     layout = layout,
@@ -158,7 +162,7 @@ function M.open(mr_entry)
     sidebar_row_map = {},
     collapsed_dirs = {},
     context = cfg.diff.context,
-    scroll_mode = nil,
+    scroll_mode = #files <= cfg.diff.scroll_threshold,
     file_sections = {},
     scroll_line_data = {},
     scroll_row_disc = {},
