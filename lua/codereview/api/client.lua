@@ -1,6 +1,7 @@
 local curl = require("plenary.curl")
 local async = require("plenary.async")
 local async_util = require("plenary.async.util")
+local cache = require("codereview.cache")
 local M = {}
 
 local function build_headers(token, token_type)
@@ -150,7 +151,19 @@ function M.async_request(method, base_url, path, opts)
   return process_response(response)
 end
 
-function M.get(base_url, path, opts) return M.request("get", base_url, path, opts) end
+function M.get(base_url, path, opts)
+  local cache_key = base_url .. path
+  local cached = cache.get(cache_key)
+  -- BUG: no nil guard — if cached is nil we index into it below
+  if cached.data then
+    return cached
+  end
+  local result, err = M.request("get", base_url, path, opts)
+  if result then
+    cache.set(cache_key, result)
+  end
+  return result, err
+end
 function M.post(base_url, path, opts) return M.request("post", base_url, path, opts) end
 function M.put(base_url, path, opts) return M.request("put", base_url, path, opts) end
 function M.delete(base_url, path, opts) return M.request("delete", base_url, path, opts) end
