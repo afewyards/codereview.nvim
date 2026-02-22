@@ -761,6 +761,46 @@ local function adjust_context(layout, state, delta)
   vim.notify("Context: " .. state.context .. " lines", vim.log.levels.INFO)
 end
 
+-- ─── Scroll mode helpers ──────────────────────────────────────────────────────
+
+local function current_file_from_cursor(layout, state)
+  local cursor = vim.api.nvim_win_get_cursor(layout.main_win)
+  local row = cursor[1]
+  for i = #state.file_sections, 1, -1 do
+    if row >= state.file_sections[i].start_line then
+      return state.file_sections[i].file_idx
+    end
+  end
+  return 1
+end
+
+local function toggle_scroll_mode(layout, state)
+  state.scroll_mode = not state.scroll_mode
+  if state.scroll_mode then
+    local result = M.render_all_files(layout.main_buf, state.files, state.mr, state.discussions, state.context)
+    state.file_sections = result.file_sections
+    state.scroll_line_data = result.line_data
+    state.scroll_row_disc = result.row_discussions
+    -- Scroll to current file's section
+    for _, sec in ipairs(state.file_sections) do
+      if sec.file_idx == state.current_file then
+        vim.api.nvim_win_set_cursor(layout.main_win, { sec.start_line, 0 })
+        break
+      end
+    end
+  else
+    -- Switch back to per-file: render current file
+    local file = state.files[state.current_file]
+    if file then
+      local ld, rd = M.render_file_diff(layout.main_buf, file, state.mr, state.discussions, state.context)
+      state.line_data_cache[state.current_file] = ld
+      state.row_disc_cache[state.current_file] = rd
+    end
+  end
+  M.render_sidebar(layout.sidebar_buf, state)
+  vim.notify(state.scroll_mode and "All-files view" or "Per-file view", vim.log.levels.INFO)
+end
+
 -- ─── Keymaps ─────────────────────────────────────────────────────────────────
 
 function M.setup_keymaps(layout, state)
@@ -967,6 +1007,7 @@ function M.open(mr, discussions)
   local layout = split.create()
 
   local config = require("glab_review.config")
+  local cfg = config.get()
   local state = {
     mr = mr,
     files = files,
@@ -977,15 +1018,26 @@ function M.open(mr, discussions)
     row_disc_cache = {},
     sidebar_row_map = {},
     collapsed_dirs = {},
-    context = config.get().diff.context,
+    context = cfg.diff.context,
+    scroll_mode = #files <= cfg.diff.scroll_threshold,
+    file_sections = {},
+    scroll_line_data = {},
+    scroll_row_disc = {},
   }
 
   M.render_sidebar(layout.sidebar_buf, state)
 
   if #files > 0 then
-    local line_data, row_disc = M.render_file_diff(layout.main_buf, files[1], mr, state.discussions, state.context)
-    state.line_data_cache[1] = line_data
-    state.row_disc_cache[1] = row_disc
+    if state.scroll_mode then
+      local result = M.render_all_files(layout.main_buf, files, mr, state.discussions, state.context)
+      state.file_sections = result.file_sections
+      state.scroll_line_data = result.line_data
+      state.scroll_row_disc = result.row_discussions
+    else
+      local line_data, row_disc = M.render_file_diff(layout.main_buf, files[1], mr, state.discussions, state.context)
+      state.line_data_cache[1] = line_data
+      state.row_disc_cache[1] = row_disc
+    end
   else
     vim.bo[layout.main_buf].modifiable = true
     vim.api.nvim_buf_set_lines(layout.main_buf, 0, -1, false, { "No diffs found." })

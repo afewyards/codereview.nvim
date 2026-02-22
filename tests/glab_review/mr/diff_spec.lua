@@ -27,6 +27,32 @@ describe("mr.diff", function()
     end)
   end)
 
+  describe("scroll mode state", function()
+    it("defaults to scroll_mode=true when files <= threshold", function()
+      local config = require("glab_review.config")
+      config.reset()
+      config.setup({ diff = { scroll_threshold = 50 } })
+      local files = {}
+      for i = 1, 20 do
+        table.insert(files, { new_path = "file" .. i .. ".lua" })
+      end
+      local threshold = config.get().diff.scroll_threshold
+      assert.truthy(#files <= threshold)
+    end)
+
+    it("defaults to scroll_mode=false when files > threshold", function()
+      local config = require("glab_review.config")
+      config.reset()
+      config.setup({ diff = { scroll_threshold = 5 } })
+      local files = {}
+      for i = 1, 10 do
+        table.insert(files, { new_path = "file" .. i .. ".lua" })
+      end
+      local threshold = config.get().diff.scroll_threshold
+      assert.truthy(#files > threshold)
+    end)
+  end)
+
   describe("render_all_files", function()
     it("returns file_sections with correct boundaries", function()
       local buf = vim.api.nvim_create_buf(false, true)
