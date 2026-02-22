@@ -26,6 +26,12 @@ function M.parse_remote(url)
   return nil, nil
 end
 
+function M.get_repo_root()
+  local result = vim.fn.systemlist({ "git", "rev-parse", "--show-toplevel" })
+  if vim.v.shell_error ~= 0 or #result == 0 then return nil end
+  return vim.trim(result[1])
+end
+
 function M.get_remote_url()
   local result = vim.fn.systemlist({ "git", "remote", "get-url", "origin" })
   if vim.v.shell_error ~= 0 or #result == 0 then
@@ -36,8 +42,8 @@ end
 
 function M.detect_project()
   local config = require("codereview.config").get()
-  if config.gitlab_url and config.project then
-    return config.gitlab_url, config.project
+  if config.base_url and config.project then
+    return config.base_url, config.project
   end
 
   local url = M.get_remote_url()
