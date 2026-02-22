@@ -450,12 +450,30 @@ function M.render_all_files(buf, files, mr, discussions, context, file_contexts)
             end
           end
           if loaded_fts[ft] then
+            -- Create sub-regions that skip delete lines to prevent syntax state corruption
             local content_start = section.start_line + 1
             local content_end = section.end_line
-            if content_end >= content_start then
+            local span_start = nil
+            local region_idx = 0
+            for i = content_start, content_end do
+              if all_line_data[i] and all_line_data[i].type == "delete" then
+                if span_start then
+                  region_idx = region_idx + 1
+                  pcall(vim.cmd, string.format(
+                    'syntax region GlabRegion_%d_%d start="\\%%%dl" end="\\%%%dl" contains=@%s keepend',
+                    section.file_idx, region_idx, span_start, i - 1, loaded_fts[ft]
+                  ))
+                  span_start = nil
+                end
+              else
+                if not span_start then span_start = i end
+              end
+            end
+            if span_start then
+              region_idx = region_idx + 1
               pcall(vim.cmd, string.format(
-                'syntax region GlabRegion_%d start="\\%%%dl" end="\\%%%dl" contains=@%s keepend',
-                section.file_idx, content_start, content_end, loaded_fts[ft]
+                'syntax region GlabRegion_%d_%d start="\\%%%dl" end="\\%%%dl" contains=@%s keepend',
+                section.file_idx, region_idx, span_start, content_end, loaded_fts[ft]
               ))
             end
           end
