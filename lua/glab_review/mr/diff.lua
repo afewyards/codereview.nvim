@@ -805,22 +805,28 @@ end
 -- ─── Context adjustment ─────────────────────────────────────────────────────
 
 local function adjust_context(layout, state, delta)
-  local cursor = vim.api.nvim_win_get_cursor(layout.main_win)
+  local cursor_row = vim.api.nvim_win_get_cursor(layout.main_win)[1]
   state.context = math.max(1, state.context + delta)
   if state.scroll_mode then
+    local anchor = M.find_anchor(state.scroll_line_data, cursor_row)
     local result = M.render_all_files(layout.main_buf, state.files, state.mr, state.discussions, state.context, state.file_contexts)
     state.file_sections = result.file_sections
     state.scroll_line_data = result.line_data
     state.scroll_row_disc = result.row_discussions
+    local row = M.find_row_for_anchor(state.scroll_line_data, anchor)
+    vim.api.nvim_win_set_cursor(layout.main_win, { row, 0 })
   else
+    local per_file_ld = state.line_data_cache[state.current_file]
+    local anchor = M.find_anchor(per_file_ld or {}, cursor_row, state.current_file)
     local file = state.files and state.files[state.current_file]
     if not file then return end
-    local line_data, row_disc = M.render_file_diff(
+    local ld, row_disc = M.render_file_diff(
       layout.main_buf, file, state.mr, state.discussions, state.context)
-    state.line_data_cache[state.current_file] = line_data
+    state.line_data_cache[state.current_file] = ld
     state.row_disc_cache[state.current_file] = row_disc
+    local row = M.find_row_for_anchor(ld, anchor, state.current_file)
+    vim.api.nvim_win_set_cursor(layout.main_win, { row, 0 })
   end
-  vim.api.nvim_win_set_cursor(layout.main_win, { math.min(cursor[1], vim.api.nvim_buf_line_count(layout.main_buf)), 0 })
   vim.notify("Context: " .. state.context .. " lines", vim.log.levels.INFO)
 end
 
@@ -1128,9 +1134,10 @@ function M.setup_keymaps(layout, state)
 
   -- Toggle full file (current file only in scroll mode)
   map(main_buf, "n", "<C-f>", function()
-    local cursor = vim.api.nvim_win_get_cursor(layout.main_win)
+    local cursor_row = vim.api.nvim_win_get_cursor(layout.main_win)[1]
     if state.scroll_mode then
       local file_idx = current_file_from_cursor(layout, state)
+      local anchor = M.find_anchor(state.scroll_line_data, cursor_row)
       if state.file_contexts[file_idx] then
         state.file_contexts[file_idx] = nil
       else
@@ -1140,7 +1147,11 @@ function M.setup_keymaps(layout, state)
       state.file_sections = result.file_sections
       state.scroll_line_data = result.line_data
       state.scroll_row_disc = result.row_discussions
+      local row = M.find_row_for_anchor(state.scroll_line_data, anchor)
+      vim.api.nvim_win_set_cursor(layout.main_win, { row, 0 })
     else
+      local per_file_ld = state.line_data_cache[state.current_file]
+      local anchor = M.find_anchor(per_file_ld or {}, cursor_row, state.current_file)
       if state.context == 99999 then
         state.context = config.get().diff.context
       else
@@ -1151,8 +1162,9 @@ function M.setup_keymaps(layout, state)
       local ld, rd = M.render_file_diff(layout.main_buf, file, state.mr, state.discussions, state.context)
       state.line_data_cache[state.current_file] = ld
       state.row_disc_cache[state.current_file] = rd
+      local row = M.find_row_for_anchor(ld, anchor, state.current_file)
+      vim.api.nvim_win_set_cursor(layout.main_win, { row, 0 })
     end
-    vim.api.nvim_win_set_cursor(layout.main_win, { math.min(cursor[1], vim.api.nvim_buf_line_count(layout.main_buf)), 0 })
   end)
 
   -- Refresh
