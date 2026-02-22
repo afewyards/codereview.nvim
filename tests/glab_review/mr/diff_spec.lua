@@ -1,32 +1,6 @@
 local diff = require("glab_review.mr.diff")
 
 describe("mr.diff", function()
-  describe("format_line_number", function()
-    it("formats dual line numbers", function()
-      local text = diff.format_line_number(10, 12)
-      assert.truthy(text:find("10"))
-      assert.truthy(text:find("12"))
-    end)
-    it("shows only old line for deletes", function()
-      local text = diff.format_line_number(10, nil)
-      assert.truthy(text:find("10"))
-    end)
-    it("shows only new line for adds", function()
-      local text = diff.format_line_number(nil, 12)
-      assert.truthy(text:find("12"))
-    end)
-  end)
-  describe("LINE_NR_WIDTH", function()
-    it("line number prefix is exactly LINE_NR_WIDTH chars", function()
-      local text = diff.format_line_number(10, 12)
-      assert.equals(14, #text)
-    end)
-    it("line number prefix width is consistent for large numbers", function()
-      local text = diff.format_line_number(9999, 9999)
-      assert.equals(14, #text)
-    end)
-  end)
-
   describe("scroll mode state", function()
     it("defaults to scroll_mode=true when files <= threshold", function()
       local config = require("glab_review.config")
@@ -247,80 +221,64 @@ describe("mr.diff", function()
     end)
   end)
 
-  describe("clamp_cursor_to_content", function()
-    local buf, win
-
-    before_each(function()
-      buf = vim.api.nvim_create_buf(false, true)
-      vim.api.nvim_buf_set_lines(buf, 0, -1, false, {
-        "   10 | 10    local x = 1",
-        "   11 | 11    local y = 2",
-      })
-      win = vim.api.nvim_open_win(buf, false, {
-        relative = "editor",
-        row = 0,
-        col = 0,
-        width = 40,
-        height = 5,
-      })
-    end)
-
-    after_each(function()
-      vim.api.nvim_win_close(win, true)
+  describe("inline virtual text line numbers", function()
+    it("buffer lines do not contain line number prefix", function()
+      local buf = vim.api.nvim_create_buf(false, true)
+      local files = {
+        { new_path = "a.lua", old_path = "a.lua", diff = "@@ -1,2 +1,2 @@\n ctx\n-old\n+new\n" },
+      }
+      local mr = { diff_refs = nil }
+      diff.render_file_diff(buf, files[1], mr, {}, 8)
+      local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+      for _, line in ipairs(lines) do
+        assert.is_nil(line:match("^%s+%d+%s+|%s+%d+%s+"))
+      end
       vim.api.nvim_buf_delete(buf, { force = true })
     end)
 
-    it("snaps cursor to LINE_NR_WIDTH when placed at column 0", function()
-      diff.clamp_cursor_to_content(buf, win)
-      vim.api.nvim_win_set_cursor(win, { 1, 0 })
-      vim.api.nvim_exec_autocmds("CursorMoved", { buffer = buf })
-      local col = vim.api.nvim_win_get_cursor(win)[2]
-      assert.equals(diff.LINE_NR_WIDTH, col)
+    it("extmarks with inline virtual text exist on diff lines", function()
+      local buf = vim.api.nvim_create_buf(false, true)
+      local files = {
+        { new_path = "a.lua", old_path = "a.lua", diff = "@@ -1,2 +1,2 @@\n ctx\n-old\n+new\n" },
+      }
+      local mr = { diff_refs = nil }
+      diff.render_file_diff(buf, files[1], mr, {}, 8)
+      local ns = vim.api.nvim_create_namespace("glab_review_diff")
+      local marks = vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, { details = true })
+      local has_inline_vt = false
+      for _, mark in ipairs(marks) do
+        local details = mark[4]
+        if details.virt_text and details.virt_text_pos == "inline" then
+          has_inline_vt = true
+          break
+        end
+      end
+      assert.truthy(has_inline_vt)
+      vim.api.nvim_buf_delete(buf, { force = true })
     end)
 
-    it("does not move cursor already past LINE_NR_WIDTH", function()
-      diff.clamp_cursor_to_content(buf, win)
-      vim.api.nvim_win_set_cursor(win, { 1, 20 })
-      vim.api.nvim_exec_autocmds("CursorMoved", { buffer = buf })
-      local col = vim.api.nvim_win_get_cursor(win)[2]
-      assert.equals(20, col)
+    it("yanking a line does not include line number prefix", function()
+      local buf = vim.api.nvim_create_buf(false, true)
+      local win = vim.api.nvim_open_win(buf, true, {
+        relative = "editor", width = 80, height = 10, row = 0, col = 0,
+      })
+      local files = {
+        { new_path = "a.lua", old_path = "a.lua", diff = "@@ -1,1 +1,1 @@\n-old\n+new\n" },
+      }
+      diff.render_file_diff(buf, files[1], { diff_refs = nil }, {}, 8)
+      local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+      local target_row
+      for i, l in ipairs(lines) do
+        if l == "new" then target_row = i break end
+      end
+      assert.truthy(target_row)
+      vim.api.nvim_win_set_cursor(win, { target_row, 0 })
+      vim.cmd("normal! yy")
+      local reg = vim.fn.getreg('"')
+      assert.equals("new\n", reg)
+      vim.api.nvim_win_close(win, true)
+      vim.api.nvim_buf_delete(buf, { force = true })
     end)
-
-    it("clamps cursor at exactly LINE_NR_WIDTH - 1", function()
-      diff.clamp_cursor_to_content(buf, win)
-      vim.api.nvim_win_set_cursor(win, { 1, 13 })
-      vim.api.nvim_exec_autocmds("CursorMoved", { buffer = buf })
-      local col = vim.api.nvim_win_get_cursor(win)[2]
-      assert.equals(14, col)
-    end)
-
-  it("strips line number prefix from yanked line", function()
-    diff.clamp_cursor_to_content(buf, win)
-    vim.api.nvim_set_current_win(win)
-    vim.api.nvim_win_set_cursor(win, { 1, 14 })
-    vim.cmd("normal! yy")
-    local reg = vim.fn.getreg('"')
-    assert.equals("local x = 1\n", reg)
-  end)
-
-  it("strips prefix from multi-line yank", function()
-    diff.clamp_cursor_to_content(buf, win)
-    vim.api.nvim_set_current_win(win)
-    vim.api.nvim_win_set_cursor(win, { 1, 14 })
-    vim.cmd("normal! 2yy")
-    local reg = vim.fn.getreg('"')
-    assert.equals("local x = 1\nlocal y = 2\n", reg)
-  end)
-
-  it("handles short lines without error", function()
-    vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "short", "   10 | 10    x" })
-    diff.clamp_cursor_to_content(buf, win)
-    vim.api.nvim_set_current_win(win)
-    vim.api.nvim_win_set_cursor(win, { 1, 0 })
-    vim.cmd("normal! yy")
-    local reg = vim.fn.getreg('"')
-    assert.equals("short\n", reg)
-  end)
   end)
 
   describe("toggle_scroll_mode line preservation", function()
