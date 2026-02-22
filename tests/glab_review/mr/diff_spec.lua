@@ -314,4 +314,180 @@ describe("mr.diff", function()
       vim.api.nvim_buf_delete(buf, { force = true })
     end)
   end)
+
+  describe("render_summary", function()
+    before_each(function()
+      package.loaded["glab_review.mr.list"] = {
+        pipeline_icon = function() return "✓" end,
+      }
+      -- detail.lua requires client/git/endpoints at top level; stub them too
+      package.loaded["glab_review.api.client"] = {}
+      package.loaded["glab_review.api.endpoints"] = {}
+      package.loaded["glab_review.git"] = {}
+      -- reset detail so it re-loads with our stubs
+      package.loaded["glab_review.mr.detail"] = nil
+    end)
+    after_each(function()
+      package.loaded["glab_review.mr.list"] = nil
+      package.loaded["glab_review.api.client"] = nil
+      package.loaded["glab_review.api.endpoints"] = nil
+      package.loaded["glab_review.git"] = nil
+      package.loaded["glab_review.mr.detail"] = nil
+    end)
+
+    it("renders MR header and activity into buffer", function()
+      local buf = vim.api.nvim_create_buf(false, true)
+      local state = {
+        mr = {
+          iid = 42,
+          title = "Fix auth",
+          author = { username = "maria" },
+          source_branch = "fix/auth",
+          target_branch = "main",
+          state = "opened",
+          head_pipeline = { status = "success" },
+          description = "Fixes the bug",
+          approved_by = {},
+          approvals_before_merge = 0,
+        },
+        discussions = {
+          {
+            id = "abc",
+            notes = {
+              {
+                id = 1,
+                body = "Looks good!",
+                author = { username = "jan" },
+                created_at = "2026-02-20T10:00:00Z",
+                system = false,
+              },
+            },
+          },
+        },
+      }
+      diff.render_summary(buf, state)
+
+      local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+      local joined = table.concat(lines, "\n")
+      assert.truthy(joined:find("!42"))
+      assert.truthy(joined:find("Fix auth"))
+      assert.truthy(joined:find("jan"))
+      assert.truthy(joined:find("Looks good"))
+      assert.truthy(#lines > 5)
+
+      vim.api.nvim_buf_delete(buf, { force = true })
+    end)
+  end)
+
+  describe("render_sidebar with summary button", function()
+    before_each(function()
+      -- Stub glab_review.mr.list so render_sidebar works without plenary
+      package.loaded["glab_review.mr.list"] = {
+        pipeline_icon = function(_) return "[--]" end,
+      }
+    end)
+
+    after_each(function()
+      package.loaded["glab_review.mr.list"] = nil
+    end)
+
+    it("renders Summary button as first interactive row", function()
+      local buf = vim.api.nvim_create_buf(false, true)
+      local state = {
+        mr = { iid = 1, title = "Test", source_branch = "feat", head_pipeline = nil },
+        files = {
+          { new_path = "src/a.lua", old_path = "src/a.lua" },
+        },
+        discussions = {},
+        current_file = 1,
+        collapsed_dirs = {},
+        sidebar_row_map = {},
+        view_mode = "summary",
+      }
+      diff.render_sidebar(buf, state)
+      local summary_row = nil
+      for row, entry in pairs(state.sidebar_row_map) do
+        if entry.type == "summary" then
+          summary_row = row
+          break
+        end
+      end
+      assert.truthy(summary_row, "Expected summary entry in sidebar_row_map")
+      for row, entry in pairs(state.sidebar_row_map) do
+        if entry.type == "file" then
+          assert.truthy(summary_row < row)
+        end
+      end
+      vim.api.nvim_buf_delete(buf, { force = true })
+    end)
+
+    it("shows active indicator on Summary when view_mode is summary", function()
+      local buf = vim.api.nvim_create_buf(false, true)
+      local state = {
+        mr = { iid = 1, title = "Test", source_branch = "feat", head_pipeline = nil },
+        files = { { new_path = "a.lua", old_path = "a.lua" } },
+        discussions = {},
+        current_file = 1,
+        collapsed_dirs = {},
+        sidebar_row_map = {},
+        view_mode = "summary",
+      }
+      diff.render_sidebar(buf, state)
+      local summary_row = nil
+      for row, entry in pairs(state.sidebar_row_map) do
+        if entry.type == "summary" then summary_row = row break end
+      end
+      local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+      assert.truthy(lines[summary_row]:find("▸"))
+      vim.api.nvim_buf_delete(buf, { force = true })
+    end)
+
+    it("no file gets active indicator when view_mode is summary", function()
+      local buf = vim.api.nvim_create_buf(false, true)
+      local state = {
+        mr = { iid = 1, title = "Test", source_branch = "feat", head_pipeline = nil },
+        files = { { new_path = "a.lua", old_path = "a.lua" } },
+        discussions = {},
+        current_file = 1,
+        collapsed_dirs = {},
+        sidebar_row_map = {},
+        view_mode = "summary",
+      }
+      diff.render_sidebar(buf, state)
+      for row, entry in pairs(state.sidebar_row_map) do
+        if entry.type == "file" then
+          local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+          assert.truthy(lines[row]:match("^%s%s "))
+        end
+      end
+      vim.api.nvim_buf_delete(buf, { force = true })
+    end)
+  end)
+
+  describe("load_diffs_into_state", function()
+    it("sets state.files when not yet loaded", function()
+      local state = {
+        mr = { iid = 1 },
+        files = nil,
+        scroll_mode = nil,
+      }
+      local files = {
+        { new_path = "a.lua", old_path = "a.lua" },
+        { new_path = "b.lua", old_path = "b.lua" },
+      }
+      diff.load_diffs_into_state(state, files)
+      assert.equals(2, #state.files)
+      assert.truthy(state.scroll_mode ~= nil)
+    end)
+
+    it("is a no-op when files already loaded", function()
+      local state = {
+        mr = { iid = 1 },
+        files = { { new_path = "existing.lua" } },
+        scroll_mode = true,
+      }
+      diff.load_diffs_into_state(state, { { new_path = "other.lua" } })
+      assert.equals("existing.lua", state.files[1].new_path)
+    end)
+  end)
 end)

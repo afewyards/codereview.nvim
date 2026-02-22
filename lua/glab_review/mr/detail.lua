@@ -138,89 +138,37 @@ function M.open(mr_entry)
 
   local discussions = client.paginate_all(base_url, endpoints.discussions(encoded, mr_entry.iid)) or {}
 
-  local lines = M.build_header_lines(mr)
-  local activity_lines = M.build_activity_lines(discussions)
-  for _, line in ipairs(activity_lines) do
-    table.insert(lines, line)
-  end
+  local diff = require("glab_review.mr.diff")
+  local split = require("glab_review.ui.split")
+  local config = require("glab_review.config")
+  local cfg = config.get()
 
-  local total, unresolved = M.count_discussions(discussions)
-  table.insert(lines, "")
-  table.insert(lines, string.rep("-", 70))
-  table.insert(lines, string.format(
-    "  %d discussions (%d unresolved)",
-    total, unresolved
-  ))
-  table.insert(lines, "")
-  table.insert(lines, "  [d]iff  [c]omment  [a]pprove  [A]I review  [p]ipeline  [m]erge  [R]efresh  [q]uit")
+  local layout = split.create()
 
-  local buf = vim.api.nvim_create_buf(false, true)
-  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
-  markdown.set_buf_markdown(buf)
-  vim.bo[buf].modifiable = false
-  vim.bo[buf].bufhidden = "wipe"
-  vim.api.nvim_buf_set_name(buf, string.format("glab://mr/%d", mr.iid))
+  local state = {
+    view_mode = "summary",
+    mr = mr,
+    mr_entry = mr_entry,
+    files = nil,
+    discussions = discussions,
+    current_file = 1,
+    layout = layout,
+    line_data_cache = {},
+    row_disc_cache = {},
+    sidebar_row_map = {},
+    collapsed_dirs = {},
+    context = cfg.diff.context,
+    scroll_mode = nil,
+    file_sections = {},
+    scroll_line_data = {},
+    scroll_row_disc = {},
+    file_contexts = {},
+  }
 
-  vim.cmd("buffer " .. buf)
-
-  vim.b[buf].glab_review_mr = mr
-  vim.b[buf].glab_review_discussions = discussions
-
-  local map_opts = { buffer = buf, nowait = true }
-  vim.keymap.set("n", "q", function() vim.cmd("bdelete") end, map_opts)
-  vim.keymap.set("n", "d", function()
-    vim.cmd("bdelete")
-    local diff = require("glab_review.mr.diff")
-    diff.open(mr, discussions)
-  end, map_opts)
-  vim.keymap.set("n", "p", function()
-    vim.notify("Pipeline view (Stage 4)", vim.log.levels.WARN)
-  end, map_opts)
-  vim.keymap.set("n", "A", function()
-    vim.notify("AI review (Stage 5)", vim.log.levels.WARN)
-  end, map_opts)
-  vim.keymap.set("n", "a", function()
-    local actions = require("glab_review.mr.actions")
-    actions.approve(mr)
-  end, map_opts)
-  vim.keymap.set("n", "o", function()
-    if mr.web_url then
-      vim.ui.open(mr.web_url)
-    end
-  end, map_opts)
-  vim.keymap.set("n", "c", function()
-    vim.ui.input({ prompt = "Comment on MR: " }, function(input)
-      if not input or input == "" then return end
-      local b_url, proj = git.detect_project()
-      if not b_url or not proj then return end
-      local enc = client.encode_project(proj)
-      client.post(b_url, endpoints.discussions(enc, mr.iid), {
-        body = { body = input },
-      })
-      vim.notify("Comment posted", vim.log.levels.INFO)
-    end)
-  end, map_opts)
-  vim.keymap.set("n", "m", function()
-    vim.ui.select({ "Merge", "Merge when pipeline succeeds", "Cancel" }, {
-      prompt = string.format("Merge MR !%d?", mr.iid),
-    }, function(choice)
-      if not choice or choice == "Cancel" then return end
-      local ok, actions = pcall(require, "glab_review.mr.actions")
-      if not ok then
-        vim.notify("Merge actions not yet implemented (Stage 3)", vim.log.levels.WARN)
-        return
-      end
-      if choice == "Merge when pipeline succeeds" then
-        actions.merge(mr, { auto_merge = true })
-      else
-        actions.merge(mr)
-      end
-    end)
-  end, map_opts)
-  vim.keymap.set("n", "R", function()
-    vim.cmd("bdelete")
-    M.open(mr_entry)
-  end, map_opts)
+  diff.render_sidebar(layout.sidebar_buf, state)
+  diff.render_summary(layout.main_buf, state)
+  diff.setup_keymaps(layout, state)
+  vim.api.nvim_set_current_win(layout.main_win)
 end
 
 return M
