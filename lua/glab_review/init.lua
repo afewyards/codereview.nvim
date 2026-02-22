@@ -36,7 +36,15 @@ end
 function M.pipeline() vim.notify("Pipeline not yet implemented (Stage 4)", vim.log.levels.WARN) end
 function M.ai_review() vim.notify("AI review not yet implemented (Stage 5)", vim.log.levels.WARN) end
 function M.submit() vim.notify("Submit not yet implemented (Stage 5)", vim.log.levels.WARN) end
-function M.approve() vim.notify("Approve not yet implemented (Stage 3)", vim.log.levels.WARN) end
+function M.approve()
+  local buf = vim.api.nvim_get_current_buf()
+  local mr = vim.b[buf].glab_review_mr
+  if not mr then
+    vim.notify("No MR context in current buffer", vim.log.levels.WARN)
+    return
+  end
+  require("glab_review.mr.actions").approve(mr)
+end
 function M.create_mr() vim.notify("Create MR not yet implemented (Stage 5)", vim.log.levels.WARN) end
 
 return M
