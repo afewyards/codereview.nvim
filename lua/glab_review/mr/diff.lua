@@ -278,8 +278,7 @@ function M.render_file_diff(buf, file_diff, mr, discussions, context)
   end
 
   for _, item in ipairs(display) do
-    local prefix = M.format_line_number(item.old_line, item.new_line)
-    table.insert(lines, prefix .. (item.text or ""))
+    table.insert(lines, item.text or "")
     table.insert(line_data, { type = item.type, item = item })
   end
 
@@ -318,6 +317,12 @@ function M.render_file_diff(buf, file_diff, mr, discussions, context)
 
   for i, data in ipairs(line_data) do
     local row = i - 1
+    if data.item and (data.item.old_line or data.item.new_line) then
+      vim.api.nvim_buf_set_extmark(buf, DIFF_NS, row, 0, {
+        virt_text = { { M.format_line_number(data.item.old_line, data.item.new_line), "GlabReviewLineNr" } },
+        virt_text_pos = "inline",
+      })
+    end
     if data.type == "add" then
       apply_line_hl(buf, row, "GlabReviewDiffAdd")
       -- Word diff against previous delete if adjacent
@@ -325,10 +330,10 @@ function M.render_file_diff(buf, file_diff, mr, discussions, context)
         local segments = parser.word_diff(prev_delete_text, data.item.text or "")
         for _, seg in ipairs(segments) do
           apply_word_hl(buf, prev_delete_row,
-            LINE_NR_WIDTH + seg.old_start, LINE_NR_WIDTH + seg.old_end,
+            seg.old_start, seg.old_end,
             "GlabReviewDiffDeleteWord")
           apply_word_hl(buf, row,
-            LINE_NR_WIDTH + seg.new_start, LINE_NR_WIDTH + seg.new_end,
+            seg.new_start, seg.new_end,
             "GlabReviewDiffAddWord")
         end
       end
