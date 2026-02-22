@@ -282,4 +282,47 @@ function M.close(client, ctx, review)
   )
 end
 
+--- Create a draft note on an MR (not visible until published).
+--- @param params table { body, path, line }
+function M.create_draft_comment(client, ctx, review, params)
+  local headers, err = get_headers()
+  if not headers then return nil, err end
+  local payload = {
+    note = params.body,
+    position = {
+      position_type = "text",
+      base_sha = review.base_sha,
+      head_sha = review.head_sha,
+      start_sha = review.start_sha,
+      new_path = params.path,
+      old_path = params.path,
+      new_line = params.line,
+    },
+  }
+  return client.post(ctx.base_url, mr_base(ctx, review.id) .. "/draft_notes", { body = payload, headers = headers })
+end
+
+--- Bulk-publish all draft notes on an MR.
+function M.publish_review(client, ctx, review)
+  local headers, err = get_headers()
+  if not headers then return nil, err end
+  return client.post(ctx.base_url, mr_base(ctx, review.id) .. "/draft_notes/bulk_publish", { body = {}, headers = headers })
+end
+
+--- Create a new merge request.
+--- @param params table { source_branch, target_branch, title, description }
+function M.create_review(client, ctx, params)
+  local headers, err = get_headers()
+  if not headers then return nil, err end
+  return client.post(ctx.base_url, "/api/v4/projects/" .. encoded_project(ctx) .. "/merge_requests", {
+    body = {
+      source_branch = params.source_branch,
+      target_branch = params.target_branch,
+      title = params.title,
+      description = params.description,
+    },
+    headers = headers,
+  })
+end
+
 return M
