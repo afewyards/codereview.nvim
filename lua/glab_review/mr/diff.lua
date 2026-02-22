@@ -2,7 +2,6 @@ local M = {}
 
 -- LINE_NR_WIDTH: "%5d | %-5d " = 5+3+5+1 = 14 chars
 local LINE_NR_WIDTH = 14
-M.LINE_NR_WIDTH = LINE_NR_WIDTH
 
 local DIFF_NS = vim.api.nvim_create_namespace("glab_review_diff")
 
@@ -12,49 +11,6 @@ function M.format_line_number(old_nr, new_nr)
   local old_str = old_nr and string.format("%5d", old_nr) or "     "
   local new_str = new_nr and string.format("%-5d", new_nr) or "     "
   return old_str .. " | " .. new_str .. " "
-end
-
-function M.clamp_cursor_to_content(buf, win)
-  vim.api.nvim_create_autocmd("CursorMoved", {
-    buffer = buf,
-    callback = function()
-      if not vim.api.nvim_win_is_valid(win) then return true end
-      local cursor = vim.api.nvim_win_get_cursor(win)
-      if cursor[2] < LINE_NR_WIDTH then
-        vim.api.nvim_win_set_cursor(win, { cursor[1], LINE_NR_WIDTH })
-      end
-    end,
-  })
-
-  vim.api.nvim_create_autocmd("TextYankPost", {
-    buffer = buf,
-    callback = function()
-      local event = vim.v.event
-      local contents = event.regcontents
-      if not contents or #contents == 0 then return end
-      local stripped = {}
-      for _, line in ipairs(contents) do
-        if #line > LINE_NR_WIDTH then
-          table.insert(stripped, line:sub(LINE_NR_WIDTH + 1))
-        else
-          table.insert(stripped, line)
-        end
-      end
-      vim.fn.setreg(event.regname, stripped, event.regtype)
-    end,
-  })
-
-  local clamp_keys = { "0", "^", "h", "<Left>", "<BS>" }
-  local opts = { noremap = true, silent = true, buffer = buf }
-  for _, key in ipairs(clamp_keys) do
-    vim.keymap.set("n", key, function()
-      vim.cmd("normal! " .. vim.api.nvim_replace_termcodes(key, true, false, true))
-      local cursor = vim.api.nvim_win_get_cursor(win)
-      if cursor[2] < LINE_NR_WIDTH then
-        vim.api.nvim_win_set_cursor(win, { cursor[1], LINE_NR_WIDTH })
-      end
-    end, opts)
-  end
 end
 
 -- ─── Highlight application ────────────────────────────────────────────────────
@@ -1407,7 +1363,6 @@ function M.open(mr, discussions)
   end
 
   M.setup_keymaps(layout, state)
-  M.clamp_cursor_to_content(layout.main_buf, layout.main_win)
   vim.api.nvim_set_current_win(layout.main_win)
 end
 
