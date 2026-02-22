@@ -6,7 +6,7 @@ local defaults = {
   project = nil,
   token = nil,
   picker = nil,
-  diff = { context = 8 },
+  diff = { context = 8, scroll_threshold = 50 },
   ai = { enabled = true, claude_cmd = "claude" },
 }
 
