@@ -903,28 +903,36 @@ local function current_file_from_cursor(layout, state)
 end
 
 local function toggle_scroll_mode(layout, state)
-  state.scroll_mode = not state.scroll_mode
+  local cursor_row = vim.api.nvim_win_get_cursor(layout.main_win)[1]
+
   if state.scroll_mode then
-    local result = M.render_all_files(layout.main_buf, state.files, state.mr, state.discussions, state.context, state.file_contexts)
-    state.file_sections = result.file_sections
-    state.scroll_line_data = result.line_data
-    state.scroll_row_disc = result.row_discussions
-    -- Scroll to current file's section
-    for _, sec in ipairs(state.file_sections) do
-      if sec.file_idx == state.current_file then
-        vim.api.nvim_win_set_cursor(layout.main_win, { sec.start_line, 0 })
-        break
-      end
-    end
-  else
-    -- Switch back to per-file: render current file
+    -- EXITING scroll mode → per-file
+    local anchor = M.find_anchor(state.scroll_line_data, cursor_row)
+    state.current_file = anchor.file_idx
+    state.scroll_mode = false
+
     local file = state.files[state.current_file]
     if file then
       local ld, rd = M.render_file_diff(layout.main_buf, file, state.mr, state.discussions, state.context)
       state.line_data_cache[state.current_file] = ld
       state.row_disc_cache[state.current_file] = rd
+      local row = M.find_row_for_anchor(ld, anchor, state.current_file)
+      vim.api.nvim_win_set_cursor(layout.main_win, { row, 0 })
     end
+  else
+    -- ENTERING scroll mode → all-files
+    local per_file_ld = state.line_data_cache[state.current_file]
+    local anchor = M.find_anchor(per_file_ld or {}, cursor_row, state.current_file)
+    state.scroll_mode = true
+
+    local result = M.render_all_files(layout.main_buf, state.files, state.mr, state.discussions, state.context, state.file_contexts)
+    state.file_sections = result.file_sections
+    state.scroll_line_data = result.line_data
+    state.scroll_row_disc = result.row_discussions
+    local row = M.find_row_for_anchor(state.scroll_line_data, anchor)
+    vim.api.nvim_win_set_cursor(layout.main_win, { row, 0 })
   end
+
   M.render_sidebar(layout.sidebar_buf, state)
   vim.notify(state.scroll_mode and "All-files view" or "Per-file view", vim.log.levels.INFO)
 end

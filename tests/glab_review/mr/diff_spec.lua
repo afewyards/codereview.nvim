@@ -246,4 +246,38 @@ describe("mr.diff", function()
       assert.equals(2, row)
     end)
   end)
+
+  describe("toggle_scroll_mode line preservation", function()
+    local function make_files()
+      return {
+        { new_path = "a.lua", old_path = "a.lua", diff = "@@ -1,3 +1,3 @@\n ctx1\n-old1\n+new1\n ctx2\n" },
+        { new_path = "b.lua", old_path = "b.lua", diff = "@@ -10,3 +10,3 @@\n ctx10\n-old10\n+new10\n ctx11\n" },
+      }
+    end
+
+    it("round-trips anchor through scroll line_data", function()
+      local buf = vim.api.nvim_create_buf(false, true)
+      local files = make_files()
+      local result = diff.render_all_files(buf, files, { diff_refs = nil }, {}, 8)
+
+      local anchor = { file_idx = 2, new_line = 10 }
+      local row = diff.find_row_for_anchor(result.line_data, anchor)
+      assert.equals(2, result.line_data[row].file_idx)
+      assert.equals(10, result.line_data[row].item.new_line)
+
+      vim.api.nvim_buf_delete(buf, { force = true })
+    end)
+
+    it("round-trips anchor through per-file line_data", function()
+      local buf = vim.api.nvim_create_buf(false, true)
+      local file = { new_path = "b.lua", old_path = "b.lua", diff = "@@ -10,3 +10,3 @@\n ctx10\n-old10\n+new10\n ctx11\n" }
+      local ld = diff.render_file_diff(buf, file, { diff_refs = nil }, {}, 8)
+
+      local anchor = diff.find_anchor(ld, 2, 2)
+      local row = diff.find_row_for_anchor(ld, anchor, 2)
+      assert.equals(2, row)
+
+      vim.api.nvim_buf_delete(buf, { force = true })
+    end)
+  end)
 end)
