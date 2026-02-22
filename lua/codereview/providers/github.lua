@@ -292,4 +292,59 @@ function M.approved_by()
   return {}
 end
 
+-- Accumulator for pending review comments (GitHub batches on publish)
+M._pending_comments = {}
+
+--- Stage a draft comment for the next review submission.
+--- GitHub doesn't have individual draft notes — comments are batched into a single review.
+--- @param params table { body, path, line }
+function M.create_draft_comment(client, ctx, review, params) -- luacheck: ignore client ctx
+  table.insert(M._pending_comments, {
+    body = params.body,
+    path = params.path,
+    line = params.line,
+    side = "RIGHT",
+  })
+end
+
+--- Publish all accumulated draft comments as a single PR review.
+function M.publish_review(client, ctx, review)
+  local headers, err = get_headers()
+  if not headers then return nil, err end
+
+  if #M._pending_comments == 0 then
+    return nil, "No pending comments to publish"
+  end
+
+  local owner, repo = parse_owner_repo(ctx)
+  local path_url = string.format("/repos/%s/%s/pulls/%d/reviews", owner, repo, review.id)
+  local payload = {
+    commit_id = review.sha,
+    event = "COMMENT",
+    comments = M._pending_comments,
+  }
+
+  local result, post_err = client.post(ctx.base_url, path_url, { body = payload, headers = headers })
+  M._pending_comments = {} -- clear regardless of success
+  return result, post_err
+end
+
+--- Create a new pull request.
+--- @param params table { source_branch, target_branch, title, description }
+function M.create_review(client, ctx, params)
+  local headers, err = get_headers()
+  if not headers then return nil, err end
+  local owner, repo = parse_owner_repo(ctx)
+  local path_url = string.format("/repos/%s/%s/pulls", owner, repo)
+  return client.post(ctx.base_url, path_url, {
+    body = {
+      head = params.source_branch,
+      base = params.target_branch,
+      title = params.title,
+      body = params.description,
+    },
+    headers = headers,
+  })
+end
+
 return M

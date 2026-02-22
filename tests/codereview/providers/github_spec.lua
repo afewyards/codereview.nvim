@@ -222,4 +222,29 @@ describe("providers.github", function()
       assert.equal("squash", called_body.merge_method)
     end)
   end)
+
+  describe("create_draft_comment", function()
+    it("accumulates comments in _pending_comments", function()
+      github._pending_comments = {} -- reset
+      local review = { id = 1, sha = "abc123" }
+      github.create_draft_comment(nil, nil, review, { body = "Fix this", path = "foo.lua", line = 10 })
+      github.create_draft_comment(nil, nil, review, { body = "And this", path = "bar.lua", line = 20 })
+      assert.equals(2, #github._pending_comments)
+      assert.equals("Fix this", github._pending_comments[1].body)
+      assert.equals("foo.lua", github._pending_comments[1].path)
+      github._pending_comments = {} -- cleanup
+    end)
+  end)
+
+  describe("publish_review", function()
+    it("exists as a function", function()
+      assert.is_function(github.publish_review)
+    end)
+  end)
+
+  describe("create_review", function()
+    it("exists as a function", function()
+      assert.is_function(github.create_review)
+    end)
+  end)
 end)
