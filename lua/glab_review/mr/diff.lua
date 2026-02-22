@@ -107,11 +107,24 @@ function M.render_file_diff(buf, file_diff, mr, discussions, context)
   local hunks = parser.parse_hunks(diff_text)
   local display = parser.build_display(hunks, context)
 
+  -- Get file line count for BOF/EOF detection
+  local file_line_count
+  local file_path = file_diff.new_path or file_diff.old_path
+  if file_path and mr.diff_refs and mr.diff_refs.head_sha then
+    local wc = vim.fn.system({
+      "git", "show", mr.diff_refs.head_sha .. ":" .. file_path,
+    })
+    if vim.v.shell_error == 0 then
+      file_line_count = select(2, wc:gsub("\n", "\n"))
+    end
+  end
+
   local lines = {}
   local line_data = {}
 
-  -- "Load more above" indicator if first hunk doesn't start at line 1
-  if #hunks > 0 and (hunks[1].new_start > 1 or hunks[1].old_start > 1) then
+  -- "Load more above" — only if first hunk doesn't start at line 1
+  local starts_at_bof = #hunks > 0 and hunks[1].new_start <= 1 and hunks[1].old_start <= 1
+  if #hunks > 0 and not starts_at_bof then
     table.insert(lines, "  ↑ Press <CR> to load more context above ↑")
     table.insert(line_data, { type = "load_more", direction = "above" })
   end
@@ -127,8 +140,17 @@ function M.render_file_diff(buf, file_diff, mr, discussions, context)
     end
   end
 
-  -- "Load more below" indicator
-  if #hunks > 0 then
+  -- "Load more below" — only if last displayed line doesn't reach EOF
+  local at_eof = false
+  if file_line_count and #display > 0 then
+    for i = #display, 1, -1 do
+      if display[i].new_line then
+        at_eof = display[i].new_line >= file_line_count
+        break
+      end
+    end
+  end
+  if #hunks > 0 and not at_eof then
     table.insert(lines, "  ↓ Press <CR> to load more context below ↓")
     table.insert(line_data, { type = "load_more", direction = "below" })
   end
@@ -232,7 +254,7 @@ function M.render_sidebar(buf, state)
   table.insert(lines, string.rep("─", 30))
   table.insert(lines, "]f/[f files  ]c/[c cmts")
   table.insert(lines, "cc:comment  R:refresh  q:quit")
-  table.insert(lines, "+/- context lines")
+  table.insert(lines, "+/- context  gf:full file")
 
   vim.bo[buf].modifiable = true
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
@@ -452,6 +474,18 @@ function M.setup_keymaps(layout, state)
   -- Context adjustment
   map(main_buf, "n", "+", function() adjust_context(layout, state, 5) end)
   map(main_buf, "n", "-", function() adjust_context(layout, state, -5) end)
+
+  -- Load entire file
+  map(main_buf, "n", "gf", function()
+    state.context = 99999
+    local file = state.files and state.files[state.current_file]
+    if not file then return end
+    local cursor = vim.api.nvim_win_get_cursor(layout.main_win)
+    local ld = M.render_file_diff(layout.main_buf, file, state.mr, state.discussions, state.context)
+    state.line_data_cache[state.current_file] = ld
+    vim.api.nvim_win_set_cursor(layout.main_win, { math.min(cursor[1], vim.api.nvim_buf_line_count(layout.main_buf)), 0 })
+    vim.notify("Full file loaded", vim.log.levels.INFO)
+  end)
 
   -- Refresh
   map(main_buf, "n", "R", function()
