@@ -315,10 +315,11 @@ end
 
 -- ─── All-files scroll view ────────────────────────────────────────────────────
 
-function M.render_all_files(buf, files, mr, discussions, context)
+function M.render_all_files(buf, files, mr, discussions, context, file_contexts)
   local parser = require("glab_review.mr.diff_parser")
   local config = require("glab_review.config")
   context = context or config.get().diff.context
+  file_contexts = file_contexts or {}
 
   local all_lines = {}
   local all_line_data = {}
@@ -341,13 +342,14 @@ function M.render_all_files(buf, files, mr, discussions, context)
     table.insert(all_lines, header)
     table.insert(all_line_data, { type = "file_header", file_idx = file_idx })
 
-    -- Parse and build display for this file
+    -- Parse and build display for this file (per-file context overrides global)
+    local file_ctx = file_contexts[file_idx] or context
     local diff_text = file_diff.diff or ""
     if mr.diff_refs and mr.diff_refs.base_sha and mr.diff_refs.head_sha then
       local fpath = file_diff.new_path or file_diff.old_path
       if fpath then
         local result = vim.fn.system({
-          "git", "diff", "-U" .. context,
+          "git", "diff", "-U" .. file_ctx,
           mr.diff_refs.base_sha, mr.diff_refs.head_sha, "--", fpath,
         })
         if vim.v.shell_error == 0 and result ~= "" then
@@ -357,7 +359,7 @@ function M.render_all_files(buf, files, mr, discussions, context)
     end
 
     local hunks = parser.parse_hunks(diff_text)
-    local display = parser.build_display(hunks, context)
+    local display = parser.build_display(hunks, file_ctx)
 
     if #display == 0 then
       table.insert(all_lines, "  (no changes)")
@@ -428,6 +430,39 @@ function M.render_all_files(buf, files, mr, discussions, context)
       prev_delete_text = nil
     end
   end
+
+  -- Apply Vim syntax highlighting per file section using syntax include/region
+  vim.api.nvim_buf_call(buf, function()
+    vim.cmd("syntax clear")
+    local loaded_fts = {}
+    for _, section in ipairs(file_sections) do
+      local fpath = section.file.new_path or section.file.old_path
+      if fpath then
+        local ft = vim.filetype.match({ filename = fpath })
+        if ft then
+          local cluster = "GlabSyn_" .. ft:gsub("[^%w]", "_")
+          if not loaded_fts[ft] then
+            vim.cmd("unlet! b:current_syntax")
+            local syn_files = vim.api.nvim_get_runtime_file("syntax/" .. ft .. ".vim", false)
+            if syn_files and #syn_files > 0 then
+              pcall(vim.cmd, "syntax include @" .. cluster .. " " .. vim.fn.fnameescape(syn_files[1]))
+              loaded_fts[ft] = cluster
+            end
+          end
+          if loaded_fts[ft] then
+            local content_start = section.start_line + 1
+            local content_end = section.end_line
+            if content_end >= content_start then
+              pcall(vim.cmd, string.format(
+                'syntax region GlabRegion_%d start="\\%%%dl" end="\\%%%dl" contains=@%s keepend',
+                section.file_idx, content_start, content_end, loaded_fts[ft]
+              ))
+            end
+          end
+        end
+      end
+    end
+  end)
 
   -- Place comment signs and inline threads per file section
   local all_row_discussions = {}
@@ -598,7 +633,7 @@ function M.render_sidebar(buf, state)
   table.insert(lines, "]f/[f  ]c/[c  cc:comment")
   table.insert(lines, "r:reply  gt:un/resolve")
   table.insert(lines, "s:summary  R:refresh  q:quit")
-  table.insert(lines, "+/- context  gf:full file")
+  table.insert(lines, "+/- context  C-f:full file")
   table.insert(lines, "<C-a>:toggle view")
 
   vim.bo[buf].modifiable = true
@@ -755,7 +790,7 @@ local function adjust_context(layout, state, delta)
   local cursor = vim.api.nvim_win_get_cursor(layout.main_win)
   state.context = math.max(1, state.context + delta)
   if state.scroll_mode then
-    local result = M.render_all_files(layout.main_buf, state.files, state.mr, state.discussions, state.context)
+    local result = M.render_all_files(layout.main_buf, state.files, state.mr, state.discussions, state.context, state.file_contexts)
     state.file_sections = result.file_sections
     state.scroll_line_data = result.line_data
     state.scroll_row_disc = result.row_discussions
@@ -787,7 +822,7 @@ end
 local function toggle_scroll_mode(layout, state)
   state.scroll_mode = not state.scroll_mode
   if state.scroll_mode then
-    local result = M.render_all_files(layout.main_buf, state.files, state.mr, state.discussions, state.context)
+    local result = M.render_all_files(layout.main_buf, state.files, state.mr, state.discussions, state.context, state.file_contexts)
     state.file_sections = result.file_sections
     state.scroll_line_data = result.line_data
     state.scroll_row_disc = result.row_discussions
@@ -977,7 +1012,7 @@ function M.setup_keymaps(layout, state)
         -- Re-render to update resolved status
         if state.scroll_mode then
           local cursor = vim.api.nvim_win_get_cursor(layout.main_win)
-          local result = M.render_all_files(layout.main_buf, state.files, state.mr, state.discussions, state.context)
+          local result = M.render_all_files(layout.main_buf, state.files, state.mr, state.discussions, state.context, state.file_contexts)
           state.file_sections = result.file_sections
           state.scroll_line_data = result.line_data
           state.scroll_row_disc = result.row_discussions
@@ -1000,16 +1035,18 @@ function M.setup_keymaps(layout, state)
   map(main_buf, "n", "+", function() adjust_context(layout, state, 5) end)
   map(main_buf, "n", "-", function() adjust_context(layout, state, -5) end)
 
-  -- Load entire file
-  map(main_buf, "n", "gf", function()
+  -- Load entire file (current file only in scroll mode)
+  map(main_buf, "n", "<C-f>", function()
     local cursor = vim.api.nvim_win_get_cursor(layout.main_win)
-    state.context = 99999
     if state.scroll_mode then
-      local result = M.render_all_files(layout.main_buf, state.files, state.mr, state.discussions, state.context)
+      local file_idx = current_file_from_cursor(layout, state)
+      state.file_contexts[file_idx] = 99999
+      local result = M.render_all_files(layout.main_buf, state.files, state.mr, state.discussions, state.context, state.file_contexts)
       state.file_sections = result.file_sections
       state.scroll_line_data = result.line_data
       state.scroll_row_disc = result.row_discussions
     else
+      state.context = 99999
       local file = state.files and state.files[state.current_file]
       if not file then return end
       local ld, rd = M.render_file_diff(layout.main_buf, file, state.mr, state.discussions, state.context)
@@ -1179,13 +1216,14 @@ function M.open(mr, discussions)
     file_sections = {},
     scroll_line_data = {},
     scroll_row_disc = {},
+    file_contexts = {},
   }
 
   M.render_sidebar(layout.sidebar_buf, state)
 
   if #files > 0 then
     if state.scroll_mode then
-      local result = M.render_all_files(layout.main_buf, files, mr, state.discussions, state.context)
+      local result = M.render_all_files(layout.main_buf, files, mr, state.discussions, state.context, state.file_contexts)
       state.file_sections = result.file_sections
       state.scroll_line_data = result.line_data
       state.scroll_row_disc = result.row_discussions
