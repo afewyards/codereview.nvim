@@ -1005,11 +1005,18 @@ function M.setup_keymaps(layout, state)
   end
 
   -- Scroll mode toggle
-  map(main_buf, "n", "<C-a>", function() toggle_scroll_mode(layout, state) end)
-  map(sidebar_buf, "n", "<C-a>", function() toggle_scroll_mode(layout, state) end)
+  map(main_buf, "n", "<C-a>", function()
+    if state.view_mode ~= "diff" then return end
+    toggle_scroll_mode(layout, state)
+  end)
+  map(sidebar_buf, "n", "<C-a>", function()
+    if state.view_mode ~= "diff" then return end
+    toggle_scroll_mode(layout, state)
+  end)
 
   -- File navigation
   map(main_buf, "n", "]f", function()
+    if state.view_mode ~= "diff" then return end
     if state.scroll_mode then
       local cursor = vim.api.nvim_win_get_cursor(layout.main_win)[1]
       for _, sec in ipairs(state.file_sections) do
@@ -1025,6 +1032,7 @@ function M.setup_keymaps(layout, state)
     end
   end)
   map(main_buf, "n", "[f", function()
+    if state.view_mode ~= "diff" then return end
     if state.scroll_mode then
       local cursor = vim.api.nvim_win_get_cursor(layout.main_win)[1]
       for i = #state.file_sections, 1, -1 do
@@ -1039,11 +1047,18 @@ function M.setup_keymaps(layout, state)
       nav_file(layout, state, -1)
     end
   end)
-  map(sidebar_buf, "n", "]f", function() nav_file(layout, state, 1) end)
-  map(sidebar_buf, "n", "[f", function() nav_file(layout, state, -1) end)
+  map(sidebar_buf, "n", "]f", function()
+    if state.view_mode ~= "diff" then return end
+    nav_file(layout, state, 1)
+  end)
+  map(sidebar_buf, "n", "[f", function()
+    if state.view_mode ~= "diff" then return end
+    nav_file(layout, state, -1)
+  end)
 
   -- Comment navigation
   map(main_buf, "n", "]c", function()
+    if state.view_mode ~= "diff" then return end
     if state.scroll_mode then
       local cursor = vim.api.nvim_win_get_cursor(layout.main_win)[1]
       local rows = {}
@@ -1060,6 +1075,7 @@ function M.setup_keymaps(layout, state)
     end
   end)
   map(main_buf, "n", "[c", function()
+    if state.view_mode ~= "diff" then return end
     if state.scroll_mode then
       local cursor = vim.api.nvim_win_get_cursor(layout.main_win)[1]
       local rows = {}
@@ -1078,6 +1094,7 @@ function M.setup_keymaps(layout, state)
 
   -- Comment creation
   map(main_buf, "n", "cc", function()
+    if state.view_mode ~= "diff" then return end
     if state.scroll_mode then
       local cursor = vim.api.nvim_win_get_cursor(layout.main_win)
       local row = cursor[1]
@@ -1094,6 +1111,7 @@ function M.setup_keymaps(layout, state)
     end
   end)
   map(main_buf, "v", "cc", function()
+    if state.view_mode ~= "diff" then return end
     if state.scroll_mode then
       local start_row = vim.fn.line("'<")
       local end_row = vim.fn.line("'>")
@@ -1119,6 +1137,7 @@ function M.setup_keymaps(layout, state)
 
   -- Load more context
   map(main_buf, "n", "<CR>", function()
+    if state.view_mode ~= "diff" then return end
     local cursor = vim.api.nvim_win_get_cursor(layout.main_win)
     local row = cursor[1]
     local line_data = state.line_data_cache[state.current_file]
@@ -1144,6 +1163,7 @@ function M.setup_keymaps(layout, state)
   end
 
   map(main_buf, "n", "r", function()
+    if state.view_mode ~= "diff" then return end
     local disc = get_cursor_disc()
     if disc then
       local comment = require("glab_review.mr.comment")
@@ -1152,6 +1172,7 @@ function M.setup_keymaps(layout, state)
   end)
 
   map(main_buf, "n", "gt", function()
+    if state.view_mode ~= "diff" then return end
     local disc = get_cursor_disc()
     if disc then
       local comment = require("glab_review.mr.comment")
@@ -1179,11 +1200,18 @@ function M.setup_keymaps(layout, state)
   end)
 
   -- Context adjustment
-  map(main_buf, "n", "+", function() adjust_context(layout, state, 5) end)
-  map(main_buf, "n", "-", function() adjust_context(layout, state, -5) end)
+  map(main_buf, "n", "+", function()
+    if state.view_mode ~= "diff" then return end
+    adjust_context(layout, state, 5)
+  end)
+  map(main_buf, "n", "-", function()
+    if state.view_mode ~= "diff" then return end
+    adjust_context(layout, state, -5)
+  end)
 
   -- Toggle full file (current file only in scroll mode)
   map(main_buf, "n", "<C-f>", function()
+    if state.view_mode ~= "diff" then return end
     local cursor_row = vim.api.nvim_win_get_cursor(layout.main_win)[1]
     if state.scroll_mode then
       local file_idx = current_file_from_cursor(layout, state)
@@ -1217,23 +1245,69 @@ function M.setup_keymaps(layout, state)
     end
   end)
 
-  -- Refresh
-  map(main_buf, "n", "R", function()
-    M.open(state.mr, nil)
-  end)
-  map(sidebar_buf, "n", "R", function()
-    M.open(state.mr, nil)
+  -- Summary-mode keymaps (no-op in diff mode)
+  map(main_buf, "n", "c", function()
+    if state.view_mode ~= "summary" then return end
+    vim.ui.input({ prompt = "Comment on MR: " }, function(input)
+      if not input or input == "" then return end
+      local b_url, proj = require("glab_review.git").detect_project()
+      if not b_url or not proj then return end
+      local enc = require("glab_review.api.client").encode_project(proj)
+      require("glab_review.api.client").post(b_url,
+        require("glab_review.api.endpoints").discussions(enc, state.mr.iid),
+        { body = { body = input } })
+      vim.notify("Comment posted", vim.log.levels.INFO)
+    end)
   end)
 
-  -- Back to detail view
-  local function back()
-    local split = require("glab_review.ui.split")
-    split.close(layout)
+  map(main_buf, "n", "a", function()
+    if state.view_mode ~= "summary" then return end
+    require("glab_review.mr.actions").approve(state.mr)
+  end)
+
+  map(main_buf, "n", "o", function()
+    if state.view_mode ~= "summary" then return end
+    if state.mr.web_url then vim.ui.open(state.mr.web_url) end
+  end)
+
+  map(main_buf, "n", "m", function()
+    if state.view_mode ~= "summary" then return end
+    vim.ui.select({ "Merge", "Merge when pipeline succeeds", "Cancel" }, {
+      prompt = string.format("Merge MR !%d?", state.mr.iid),
+    }, function(choice)
+      if not choice or choice == "Cancel" then return end
+      local ok, actions = pcall(require, "glab_review.mr.actions")
+      if not ok then
+        vim.notify("Merge actions not yet implemented", vim.log.levels.WARN)
+        return
+      end
+      if choice == "Merge when pipeline succeeds" then
+        actions.merge(state.mr, { auto_merge = true })
+      else
+        actions.merge(state.mr)
+      end
+    end)
+  end)
+
+  map(main_buf, "n", "p", function()
+    if state.view_mode ~= "summary" then return end
+    vim.notify("Pipeline view (Stage 4)", vim.log.levels.WARN)
+  end)
+
+  map(main_buf, "n", "A", function()
+    if state.view_mode ~= "summary" then return end
+    vim.notify("AI review (Stage 5)", vim.log.levels.WARN)
+  end)
+
+  -- Refresh
+  local function refresh()
+    local split_mod = require("glab_review.ui.split")
+    split_mod.close(layout)
     local detail = require("glab_review.mr.detail")
-    detail.open(state.mr)
+    detail.open(state.mr_entry or state.mr)
   end
-  map(main_buf, "n", "s", back)
-  map(sidebar_buf, "n", "s", back)
+  map(main_buf, "n", "R", refresh)
+  map(sidebar_buf, "n", "R", refresh)
 
   -- Quit
   local function quit()
@@ -1244,14 +1318,20 @@ function M.setup_keymaps(layout, state)
   map(main_buf, "n", "q", quit)
   map(sidebar_buf, "n", "q", quit)
 
-  -- Sidebar: <CR> to select file or toggle directory
+  -- Sidebar: <CR> to select file, toggle directory, or open summary
   map(sidebar_buf, "n", "<CR>", function()
     local cursor = vim.api.nvim_win_get_cursor(layout.sidebar_win)
     local row = cursor[1]
     local entry = state.sidebar_row_map and state.sidebar_row_map[row]
     if not entry then return end
 
-    if entry.type == "dir" then
+    if entry.type == "summary" then
+      state.view_mode = "summary"
+      M.render_sidebar(layout.sidebar_buf, state)
+      M.render_summary(layout.main_buf, state)
+      vim.api.nvim_set_current_win(layout.main_win)
+
+    elseif entry.type == "dir" then
       if not state.collapsed_dirs then state.collapsed_dirs = {} end
       if state.collapsed_dirs[entry.path] then
         state.collapsed_dirs[entry.path] = nil
@@ -1259,9 +1339,31 @@ function M.setup_keymaps(layout, state)
         state.collapsed_dirs[entry.path] = true
       end
       M.render_sidebar(layout.sidebar_buf, state)
-      -- Keep cursor on the same directory row after re-render
       pcall(vim.api.nvim_win_set_cursor, layout.sidebar_win, { row, 0 })
+
     elseif entry.type == "file" then
+      -- Lazy load diffs if needed
+      if not state.files then
+        local client_mod = require("glab_review.api.client")
+        local endpoints_mod = require("glab_review.api.endpoints")
+        local git_mod = require("glab_review.git")
+        local b_url, proj = git_mod.detect_project()
+        if not b_url or not proj then return end
+        local enc = client_mod.encode_project(proj)
+        local result, fetch_err = client_mod.get(b_url, endpoints_mod.mr_diffs(enc, state.mr.iid))
+        if fetch_err then
+          vim.notify("Failed to fetch diffs: " .. fetch_err, vim.log.levels.ERROR)
+          return
+        end
+        local files = result and result.data or {}
+        if type(files) ~= "table" then files = {} end
+        M.load_diffs_into_state(state, files)
+        M.render_sidebar(layout.sidebar_buf, state)
+      end
+
+      state.view_mode = "diff"
+
+      -- Now do the existing file selection logic
       if state.scroll_mode then
         for _, sec in ipairs(state.file_sections) do
           if sec.file_idx == entry.idx then
@@ -1271,6 +1373,22 @@ function M.setup_keymaps(layout, state)
             vim.api.nvim_set_current_win(layout.main_win)
             return
           end
+        end
+        -- If we just loaded diffs, need to render them first
+        if state.file_sections and #state.file_sections == 0 then
+          local result = M.render_all_files(layout.main_buf, state.files, state.mr, state.discussions, state.context, state.file_contexts)
+          state.file_sections = result.file_sections
+          state.scroll_line_data = result.line_data
+          state.scroll_row_disc = result.row_discussions
+          state.current_file = entry.idx
+          M.render_sidebar(layout.sidebar_buf, state)
+          for _, sec in ipairs(state.file_sections) do
+            if sec.file_idx == entry.idx then
+              vim.api.nvim_win_set_cursor(layout.main_win, { sec.start_line, 0 })
+              break
+            end
+          end
+          vim.api.nvim_set_current_win(layout.main_win)
         end
       else
         state.current_file = entry.idx
@@ -1323,7 +1441,7 @@ function M.setup_keymaps(layout, state)
   vim.api.nvim_create_autocmd("CursorMoved", {
     buffer = main_buf,
     callback = function()
-      if not state.scroll_mode or #state.file_sections == 0 then return end
+      if not state.scroll_mode or state.view_mode ~= "diff" or #state.file_sections == 0 then return end
       local file_idx = current_file_from_cursor(layout, state)
       if file_idx ~= state.current_file then
         state.current_file = file_idx
