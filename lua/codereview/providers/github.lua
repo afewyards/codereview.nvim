@@ -15,6 +15,21 @@ function M.build_auth_header(token)
   }
 end
 
+-- Helpers --------------------------------------------------------------------
+
+local function parse_owner_repo(ctx)
+  local parts = {}
+  for part in ctx.project:gmatch("[^/]+") do table.insert(parts, part) end
+  return parts[1], parts[2]
+end
+
+local function get_headers()
+  local auth = require("codereview.api.auth")
+  local token = auth.get_token("github")
+  if not token then return nil, "No GitHub token found" end
+  return M.build_auth_header(token)
+end
+
 -- Pagination -----------------------------------------------------------------
 
 --- Extracts the next URL from a GitHub Link header.
@@ -119,14 +134,15 @@ end
 --- List open PRs for the repo (owner/repo from ctx.project).
 function M.list_reviews(client, ctx, opts)
   opts = opts or {}
-  local parts = {}
-  for part in ctx.project:gmatch("[^/]+") do table.insert(parts, part) end
-  local owner, repo = parts[1], parts[2]
+  local headers, err = get_headers()
+  if not headers then return nil, err end
+  local owner, repo = parse_owner_repo(ctx)
   local path_url = string.format("/repos/%s/%s/pulls", owner, repo)
-  local result, err = client.get(ctx.base_url, path_url, {
+  local result, err2 = client.get(ctx.base_url, path_url, {
     query = { state = opts.state or "open", per_page = opts.per_page or 50 },
+    headers = headers,
   })
-  if not result then return nil, err end
+  if not result then return nil, err2 end
   local reviews = {}
   for _, pr in ipairs(result.data or {}) do
     table.insert(reviews, M.normalize_pr(pr))
@@ -134,72 +150,140 @@ function M.list_reviews(client, ctx, opts)
   return reviews
 end
 
--- API operations -------------------------------------------------------------
+--- Get a single PR by number.
+function M.get_review(client, ctx, pr_number)
+  local headers, err = get_headers()
+  if not headers then return nil, err end
+  local owner, repo = parse_owner_repo(ctx)
+  local path_url = string.format("/repos/%s/%s/pulls/%d", owner, repo, pr_number)
+  local result, err2 = client.get(ctx.base_url, path_url, { headers = headers })
+  if not result then return nil, err2 end
+  return M.normalize_pr(result.data)
+end
 
---- Post a single-line review comment.
-function M.post_comment(owner, repo, pr_number, token, body, commit_sha, path, line, side)
-  local client = require("codereview.api.client")
-  local path_url = string.format("/repos/%s/%s/pulls/%d/comments", owner, repo, pr_number)
-  local payload = {
-    body = body,
-    commit_id = commit_sha,
-    path = path,
-    line = line,
-    side = side or "RIGHT",
-  }
-  return client.post(M.base_url, path_url, {
-    body = payload,
-    headers = M.build_auth_header(token),
-  })
+--- Get file diffs for a PR.
+function M.get_diffs(client, ctx, review)
+  local headers, err = get_headers()
+  if not headers then return nil, err end
+  local owner, repo = parse_owner_repo(ctx)
+  local path_url = string.format("/repos/%s/%s/pulls/%d/files", owner, repo, review.id)
+  local result, err2 = client.get(ctx.base_url, path_url, { headers = headers })
+  if not result then return nil, err2 end
+
+  local diffs = {}
+  for _, f in ipairs(result.data or {}) do
+    table.insert(diffs, {
+      new_path = f.filename,
+      old_path = f.previous_filename or f.filename,
+      new_file = (f.status == "added"),
+      renamed_file = (f.status == "renamed"),
+      deleted_file = (f.status == "removed"),
+      diff = f.patch or "",
+    })
+  end
+  return diffs
+end
+
+--- Get all review comment discussions for a PR.
+function M.get_discussions(client, ctx, review)
+  local headers, err = get_headers()
+  if not headers then return nil, err end
+  local owner, repo = parse_owner_repo(ctx)
+  local start_url = string.format("%s/repos/%s/%s/pulls/%d/comments", ctx.base_url, owner, repo, review.id)
+  local all_comments = client.paginate_all_url(start_url, { headers = headers })
+  if not all_comments then return nil, "Failed to fetch discussions" end
+  return M.normalize_review_comments_to_discussions(all_comments)
+end
+
+--- Post an inline comment or general PR comment.
+--- @param position table|nil { new_path, old_path, new_line, old_line, side, commit_sha } or nil for general comment
+function M.post_comment(client, ctx, review, body, position)
+  local headers, err = get_headers()
+  if not headers then return nil, err end
+  local owner, repo = parse_owner_repo(ctx)
+
+  if position then
+    local path_url = string.format("/repos/%s/%s/pulls/%d/comments", owner, repo, review.id)
+    local payload = {
+      body = body,
+      commit_id = position.commit_sha,
+      path = position.new_path or position.old_path,
+      line = position.new_line or position.old_line,
+      side = position.side or "RIGHT",
+    }
+    return client.post(ctx.base_url, path_url, { body = payload, headers = headers })
+  else
+    local path_url = string.format("/repos/%s/%s/issues/%d/comments", owner, repo, review.id)
+    return client.post(ctx.base_url, path_url, { body = { body = body }, headers = headers })
+  end
 end
 
 --- Post a multi-line range comment (GitHub supports start_line/start_side).
-function M.post_range_comment(owner, repo, pr_number, token, body, commit_sha, path, start_line, end_line, side)
-  local client = require("codereview.api.client")
-  local path_url = string.format("/repos/%s/%s/pulls/%d/comments", owner, repo, pr_number)
+function M.post_range_comment(client, ctx, review, body, old_path, new_path, start_pos, end_pos)
+  local headers, err = get_headers()
+  if not headers then return nil, err end
+  local owner, repo = parse_owner_repo(ctx)
+  local path_url = string.format("/repos/%s/%s/pulls/%d/comments", owner, repo, review.id)
   local payload = {
     body = body,
-    commit_id = commit_sha,
-    path = path,
-    start_line = start_line,
-    line = end_line,
-    start_side = side or "RIGHT",
-    side = side or "RIGHT",
+    commit_id = review.sha,
+    path = new_path or old_path,
+    start_line = start_pos.new_line or start_pos.old_line,
+    line = end_pos.new_line or end_pos.old_line,
+    start_side = start_pos.side or "RIGHT",
+    side = end_pos.side or "RIGHT",
   }
-  return client.post(M.base_url, path_url, {
-    body = payload,
-    headers = M.build_auth_header(token),
-  })
+  return client.post(ctx.base_url, path_url, { body = payload, headers = headers })
 end
 
 --- Reply to an existing review comment thread.
-function M.reply_to_comment(owner, repo, pr_number, token, comment_id, body)
-  local client = require("codereview.api.client")
-  local path_url = string.format("/repos/%s/%s/pulls/%d/comments/%d/replies", owner, repo, pr_number, comment_id)
-  return client.post(M.base_url, path_url, {
-    body = { body = body },
-    headers = M.build_auth_header(token),
-  })
+function M.reply_to_discussion(client, ctx, review, discussion_id, body)
+  local headers, err = get_headers()
+  if not headers then return nil, err end
+  local owner, repo = parse_owner_repo(ctx)
+  local path_url = string.format("/repos/%s/%s/pulls/%d/comments/%s/replies", owner, repo, review.id, discussion_id)
+  return client.post(ctx.base_url, path_url, { body = { body = body }, headers = headers })
 end
 
 --- Close a PR (state = "closed"). Uses PATCH.
-function M.close(owner, repo, pr_number, token)
-  local client = require("codereview.api.client")
-  local path_url = string.format("/repos/%s/%s/pulls/%d", owner, repo, pr_number)
-  return client.patch(M.base_url, path_url, {
-    body = { state = "closed" },
-    headers = M.build_auth_header(token),
-  })
+function M.close(client, ctx, review)
+  local headers, err = get_headers()
+  if not headers then return nil, err end
+  local owner, repo = parse_owner_repo(ctx)
+  local path_url = string.format("/repos/%s/%s/pulls/%d", owner, repo, review.id)
+  return client.patch(ctx.base_url, path_url, { body = { state = "closed" }, headers = headers })
 end
 
 --- GitHub does not support resolving individual review threads via the REST API.
-function M.resolve_discussion()
+function M.resolve_discussion(client, ctx, review, discussion_id, resolved) -- luacheck: ignore
   return nil, "not supported"
 end
 
+--- Approve a PR by submitting an APPROVE review.
+function M.approve(client, ctx, review)
+  local headers, err = get_headers()
+  if not headers then return nil, err end
+  local owner, repo = parse_owner_repo(ctx)
+  local path_url = string.format("/repos/%s/%s/pulls/%d/reviews", owner, repo, review.id)
+  return client.post(ctx.base_url, path_url, { body = { event = "APPROVE" }, headers = headers })
+end
+
 --- GitHub does not support un-approving reviews via the REST API.
-function M.unapprove()
+function M.unapprove(client, ctx, review) -- luacheck: ignore
   return nil, "not supported"
+end
+
+--- Merge a PR.
+function M.merge(client, ctx, review, opts)
+  local headers, err = get_headers()
+  if not headers then return nil, err end
+  local owner, repo = parse_owner_repo(ctx)
+  opts = opts or {}
+  local merge_method = opts.squash and "squash" or (opts.rebase and "rebase" or opts.merge_method or "merge")
+  local path_url = string.format("/repos/%s/%s/pulls/%d/merge", owner, repo, review.id)
+  local params = { merge_method = merge_method }
+  if opts.remove_source_branch then params.delete_branch_after = true end
+  return client.put(ctx.base_url, path_url, { body = params, headers = headers })
 end
 
 --- Fetch approvals for a PR from /pulls/:id/reviews.
