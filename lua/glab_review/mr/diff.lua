@@ -414,9 +414,13 @@ function M.render_all_files(buf, files, mr, discussions, context, file_contexts)
       table.insert(all_line_data, { type = "empty", file_idx = file_idx })
     else
       for _, item in ipairs(display) do
-        local prefix = M.format_line_number(item.old_line, item.new_line)
-        table.insert(all_lines, prefix .. (item.text or ""))
+        table.insert(all_lines, item.text or "")
         table.insert(all_line_data, { type = item.type, item = item, file_idx = file_idx })
+      end
+      -- trim trailing empty-text context lines (parser artifact from trailing \n)
+      while #all_lines > section_start and all_lines[#all_lines] == "" do
+        table.remove(all_lines)
+        table.remove(all_line_data)
       end
     end
 
@@ -450,6 +454,12 @@ function M.render_all_files(buf, files, mr, discussions, context, file_contexts)
 
   for i, data in ipairs(all_line_data) do
     local row = i - 1
+    if data.item and (data.item.old_line or data.item.new_line) then
+      vim.api.nvim_buf_set_extmark(buf, DIFF_NS, row, 0, {
+        virt_text = { { M.format_line_number(data.item.old_line, data.item.new_line), "GlabReviewLineNr" } },
+        virt_text_pos = "inline",
+      })
+    end
     if data.type == "file_header" then
       apply_line_hl(buf, row, "GlabReviewFileHeader")
       prev_delete_row = nil
@@ -460,10 +470,10 @@ function M.render_all_files(buf, files, mr, discussions, context, file_contexts)
         local segments = parser.word_diff(prev_delete_text, data.item.text or "")
         for _, seg in ipairs(segments) do
           apply_word_hl(buf, prev_delete_row,
-            LINE_NR_WIDTH + seg.old_start, LINE_NR_WIDTH + seg.old_end,
+            seg.old_start, seg.old_end,
             "GlabReviewDiffDeleteWord")
           apply_word_hl(buf, row,
-            LINE_NR_WIDTH + seg.new_start, LINE_NR_WIDTH + seg.new_end,
+            seg.new_start, seg.new_end,
             "GlabReviewDiffAddWord")
         end
       end
