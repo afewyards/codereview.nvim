@@ -1132,13 +1132,14 @@ function M.setup_keymaps(layout, state)
     local client_mod = require("codereview.api.client")
     local discs = state.provider.get_discussions(client_mod, state.ctx, state.review) or {}
     state.discussions = discs
+
+    local view = vim.fn.winsaveview()
+
     if state.scroll_mode then
-      local cursor = vim.api.nvim_win_get_cursor(layout.main_win)
       local result = M.render_all_files(layout.main_buf, state.files, state.review, discs, state.context, state.file_contexts)
       state.file_sections = result.file_sections
       state.scroll_line_data = result.line_data
       state.scroll_row_disc = result.row_discussions
-      vim.api.nvim_win_set_cursor(layout.main_win, { math.min(cursor[1], vim.api.nvim_buf_line_count(layout.main_buf)), 0 })
     else
       local file = state.files and state.files[state.current_file]
       if file then
@@ -1147,6 +1148,12 @@ function M.setup_keymaps(layout, state)
         state.row_disc_cache[state.current_file] = rd
       end
     end
+
+    -- Clamp cursor to buffer bounds then restore scroll position
+    local max_line = vim.api.nvim_buf_line_count(layout.main_buf)
+    view.lnum = math.min(view.lnum, max_line)
+    view.topline = math.min(view.topline, max_line)
+    vim.fn.winrestview(view)
   end
 
   -- Comment creation (works in both diff and summary modes)
