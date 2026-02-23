@@ -54,6 +54,22 @@ function M.submit_review(review, suggestions)
   return #errors == 0
 end
 
+function M.submit_and_publish(review, ai_suggestions)
+  -- Post remaining accepted AI suggestions as drafts
+  if ai_suggestions then
+    local remaining = M.filter_accepted(ai_suggestions)
+    if #remaining > 0 then
+      M.submit_review(review, ai_suggestions)
+    end
+  end
+  -- Publish all drafts (human + AI)
+  M.bulk_publish(review)
+  -- Dismiss all AI suggestions
+  if ai_suggestions then
+    for _, s in ipairs(ai_suggestions) do s.status = "dismissed" end
+  end
+end
+
 function M.bulk_publish(review)
   local provider, ctx, err = providers.detect()
   if not provider then

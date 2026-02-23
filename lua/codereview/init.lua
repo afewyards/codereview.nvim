@@ -53,52 +53,28 @@ function M.ai_review()
 end
 
 function M.submit()
+  local session = require("codereview.review.session")
   local buf = vim.api.nvim_get_current_buf()
   local diff_mod = require("codereview.mr.diff")
   local active = diff_mod.get_state(buf)
-  local session = require("codereview.review.session")
-  local submit_mod = require("codereview.review.submit")
+
   if active then
-    local state = active.state
-    local layout = active.layout
-    -- Warn if AI still running
+    local submit_mod = require("codereview.review.submit")
     if session.get().ai_pending then
       vim.notify("AI review still running — publishing available drafts", vim.log.levels.WARN)
     end
-    -- Post remaining accepted AI suggestions as drafts
-    if state.ai_suggestions then
-      local accepted = submit_mod.filter_accepted(state.ai_suggestions)
-      if #accepted > 0 then
-        local client_mod = require("codereview.api.client")
-        local provider, ctx, err = require("codereview.providers").detect()
-        if provider then
-          for _, suggestion in ipairs(accepted) do
-            local _, post_err = provider.create_draft_comment(client_mod, ctx, state.review, {
-              body = suggestion.comment,
-              path = suggestion.file,
-              line = suggestion.line,
-            })
-            if not post_err then suggestion.drafted = true end
-          end
-        else
-          vim.notify("Could not detect platform: " .. (err or ""), vim.log.levels.ERROR)
-        end
-      end
-    end
-    -- Publish all drafts (human + AI)
-    submit_mod.bulk_publish(state.review)
-    -- End review session and re-render sidebar
+    submit_mod.submit_and_publish(active.state.review, active.state.ai_suggestions)
     session.stop()
-    diff_mod.render_sidebar(layout.sidebar_buf, state)
+    diff_mod.render_sidebar(active.layout.sidebar_buf, active.state)
     return
   end
-  -- Fallback: buffer-local review
+
   local review = vim.b[buf].codereview_review
   if not review then
     vim.notify("No review context. Open a review first with :CodeReview", vim.log.levels.WARN)
     return
   end
-  submit_mod.bulk_publish(review)
+  require("codereview.review.submit").bulk_publish(review)
   session.stop()
 end
 function M.approve()
