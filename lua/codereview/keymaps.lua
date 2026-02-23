@@ -26,7 +26,7 @@ local defaults = {
   show_pipeline        = { key = "p",     mode = "n", desc = "Pipeline" },
   ai_review            = { key = "A",     mode = "n", desc = "Start/cancel AI" },
   refresh              = { key = "R",     mode = "n", desc = "Refresh" },
-  quit                 = { key = "q",     mode = "n", desc = "Quit" },
+  quit                 = { key = "Q",     mode = "n", desc = "Quit" },
 }
 
 local function deep_copy(orig)
@@ -64,13 +64,17 @@ end
 
 function M.get_all()
   if not resolved then M.setup() end
-  return resolved
+  return deep_copy(resolved)
 end
 
 function M.apply(buf, callbacks)
   if not resolved then M.setup() end
   local opts = { noremap = true, silent = true, nowait = true }
-  for action, fn in pairs(callbacks) do
+  local actions = {}
+  for action in pairs(callbacks) do table.insert(actions, action) end
+  table.sort(actions)
+  for _, action in ipairs(actions) do
+    local fn = callbacks[action]
     local entry = resolved[action]
     if entry and entry.key and entry.key ~= false then
       vim.keymap.set(entry.mode, entry.key, fn, vim.tbl_extend("force", opts, { buffer = buf, desc = entry.desc }))

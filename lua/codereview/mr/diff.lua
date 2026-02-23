@@ -889,9 +889,7 @@ local function build_footer(state, sess)
   table.insert(lines, string.rep("─", 30))
 
   if state.view_mode == "summary" then
-    -- approve shares default key "a" with accept_suggestion; prefer approve key
-    local approve_key = k("approve") or k("accept_suggestion")
-    pair_row(approve_key, "approve", "   ", k("open_in_browser"), "open")
+    pair_row(k("approve"), "approve", "   ", k("open_in_browser"), "open")
     pair_row(k("merge"), "merge", "     ", k("refresh"), "refresh")
     if k("quit") then row(k("quit") .. " quit") end
     return lines, hls
@@ -923,7 +921,8 @@ local function build_footer(state, sess)
   elseif cc_key then row(cc_key .. "  new comment")
   elseif r_key then row(r_key .. " reply")
   end
-  if k("toggle_resolve") then row(k("toggle_resolve") .. "     resolve") end
+  local resolve_key = k("toggle_resolve")
+  if resolve_key then row(resolve_key .. "     resolve") end
 
   if sess.active then
     header("Review")
