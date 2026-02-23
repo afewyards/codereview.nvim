@@ -69,6 +69,7 @@ local function open_input_popup(title, callback, opts)
       title_pos = "center",
       footer = footer,
       footer_pos = "center",
+      noautocmd = true,
     })
   else
     -- Fallback: centered editor-relative float
@@ -88,8 +89,12 @@ local function open_input_popup(title, callback, opts)
       title_pos = "center",
       footer = footer,
       footer_pos = "center",
+      noautocmd = true,
     })
   end
+
+  vim.api.nvim_set_option_value("winblend", 0, { win = win })
+  vim.api.nvim_set_option_value("winhighlight", "NormalFloat:Normal", { win = win })
 
   -- Place cursor on first line
   pcall(vim.api.nvim_win_set_cursor, win, { 1, 0 })
