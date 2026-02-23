@@ -941,6 +941,10 @@ function M.create_comment_at_cursor(layout, state, on_success)
     vim.notify("No diff line at cursor", vim.log.levels.WARN)
     return
   end
+  if data.type == "context" then
+    vim.notify("Cannot comment on unchanged lines", vim.log.levels.WARN)
+    return
+  end
   local file = state.files[state.current_file]
   local line_text = vim.api.nvim_buf_get_lines(
     vim.api.nvim_win_get_buf(layout.main_win), row - 1, row, false
@@ -967,6 +971,10 @@ function M.create_comment_range(layout, state, on_success)
   local end_data = line_data[e]
   if not start_data or not end_data then
     vim.notify("Invalid selection range", vim.log.levels.WARN)
+    return
+  end
+  if start_data.type == "context" or end_data.type == "context" then
+    vim.notify("Cannot comment on unchanged lines", vim.log.levels.WARN)
     return
   end
   local file = state.files[state.current_file]
@@ -1400,6 +1408,10 @@ function M.setup_keymaps(layout, state)
         vim.notify("No diff line at cursor", vim.log.levels.WARN)
         return
       end
+      if data.type == "context" then
+        vim.notify("Cannot comment on unchanged lines", vim.log.levels.WARN)
+        return
+      end
       local file = state.files[data.file_idx]
       local line_text = vim.api.nvim_buf_get_lines(
         vim.api.nvim_win_get_buf(layout.main_win), row - 1, row, false
@@ -1420,6 +1432,10 @@ function M.setup_keymaps(layout, state)
         local data = line_data[row]
         if not data or not data.item then
           vim.notify("No diff line at cursor", vim.log.levels.WARN)
+          return
+        end
+        if data.type == "context" then
+          vim.notify("Cannot comment on unchanged lines", vim.log.levels.WARN)
           return
         end
         local file = state.files[state.current_file]
@@ -1444,6 +1460,10 @@ function M.setup_keymaps(layout, state)
       local end_data = state.scroll_line_data[e]
       if not start_data or not start_data.item or not end_data or not end_data.item then
         vim.notify("Invalid selection range", vim.log.levels.WARN)
+        return
+      end
+      if start_data.type == "context" or end_data.type == "context" then
+        vim.notify("Cannot comment on unchanged lines", vim.log.levels.WARN)
         return
       end
       local file = state.files[start_data.file_idx]
@@ -1482,6 +1502,10 @@ function M.setup_keymaps(layout, state)
         local end_data = line_data[e]
         if not start_data or not start_data.item or not end_data or not end_data.item then
           vim.notify("Invalid selection range", vim.log.levels.WARN)
+          return
+        end
+        if start_data.type == "context" or end_data.type == "context" then
+          vim.notify("Cannot comment on unchanged lines", vim.log.levels.WARN)
           return
         end
         local file = state.files[state.current_file]
