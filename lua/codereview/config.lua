@@ -10,6 +10,7 @@ local defaults = {
   debug = false,      -- write request/auth logs to .codereview.log
   diff = { context = 8, scroll_threshold = 50 },
   ai = { enabled = true, claude_cmd = "claude", agent = "code-review" },
+  keymaps = {},
 }
 
 local current = nil
@@ -37,6 +38,7 @@ function M.setup(opts)
   if current.gitlab_url and not current.base_url then
     current.base_url = current.gitlab_url
   end
+  require("codereview.keymaps").setup(current.keymaps)
 end
 
 function M.get()
