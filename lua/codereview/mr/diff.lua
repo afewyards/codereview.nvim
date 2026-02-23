@@ -1672,11 +1672,7 @@ function M.setup_keymaps(layout, state)
     end
     local review_mod = require("codereview.review")
     state.ai_review_in_progress = true
-    if state.view_mode == "diff" then
-      review_mod.start(state.review, state, layout)
-    else
-      review_mod.start(state.review)
-    end
+    review_mod.start(state.review, state, layout)
   end)
 
   -- Refresh

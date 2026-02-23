@@ -115,6 +115,13 @@ function M.start(review, diff_state, layout)
         diff_state.ai_suggestions = suggestions
 
         local diff_mod = require("codereview.mr.diff")
+
+        -- Switch to diff view if currently in summary mode
+        if diff_state.view_mode ~= "diff" then
+          diff_state.view_mode = "diff"
+          diff_state.current_file = diff_state.current_file or 1
+        end
+
         if diff_state.scroll_mode then
           local result = diff_mod.render_all_files(
             layout.main_buf, diff_state.files, diff_state.review,
@@ -126,7 +133,7 @@ function M.start(review, diff_state, layout)
           diff_state.scroll_row_disc = result.row_discussions
           diff_state.scroll_row_ai = result.row_ai
         else
-          local file = diff_state.files[diff_state.current_file]
+          local file = diff_state.files and diff_state.files[diff_state.current_file]
           if file then
             local ld, rd, ra = diff_mod.render_file_diff(
               layout.main_buf, file, diff_state.review,
@@ -138,6 +145,7 @@ function M.start(review, diff_state, layout)
           end
         end
         diff_mod.render_sidebar(layout.sidebar_buf, diff_state)
+        vim.api.nvim_set_current_win(layout.main_win)
       end)
     else
       -- Standalone mode: open triage view
