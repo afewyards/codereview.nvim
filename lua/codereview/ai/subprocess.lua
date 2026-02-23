@@ -4,7 +4,7 @@ local log = require("codereview.log")
 local M = {}
 
 function M.build_cmd(claude_cmd, agent)
-  local cmd = { claude_cmd, "-p" }
+  local cmd = { claude_cmd, "-p", "--output-format", "json", "--max-turns", "1" }
   if agent then
     table.insert(cmd, "--agent")
     table.insert(cmd, agent)
@@ -77,6 +77,7 @@ function M.run(prompt, callback)
 
   vim.fn.chansend(job_id, prompt)
   vim.fn.chanclose(job_id, "stdin")
+  return job_id
 end
 
 return M

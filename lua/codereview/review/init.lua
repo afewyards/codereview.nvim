@@ -89,12 +89,11 @@ function M.start(review, diff_state, layout)
 
   local review_prompt = prompt_mod.build_review_prompt(review, diffs)
 
-  -- Show progress float with spinner
-  local progress = open_progress_float()
+  local session = require("codereview.review.session")
+  session.start()
 
-  ai_sub.run(review_prompt, function(output, ai_err)
-    progress.close()
-    if diff_state then diff_state.ai_review_in_progress = false end
+  local job_id = ai_sub.run(review_prompt, function(output, ai_err)
+    session.ai_finish()
 
     if ai_err then
       vim.notify("AI review failed: " .. ai_err, vim.log.levels.ERROR)
@@ -152,6 +151,11 @@ function M.start(review, diff_state, layout)
       triage.open(review, diffs, discussions, suggestions)
     end
   end)
+
+  if job_id and job_id > 0 then
+    session.ai_start(job_id)
+    vim.notify("AI review started…", vim.log.levels.INFO)
+  end
 end
 
 return M

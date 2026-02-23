@@ -1352,6 +1352,7 @@ function M.setup_keymaps(layout, state)
       return
     end
     if state.view_mode ~= "diff" then return end
+    local session = require("codereview.review.session")
     if state.scroll_mode then
       local cursor = vim.api.nvim_win_get_cursor(layout.main_win)
       local row = cursor[1]
@@ -1362,13 +1363,33 @@ function M.setup_keymaps(layout, state)
       end
       local file = state.files[data.file_idx]
       local comment = require("codereview.mr.comment")
-      comment.create_inline(state.review, file.old_path, file.new_path, data.item.old_line, data.item.new_line, refresh_discussions)
+      if session.get().active then
+        comment.create_inline_draft(state.review, file.new_path, data.item.new_line, refresh_discussions)
+      else
+        comment.create_inline(state.review, file.old_path, file.new_path, data.item.old_line, data.item.new_line, refresh_discussions)
+      end
     else
-      M.create_comment_at_cursor(layout, state, refresh_discussions)
+      if session.get().active then
+        local line_data = state.line_data_cache[state.current_file]
+        if not line_data then return end
+        local cursor = vim.api.nvim_win_get_cursor(layout.main_win)
+        local row = cursor[1]
+        local data = line_data[row]
+        if not data or not data.item then
+          vim.notify("No diff line at cursor", vim.log.levels.WARN)
+          return
+        end
+        local file = state.files[state.current_file]
+        local comment = require("codereview.mr.comment")
+        comment.create_inline_draft(state.review, file.new_path, data.item.new_line, refresh_discussions)
+      else
+        M.create_comment_at_cursor(layout, state, refresh_discussions)
+      end
     end
   end)
   map(main_buf, "v", "cc", function()
     if state.view_mode ~= "diff" then return end
+    local session = require("codereview.review.session")
     if state.scroll_mode then
       local s, e = vim.fn.line("v"), vim.fn.line(".")
       if s > e then s, e = e, s end
@@ -1380,16 +1401,48 @@ function M.setup_keymaps(layout, state)
       end
       local file = state.files[start_data.file_idx]
       local comment = require("codereview.mr.comment")
-      comment.create_inline_range(
-        state.review,
-        file.old_path,
-        file.new_path,
-        { old_line = start_data.item.old_line, new_line = start_data.item.new_line },
-        { old_line = end_data.item.old_line, new_line = end_data.item.new_line },
-        refresh_discussions
-      )
+      if session.get().active then
+        comment.create_inline_range_draft(
+          state.review,
+          file.new_path,
+          start_data.item.new_line,
+          end_data.item.new_line,
+          refresh_discussions
+        )
+      else
+        comment.create_inline_range(
+          state.review,
+          file.old_path,
+          file.new_path,
+          { old_line = start_data.item.old_line, new_line = start_data.item.new_line },
+          { old_line = end_data.item.old_line, new_line = end_data.item.new_line },
+          refresh_discussions
+        )
+      end
     else
-      M.create_comment_range(layout, state, refresh_discussions)
+      if session.get().active then
+        local line_data = state.line_data_cache[state.current_file]
+        if not line_data then return end
+        local s, e = vim.fn.line("v"), vim.fn.line(".")
+        if s > e then s, e = e, s end
+        local start_data = line_data[s]
+        local end_data = line_data[e]
+        if not start_data or not start_data.item or not end_data or not end_data.item then
+          vim.notify("Invalid selection range", vim.log.levels.WARN)
+          return
+        end
+        local file = state.files[state.current_file]
+        local comment = require("codereview.mr.comment")
+        comment.create_inline_range_draft(
+          state.review,
+          file.new_path,
+          start_data.item.new_line,
+          end_data.item.new_line,
+          refresh_discussions
+        )
+      else
+        M.create_comment_range(layout, state, refresh_discussions)
+      end
     end
   end)
 
@@ -1725,12 +1778,15 @@ function M.setup_keymaps(layout, state)
   end)
 
   map(main_buf, "n", "A", function()
-    if state.ai_review_in_progress then
-      vim.notify("AI review already running", vim.log.levels.WARN)
+    local session = require("codereview.review.session")
+    local s = session.get()
+    if s.ai_pending then
+      vim.fn.jobstop(s.ai_job_id)
+      session.ai_finish()
+      vim.notify("AI review cancelled", vim.log.levels.INFO)
       return
     end
     local review_mod = require("codereview.review")
-    state.ai_review_in_progress = true
     review_mod.start(state.review, state, layout)
   end)
 
