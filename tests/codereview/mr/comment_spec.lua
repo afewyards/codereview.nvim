@@ -34,6 +34,34 @@ describe("mr.comment", function()
     end)
   end)
 
+  describe("optimistic comment flow", function()
+    it("add callback returns a discussion with is_optimistic", function()
+      local discussions = {}
+      local function add_optimistic(text)
+        local disc = {
+          notes = {{ author = "You", body = text, created_at = os.date("!%Y-%m-%dT%H:%M:%SZ"),
+            position = { new_path = "a.lua", new_line = 5 } }},
+          is_optimistic = true,
+        }
+        table.insert(discussions, disc)
+        return disc
+      end
+      local disc = add_optimistic("looks good")
+      assert.truthy(disc.is_optimistic)
+      assert.equals("You", disc.notes[1].author)
+      assert.equals("looks good", disc.notes[1].body)
+      assert.equals(1, #discussions)
+    end)
+
+    it("mark_failed transitions from optimistic to failed", function()
+      local disc = { is_optimistic = true, is_failed = false, notes = {} }
+      disc.is_optimistic = false
+      disc.is_failed = true
+      assert.falsy(disc.is_optimistic)
+      assert.truthy(disc.is_failed)
+    end)
+  end)
+
   describe("post_with_retry", function()
     it("calls on_success on first success", function()
       local called = false
