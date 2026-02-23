@@ -1545,6 +1545,7 @@ function M.setup_keymaps(layout, state)
   end)
 
   -- a: approve (summary mode) or accept AI suggestion at cursor (diff mode)
+  -- Accept = post as draft comment, remove AI box, refresh to show as regular comment
   map(main_buf, "n", "a", function()
     if state.view_mode == "summary" then
       require("codereview.mr.actions").approve(state.review)
@@ -1555,8 +1556,23 @@ function M.setup_keymaps(layout, state)
     local row_ai = state.scroll_mode and state.scroll_row_ai or (state.row_ai_cache[state.current_file] or {})
     local suggestion = row_ai[cursor]
     if not suggestion then return end
-    suggestion.status = "accepted"
+
+    -- Post as draft comment via API
+    local client_mod = require("codereview.api.client")
+    local _, post_err = state.provider.create_draft_comment(client_mod, state.ctx, state.review, {
+      body = suggestion.comment,
+      path = suggestion.file,
+      line = suggestion.line,
+    })
+    if post_err then
+      vim.notify("Failed to post draft: " .. post_err, vim.log.levels.ERROR)
+      return
+    end
+
+    vim.notify("Draft comment posted", vim.log.levels.INFO)
+    suggestion.status = "dismissed"
     rerender_ai()
+    refresh_discussions()
     nav_to_next_ai(cursor)
   end)
 
@@ -1608,9 +1624,27 @@ function M.setup_keymaps(layout, state)
     vim.keymap.set("n", "<CR>", function()
       local new_lines = vim.api.nvim_buf_get_lines(float_buf, 0, -1, false)
       suggestion.comment = table.concat(new_lines, "\n")
-      suggestion.status = "edited"
       close_float()
+
+      -- Post edited suggestion as draft comment
+      local client_mod = require("codereview.api.client")
+      local _, post_err = state.provider.create_draft_comment(client_mod, state.ctx, state.review, {
+        body = suggestion.comment,
+        path = suggestion.file,
+        line = suggestion.line,
+      })
+      if post_err then
+        vim.notify("Failed to post draft: " .. post_err, vim.log.levels.ERROR)
+        suggestion.status = "edited"
+        rerender_ai()
+        return
+      end
+
+      vim.notify("Draft comment posted", vim.log.levels.INFO)
+      suggestion.status = "dismissed"
       rerender_ai()
+      refresh_discussions()
+      nav_to_next_ai(cursor)
     end, { buffer = float_buf, noremap = true, silent = true })
 
     vim.keymap.set("n", "q", function()
@@ -1618,11 +1652,22 @@ function M.setup_keymaps(layout, state)
     end, { buffer = float_buf, noremap = true, silent = true })
   end)
 
-  -- S: submit accepted/edited AI suggestions as review comments
+  -- S: post remaining edited suggestions + publish all drafts
   map(main_buf, "n", "S", function()
     if state.view_mode ~= "diff" or not state.ai_suggestions then return end
     local submit_mod = require("codereview.review.submit")
-    submit_mod.submit_review(state.review, state.ai_suggestions)
+    -- Post any remaining accepted/edited suggestions not yet individually posted
+    local remaining = submit_mod.filter_accepted(state.ai_suggestions)
+    if #remaining > 0 then
+      submit_mod.submit_review(state.review, state.ai_suggestions)
+    else
+      -- All were posted individually via 'a', just publish the review
+      submit_mod.bulk_publish(state.review)
+    end
+    -- Clean up AI suggestions after submit
+    for _, s in ipairs(state.ai_suggestions) do s.status = "dismissed" end
+    rerender_ai()
+    refresh_discussions()
   end)
 
   -- ds: dismiss all non-accepted/edited AI suggestions
