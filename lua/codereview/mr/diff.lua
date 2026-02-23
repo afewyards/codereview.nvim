@@ -806,6 +806,16 @@ local function count_file_comments(file, discussions)
   return n
 end
 
+local function count_file_unresolved(file, discussions)
+  local n = 0
+  for _, disc in ipairs(discussions or {}) do
+    if discussion_matches_file(disc, file) and not disc.local_draft and not disc.resolved then
+      n = n + 1
+    end
+  end
+  return n
+end
+
 local function count_file_ai(file, suggestions)
   local n = 0
   local path = file.new_path or file.old_path
@@ -954,11 +964,13 @@ function M.render_sidebar(buf, state)
         local ccount = count_file_comments(files[entry.idx], state.discussions)
         local cstr = ccount > 0 and (" [" .. ccount .. "]") or ""
         local aicount = count_file_ai(files[entry.idx], state.ai_suggestions)
-        local aistr = aicount > 0 and (" [" .. aicount .. " AI]") or ""
+        local aistr = aicount > 0 and (" 🤖" .. aicount) or ""
+        local ucount = count_file_unresolved(files[entry.idx], state.discussions)
+        local ustr = ucount > 0 and (" ⚠" .. ucount) or ""
         local name = entry.name
-        local max_name = 22 - #cstr - #aistr
+        local max_name = 22 - #cstr - #aistr - #ustr
         if #name > max_name then name = ".." .. name:sub(-(max_name - 2)) end
-        table.insert(lines, string.format("  %s %s%s%s", indicator, name, cstr, aistr))
+        table.insert(lines, string.format("  %s %s%s%s%s", indicator, name, cstr, aistr, ustr))
         state.sidebar_row_map[#lines] = { type = "file", idx = entry.idx }
       end
     end
@@ -970,11 +982,13 @@ function M.render_sidebar(buf, state)
     local ccount = count_file_comments(files[entry.idx], state.discussions)
     local cstr = ccount > 0 and (" [" .. ccount .. "]") or ""
     local aicount = count_file_ai(files[entry.idx], state.ai_suggestions)
-    local aistr = aicount > 0 and (" [" .. aicount .. " AI]") or ""
+    local aistr = aicount > 0 and (" 🤖" .. aicount) or ""
+    local ucount = count_file_unresolved(files[entry.idx], state.discussions)
+    local ustr = ucount > 0 and (" ⚠" .. ucount) or ""
     local name = entry.name
-    local max_name = 24 - #cstr - #aistr
+    local max_name = 24 - #cstr - #aistr - #ustr
     if #name > max_name then name = ".." .. name:sub(-(max_name - 2)) end
-    table.insert(lines, string.format("  %s %s%s%s", indicator, name, cstr, aistr))
+    table.insert(lines, string.format("  %s %s%s%s%s", indicator, name, cstr, aistr, ustr))
     state.sidebar_row_map[#lines] = { type = "file", idx = entry.idx }
   end
 
@@ -999,6 +1013,19 @@ function M.render_sidebar(buf, state)
       pcall(apply_line_hl, buf, row - 1, "CodeReviewFileChanged")
     elseif entry.type == "dir" then
       pcall(apply_line_hl, buf, row - 1, "CodeReviewHidden")
+    end
+    if entry.type == "file" then
+      local line = vim.api.nvim_buf_get_lines(buf, row - 1, row, false)[1] or ""
+      local file_segments = {
+        { pat = "🤖%d+", hl = "CodeReviewAIDraft" },
+        { pat = "⚠%d+", hl = "CodeReviewCommentUnresolved" },
+      }
+      for _, seg in ipairs(file_segments) do
+        local s, e = string.find(line, seg.pat)
+        if s then
+          pcall(apply_word_hl, buf, row - 1, s - 1, e, seg.hl)
+        end
+      end
     end
   end
 
