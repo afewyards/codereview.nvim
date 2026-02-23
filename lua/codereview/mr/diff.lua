@@ -847,12 +847,47 @@ function M.render_sidebar(buf, state)
   table.insert(lines, string.rep("─", 30))
   local session = require("codereview.review.session")
   local sess = session.get()
+  local stats = count_session_stats(state)
+  local status_start_row = #lines  -- track where status lines begin for highlights
+
   if sess.active then
     if sess.ai_pending then
       table.insert(lines, "⟳ AI reviewing…")
     else
       table.insert(lines, "● Review in progress")
     end
+  end
+
+  -- Drafts + AI stats line
+  if sess.active then
+    local parts = {}
+    if stats.drafts > 0 then
+      table.insert(parts, string.format("✎ %d drafts", stats.drafts))
+    end
+    if state.ai_suggestions then
+      local ai_parts = {}
+      if stats.ai_accepted > 0 then table.insert(ai_parts, "✓" .. stats.ai_accepted) end
+      if stats.ai_dismissed > 0 then table.insert(ai_parts, "✗" .. stats.ai_dismissed) end
+      if stats.ai_pending > 0 then table.insert(ai_parts, "⏳" .. stats.ai_pending) end
+      if #ai_parts > 0 then
+        table.insert(parts, table.concat(ai_parts, " ") .. " AI")
+      end
+    end
+    if #parts > 0 then
+      table.insert(lines, table.concat(parts, "  "))
+    end
+  end
+
+  -- Threads line (always when discussions exist)
+  if stats.threads > 0 then
+    local tline = string.format("💬 %d threads", stats.threads)
+    if stats.unresolved > 0 then
+      tline = tline .. string.format("  ⚠ %d open", stats.unresolved)
+    end
+    table.insert(lines, tline)
+  end
+
+  if #lines > status_start_row then
     table.insert(lines, "")
   end
   table.insert(lines, string.format("%d files changed", #files))
