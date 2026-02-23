@@ -808,6 +808,31 @@ local function count_file_ai(file, suggestions)
   return n
 end
 
+local function count_session_stats(state)
+  local stats = { drafts = 0, ai_accepted = 0, ai_dismissed = 0, ai_pending = 0, threads = 0, unresolved = 0 }
+  for _ in ipairs(state.local_drafts or {}) do
+    stats.drafts = stats.drafts + 1
+  end
+  for _, s in ipairs(state.ai_suggestions or {}) do
+    if s.status == "accepted" or s.status == "edited" then
+      stats.ai_accepted = stats.ai_accepted + 1
+    elseif s.status == "dismissed" then
+      stats.ai_dismissed = stats.ai_dismissed + 1
+    elseif s.status == "pending" then
+      stats.ai_pending = stats.ai_pending + 1
+    end
+  end
+  for _, d in ipairs(state.discussions or {}) do
+    if not d.local_draft then
+      stats.threads = stats.threads + 1
+      if not d.resolved then
+        stats.unresolved = stats.unresolved + 1
+      end
+    end
+  end
+  return stats
+end
+
 function M.render_sidebar(buf, state)
   local list = require("codereview.mr.list")
   local review = state.review
