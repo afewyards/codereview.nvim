@@ -36,6 +36,14 @@ end
 function M.pipeline() vim.notify("Pipeline not yet implemented (Stage 4)", vim.log.levels.WARN) end
 function M.ai_review()
   local buf = vim.api.nvim_get_current_buf()
+  local diff_mod = require("codereview.mr.diff")
+  local active = diff_mod.get_state(buf)
+  if active then
+    -- Called from diff view: use inline mode
+    require("codereview.review").start(active.state.review, active.state, active.layout)
+    return
+  end
+  -- Fallback: try buffer-local review variable
   local review = vim.b[buf].codereview_review
   if not review then
     vim.notify("No review context. Open a review first with :CodeReview", vim.log.levels.WARN)
