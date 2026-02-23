@@ -1,0 +1,25 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: leafo/gh-actions-lua@v10
+        with:
+          luaVersion: "5.1"
+
+      - uses: leafo/gh-actions-luarocks@v4
+
+      - name: Install test dependencies
+        run: luarocks install busted
+
+      - name: Run tests
+        run: busted --run unit tests/
