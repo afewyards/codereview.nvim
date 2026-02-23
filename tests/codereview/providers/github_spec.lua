@@ -81,16 +81,23 @@ describe("providers.github", function()
       package.loaded["codereview.api.auth"] = {
         get_token = function() return "ghp_test", "pat" end,
       }
+      -- Stub plenary.curl to prevent real HTTP calls
+      package.loaded["plenary.curl"] = {
+        request = function()
+          return { status = 200, body = vim.json.encode({ data = { repository = { pullRequest = { reviewThreads = { nodes = {} } } } } }) }
+        end,
+      }
     end)
 
     after_each(function()
       package.loaded["codereview.api.auth"] = nil
+      package.loaded["plenary.curl"] = nil
     end)
 
-    it("resolve_discussion returns nil, not supported", function()
+    it("resolve_discussion returns error when thread not found", function()
       local result, err = github.resolve_discussion(make_client({}), ctx, review, "1", true)
       assert.is_nil(result)
-      assert.equal("not supported", err)
+      assert.truthy(err:find("thread"))
     end)
 
     it("unapprove returns nil, not supported", function()
