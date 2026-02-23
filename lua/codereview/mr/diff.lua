@@ -1611,6 +1611,15 @@ function M.setup_keymaps(layout, state)
     end
   end
 
+  local function get_summary_disc()
+    if state.view_mode ~= "summary" then return nil end
+    local cursor = vim.api.nvim_win_get_cursor(layout.main_win)[1]
+    local entry = state.summary_row_map and state.summary_row_map[cursor]
+    if entry and (entry.type == "thread" or entry.type == "thread_start") then
+      return entry.discussion
+    end
+  end
+
   -- Refresh: close and reopen the MR view
   local function refresh()
     require("codereview.review.session").stop()
@@ -1677,6 +1686,18 @@ function M.setup_keymaps(layout, state)
     end,
 
     next_comment = function()
+      if state.view_mode == "summary" then
+        local cursor = vim.api.nvim_win_get_cursor(layout.main_win)[1]
+        local total = vim.api.nvim_buf_line_count(layout.main_buf)
+        for r = cursor + 1, total do
+          local entry = state.summary_row_map and state.summary_row_map[r]
+          if entry and entry.type == "thread_start" then
+            vim.api.nvim_win_set_cursor(layout.main_win, { r, 0 })
+            return
+          end
+        end
+        return
+      end
       if state.view_mode ~= "diff" then return end
       if state.scroll_mode then
         local cursor = vim.api.nvim_win_get_cursor(layout.main_win)[1]
@@ -1695,6 +1716,17 @@ function M.setup_keymaps(layout, state)
     end,
 
     prev_comment = function()
+      if state.view_mode == "summary" then
+        local cursor = vim.api.nvim_win_get_cursor(layout.main_win)[1]
+        for r = cursor - 1, 1, -1 do
+          local entry = state.summary_row_map and state.summary_row_map[r]
+          if entry and entry.type == "thread_start" then
+            vim.api.nvim_win_set_cursor(layout.main_win, { r, 0 })
+            return
+          end
+        end
+        return
+      end
       if state.view_mode ~= "diff" then return end
       if state.scroll_mode then
         local cursor = vim.api.nvim_win_get_cursor(layout.main_win)[1]
@@ -1883,6 +1915,15 @@ function M.setup_keymaps(layout, state)
     end,
 
     reply = function()
+      if state.view_mode == "summary" then
+        local disc = get_summary_disc()
+        if disc then
+          local comment = require("codereview.mr.comment")
+          comment.reply(disc, state.review, refresh_discussions,
+            { anchor_line = vim.api.nvim_win_get_cursor(layout.main_win)[1], win_id = layout.main_win })
+        end
+        return
+      end
       if state.view_mode ~= "diff" then return end
       local disc = get_cursor_disc()
       if disc then
@@ -1929,6 +1970,14 @@ function M.setup_keymaps(layout, state)
     end,
 
     toggle_resolve = function()
+      if state.view_mode == "summary" then
+        local disc = get_summary_disc()
+        if disc then
+          local comment = require("codereview.mr.comment")
+          comment.resolve_toggle(disc, state.review, refresh_discussions)
+        end
+        return
+      end
       if state.view_mode ~= "diff" then return end
       local disc = get_cursor_disc()
       if disc then
