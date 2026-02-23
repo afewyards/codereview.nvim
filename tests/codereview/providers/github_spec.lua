@@ -298,6 +298,26 @@ describe("providers.github", function()
       github.merge(client, ctx, review, { squash = true })
       assert.equal("squash", called_body.merge_method)
     end)
+
+    it("resolve_discussion uses node_id to skip lookup query", function()
+      local mutations = {}
+      package.loaded["plenary.curl"] = {
+        request = function(params)
+          local body = vim.json.decode(params.body)
+          table.insert(mutations, body.query)
+          return {
+            status = 200,
+            body = vim.json.encode({ data = { resolveReviewThread = { thread = { id = "PRRT_1", isResolved = true } } } }),
+          }
+        end,
+      }
+      local result, err = github.resolve_discussion(make_client({}), ctx, review, "1", true, "PRRT_1")
+      assert.is_nil(err)
+      assert.truthy(result)
+      -- Should only have made ONE GraphQL call (the mutation), not two (lookup + mutation)
+      assert.equal(1, #mutations)
+      assert.truthy(mutations[1]:find("resolveReviewThread"))
+    end)
   end)
 
   describe("create_draft_comment", function()

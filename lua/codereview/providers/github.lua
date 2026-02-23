@@ -429,59 +429,63 @@ end
 --- Resolve/unresolve a review thread via GitHub GraphQL API.
 --- discussion_id is the root comment ID (string). We look up the thread node_id
 --- via GraphQL, then call resolveReviewThread or unresolveReviewThread.
-function M.resolve_discussion(client, ctx, review, discussion_id, resolved)
+--- If node_id is provided (cached from get_discussions), the lookup step is skipped.
+function M.resolve_discussion(client, ctx, review, discussion_id, resolved, node_id)
   local headers, err = get_headers()
   if not headers then return nil, err end
   local owner, repo = parse_owner_repo(ctx)
 
-  -- Step 1: find the thread node_id for this comment
-  local lookup_query = string.format([[
-    query {
-      repository(owner: "%s", name: "%s") {
-        pullRequest(number: %d) {
-          reviewThreads(first: 100) {
-            nodes {
-              id
-              isResolved
-              comments(first: 1) {
-                nodes { databaseId }
+  local thread_node_id = node_id
+
+  if not thread_node_id then
+    -- Step 1: find the thread node_id for this comment
+    local lookup_query = string.format([[
+      query {
+        repository(owner: "%s", name: "%s") {
+          pullRequest(number: %d) {
+            reviewThreads(first: 100) {
+              nodes {
+                id
+                isResolved
+                comments(first: 1) {
+                  nodes { databaseId }
+                }
               }
             }
           }
         }
       }
-    }
-  ]], owner, repo, review.id)
+    ]], owner, repo, review.id)
 
-  log.debug("GraphQL: fetching review threads for comment " .. discussion_id)
-  local ldata, lerr = graphql(nil, headers, lookup_query)
-  if not ldata then
-    return nil, lerr or "GraphQL lookup failed"
-  end
-
-  local threads = ldata
-    and ldata.repository
-    and ldata.repository.pullRequest
-    and ldata.repository.pullRequest.reviewThreads
-    and ldata.repository.pullRequest.reviewThreads.nodes
-  if not threads then
-    log.error("GraphQL: no review threads in response")
-    return nil, "No review threads found"
-  end
-
-  local comment_id = tonumber(discussion_id)
-  local thread_node_id
-  for _, thread in ipairs(threads) do
-    local comments = thread.comments and thread.comments.nodes
-    if comments and #comments > 0 and comments[1].databaseId == comment_id then
-      thread_node_id = thread.id
-      break
+    log.debug("GraphQL: fetching review threads for comment " .. discussion_id)
+    local ldata, lerr = graphql(nil, headers, lookup_query)
+    if not ldata then
+      return nil, lerr or "GraphQL lookup failed"
     end
-  end
 
-  if not thread_node_id then
-    log.error("GraphQL: no thread matched comment id " .. discussion_id)
-    return nil, "Could not find thread for comment " .. discussion_id
+    local threads = ldata
+      and ldata.repository
+      and ldata.repository.pullRequest
+      and ldata.repository.pullRequest.reviewThreads
+      and ldata.repository.pullRequest.reviewThreads.nodes
+    if not threads then
+      log.error("GraphQL: no review threads in response")
+      return nil, "No review threads found"
+    end
+
+    local comment_id = tonumber(discussion_id)
+    for _, thread in ipairs(threads) do
+      local comments = thread.comments and thread.comments.nodes
+      if comments and #comments > 0 and comments[1].databaseId == comment_id then
+        thread_node_id = thread.id
+        break
+      end
+    end
+
+    if not thread_node_id then
+      log.error("GraphQL: no thread matched comment id " .. discussion_id)
+      return nil, "Could not find thread for comment " .. discussion_id
+    end
   end
 
   -- Step 2: resolve or unresolve

@@ -381,7 +381,7 @@ function M.resolve_toggle(disc, mr, callback)
   if not provider then return end
 
   local currently_resolved = first.resolved
-  local _, err = provider.resolve_discussion(client, ctx, mr, disc.id, not currently_resolved)
+  local _, err = provider.resolve_discussion(client, ctx, mr, disc.id, not currently_resolved, disc.node_id)
   if err then
     vim.notify("Failed to toggle resolve: " .. err, vim.log.levels.ERROR)
   elseif callback then
