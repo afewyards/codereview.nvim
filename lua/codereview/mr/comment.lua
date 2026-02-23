@@ -154,6 +154,30 @@ local function open_input_popup(title, callback, opts)
     end,
   })
 
+  -- Close on leaving the float window
+  vim.api.nvim_create_autocmd("WinLeave", {
+    buffer = buf,
+    callback = function()
+      if closed then return true end
+      local lines = vim.api.nvim_buf_get_lines(buf, header_count, -1, false)
+      local text = vim.trim(table.concat(lines, "\n"))
+      if text ~= "" then
+        local choice = vim.fn.confirm("Discard comment?", "&Discard\n&Submit\n&Cancel", 3)
+        if choice == 1 then
+          close()
+        elseif choice == 2 then
+          submit()
+        else
+          -- Cancel — return focus to the float
+          vim.api.nvim_set_current_win(win)
+        end
+      else
+        close()
+      end
+      return true
+    end,
+  })
+
   -- WinClosed guard
   vim.api.nvim_create_autocmd("WinClosed", {
     pattern = tostring(win),
