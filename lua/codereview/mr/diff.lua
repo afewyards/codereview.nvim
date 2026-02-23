@@ -6,6 +6,7 @@ local LINE_NR_WIDTH = 14
 
 local DIFF_NS = vim.api.nvim_create_namespace("codereview_diff")
 local AIDRAFT_NS = vim.api.nvim_create_namespace("codereview_ai_draft")
+local SUMMARY_NS = vim.api.nvim_create_namespace("codereview_summary")
 
 
 -- ─── Active state tracking ────────────────────────────────────────────────────
@@ -771,8 +772,8 @@ function M.render_summary(buf, state)
   local markdown_mod = require("codereview.ui.markdown")
 
   local lines = detail.build_header_lines(state.review)
-  local activity_lines = detail.build_activity_lines(state.discussions)
-  for _, line in ipairs(activity_lines) do
+  local activity = detail.build_activity_lines(state.discussions)
+  for _, line in ipairs(activity.lines) do
     table.insert(lines, line)
   end
 
@@ -783,11 +784,29 @@ function M.render_summary(buf, state)
     "  %d discussions (%d unresolved)",
     total, unresolved
   ))
-  table.insert(lines, "")
-  table.insert(lines, "  [c]omment  [a]pprove  [A]I review  [p]ipeline  [m]erge  [R]efresh  [q]uit")
 
   vim.bo[buf].modifiable = true
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+
+  -- Clear old summary highlights
+  vim.api.nvim_buf_clear_namespace(buf, SUMMARY_NS, 0, -1)
+
+  -- Activity lines start after header
+  local header_count = #detail.build_header_lines(state.review)
+  for _, hl in ipairs(activity.highlights) do
+    local row = header_count + hl[1]  -- 0-indexed row in buffer
+    pcall(vim.api.nvim_buf_set_extmark, buf, SUMMARY_NS, row, hl[2], {
+      end_col = hl[3],
+      hl_group = hl[4],
+    })
+  end
+
+  -- Build summary row map (buffer row → discussion)
+  state.summary_row_map = {}
+  for offset, entry in pairs(activity.row_map) do
+    state.summary_row_map[header_count + offset + 1] = entry  -- +1 for 1-indexed rows
+  end
+
   markdown_mod.set_buf_markdown(buf)
   vim.bo[buf].modifiable = false
 end
@@ -889,6 +908,20 @@ local function build_footer(state, sess)
   table.insert(lines, string.rep("─", 30))
 
   if state.view_mode == "summary" then
+    header("Navigate")
+    local nc, pc = k("next_comment"), k("prev_comment")
+    if nc and pc then row(nc .. " " .. pc .. "  threads")
+    elseif nc then row(nc .. "  next thread")
+    elseif pc then row(pc .. "  prev thread")
+    end
+
+    header("Comment")
+    local r_key = k("reply")
+    if r_key then row(r_key .. " reply") end
+    local resolve_key = k("toggle_resolve")
+    if resolve_key then row(resolve_key .. "     resolve") end
+
+    header("Actions")
     pair_row(k("approve"), "approve", "   ", k("open_in_browser"), "open")
     pair_row(k("merge"), "merge", "     ", k("refresh"), "refresh")
     if k("quit") then row(k("quit") .. " quit") end
