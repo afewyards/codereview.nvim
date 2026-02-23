@@ -174,6 +174,10 @@ function M.open(entry)
     scroll_line_data = {},
     scroll_row_disc = {},
     file_contexts = {},
+    ai_suggestions = nil,
+    row_ai_cache = {},
+    scroll_row_ai = {},
+    local_drafts = {},
   }
 
   diff.render_sidebar(layout.sidebar_buf, state)
