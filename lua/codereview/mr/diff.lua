@@ -850,6 +850,64 @@ local function count_session_stats(state)
   return stats
 end
 
+--- Build dynamic keymap footer lines + highlight metadata.
+--- @param state table  diff viewer state
+--- @param sess table   current review session (from session.get())
+--- @return string[] lines
+--- @return table[] highlights  Array of {row:integer, line_hl:string}
+local function build_footer(state, sess)
+  local lines = {}
+  local hls = {}
+
+  local function header(label)
+    local text = string.format("───── %s %s", label, string.rep("─", 24 - #label))
+    table.insert(lines, text)
+    hls[#hls + 1] = { row = #lines, line_hl = "CodeReviewHidden" }
+  end
+
+  local function row(text)
+    table.insert(lines, text)
+  end
+
+  table.insert(lines, "")
+  table.insert(lines, string.rep("─", 30))
+
+  if state.view_mode == "summary" then
+    row("a approve   o open")
+    row("m merge     R refresh")
+    row("q quit")
+    return lines, hls
+  end
+
+  -- Diff mode
+
+  header("Navigate")
+  row("]f [f  files")
+  if sess.active then
+    row("]c [c  comments  ]s [s AI")
+  else
+    row("]c [c  comments")
+  end
+
+  header("Comment")
+  row("cc     new       r reply")
+  row("gt     resolve")
+
+  if sess.active then
+    header("AI")
+    row("a accept   x dismiss")
+    row("e edit     ds dismiss all")
+    row("S submit   A cancel AI")
+  end
+
+  header("View")
+  row("+/-    context   ⌃F full")
+  row("⌃A     scroll    R  refresh")
+  row("q quit")
+
+  return lines, hls
+end
+
 function M.render_sidebar(buf, state)
   local list = require("codereview.mr.list")
   local review = state.review
@@ -992,13 +1050,11 @@ function M.render_sidebar(buf, state)
     state.sidebar_row_map[#lines] = { type = "file", idx = entry.idx }
   end
 
-  table.insert(lines, "")
-  table.insert(lines, string.rep("─", 30))
-  table.insert(lines, "]f/[f  ]c/[c  cc:comment")
-  table.insert(lines, "r:reply  gt:un/resolve")
-  table.insert(lines, "s:summary  R:refresh  q:quit")
-  table.insert(lines, "+/- context  C-f:full file")
-  table.insert(lines, "<C-a>:toggle view")
+  local footer_lines, footer_hls = build_footer(state, sess)
+  local footer_start = #lines
+  for _, fl in ipairs(footer_lines) do
+    table.insert(lines, fl)
+  end
 
   vim.bo[buf].modifiable = true
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
@@ -1053,6 +1109,11 @@ function M.render_sidebar(buf, state)
         pcall(apply_word_hl, buf, row0, s - 1, e, seg.hl)
       end
     end
+  end
+
+  -- Footer group header highlights
+  for _, fhl in ipairs(footer_hls) do
+    pcall(apply_line_hl, buf, footer_start + fhl.row - 1, fhl.line_hl)
   end
 end
 
