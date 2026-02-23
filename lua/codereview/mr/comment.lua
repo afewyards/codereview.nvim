@@ -168,8 +168,12 @@ local function open_input_popup(title, callback, opts)
         elseif choice == 2 then
           submit()
         else
-          -- Cancel — return focus to the float
-          vim.api.nvim_set_current_win(win)
+          -- Cancel — defer refocus so it runs after the window switch completes
+          vim.schedule(function()
+            if not closed and vim.api.nvim_win_is_valid(win) then
+              vim.api.nvim_set_current_win(win)
+            end
+          end)
         end
       else
         close()
