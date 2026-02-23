@@ -10,9 +10,7 @@ local function open_input_popup(title, callback, opts)
   opts = opts or {}
   local ifloat = require("codereview.ui.inline_float")
 
-  -- Build context header
-  local header_lines = ifloat.build_context_header(opts)
-  local header_count = #header_lines
+  local header_count = 0
 
   -- Determine if we can use inline mode
   local use_inline = opts.anchor_line and opts.win_id
@@ -24,9 +22,8 @@ local function open_input_popup(title, callback, opts)
   vim.bo[buf].bufhidden = "wipe"
   vim.bo[buf].filetype = "markdown"
 
-  -- Set initial content: header + prefill or empty line
+  -- Set initial content: prefill or empty line
   local init_lines = {}
-  for _, hl in ipairs(header_lines) do table.insert(init_lines, hl) end
   if opts.prefill and opts.prefill ~= "" then
     for _, pl in ipairs(vim.split(opts.prefill, "\n")) do
       table.insert(init_lines, pl)
@@ -89,11 +86,8 @@ local function open_input_popup(title, callback, opts)
     })
   end
 
-  -- Apply header highlights
-  ifloat.apply_header_hl(buf, header_count)
-
-  -- Place cursor on first editable line
-  pcall(vim.api.nvim_win_set_cursor, win, { header_count + 1, 0 })
+  -- Place cursor on first line
+  pcall(vim.api.nvim_win_set_cursor, win, { 1, 0 })
 
   -- Start in insert for new comments, normal for edits
   if opts.action_type == "edit" then
@@ -143,18 +137,6 @@ local function open_input_popup(title, callback, opts)
           ifloat.update_space(diff_buf, extmark_id, opts.anchor_line - 1, new_height + 2)
         end
       end)
-    end,
-  })
-
-  -- Clamp cursor to editable region
-  vim.api.nvim_create_autocmd("CursorMoved", {
-    buffer = buf,
-    callback = function()
-      if closed then return true end
-      local cursor = vim.api.nvim_win_get_cursor(win)
-      if cursor[1] <= header_count then
-        pcall(vim.api.nvim_win_set_cursor, win, { header_count + 1, cursor[2] })
-      end
     end,
   })
 
