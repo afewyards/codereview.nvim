@@ -1313,16 +1313,12 @@ function M.setup_keymaps(layout, state)
     end
   end)
 
-  -- Re-fetch discussions from API and re-render the diff view
-  local function refresh_discussions()
-    local client_mod = require("codereview.api.client")
-    local discs = state.provider.get_discussions(client_mod, state.ctx, state.review) or {}
-    state.discussions = discs
-
+  -- Re-render discussions without re-fetching from API
+  local function rerender_view()
     local view = vim.fn.winsaveview()
 
     if state.scroll_mode then
-      local result = M.render_all_files(layout.main_buf, state.files, state.review, discs, state.context, state.file_contexts, state.ai_suggestions)
+      local result = M.render_all_files(layout.main_buf, state.files, state.review, state.discussions, state.context, state.file_contexts, state.ai_suggestions)
       state.file_sections = result.file_sections
       state.scroll_line_data = result.line_data
       state.scroll_row_disc = result.row_discussions
@@ -1330,7 +1326,7 @@ function M.setup_keymaps(layout, state)
     else
       local file = state.files and state.files[state.current_file]
       if file then
-        local ld, rd, ra = M.render_file_diff(layout.main_buf, file, state.review, discs, state.context, state.ai_suggestions)
+        local ld, rd, ra = M.render_file_diff(layout.main_buf, file, state.review, state.discussions, state.context, state.ai_suggestions)
         state.line_data_cache[state.current_file] = ld
         state.row_disc_cache[state.current_file] = rd
         state.row_ai_cache[state.current_file] = ra
@@ -1342,6 +1338,41 @@ function M.setup_keymaps(layout, state)
     view.lnum = math.min(view.lnum, max_line)
     view.topline = math.min(view.topline, max_line)
     vim.fn.winrestview(view)
+  end
+
+  -- Re-fetch discussions from API and re-render the diff view
+  local function refresh_discussions()
+    local client_mod = require("codereview.api.client")
+    local discs = state.provider.get_discussions(client_mod, state.ctx, state.review) or {}
+    -- Merge local drafts that the API won't return
+    for _, d in ipairs(state.local_drafts or {}) do
+      table.insert(discs, d)
+    end
+    state.discussions = discs
+    rerender_view()
+  end
+
+  -- Add a draft comment to local state and re-render
+  local function add_local_draft(new_path, new_line, start_line)
+    return function(text)
+      local disc = {
+        notes = {{
+          author = "You (draft)",
+          body = text,
+          created_at = os.date("!%Y-%m-%dT%H:%M:%SZ"),
+          position = {
+            new_path = new_path,
+            new_line = new_line,
+            start_line = start_line,
+          },
+        }},
+        is_draft = true,
+      }
+      if not state.local_drafts then state.local_drafts = {} end
+      table.insert(state.local_drafts, disc)
+      table.insert(state.discussions, disc)
+      rerender_view()
+    end
   end
 
   -- Comment creation (works in both diff and summary modes)
@@ -1364,7 +1395,8 @@ function M.setup_keymaps(layout, state)
       local file = state.files[data.file_idx]
       local comment = require("codereview.mr.comment")
       if session.get().active then
-        comment.create_inline_draft(state.review, file.new_path, data.item.new_line, refresh_discussions)
+        comment.create_inline_draft(state.review, file.new_path, data.item.new_line,
+          add_local_draft(file.new_path, data.item.new_line))
       else
         comment.create_inline(state.review, file.old_path, file.new_path, data.item.old_line, data.item.new_line, refresh_discussions)
       end
@@ -1381,7 +1413,8 @@ function M.setup_keymaps(layout, state)
         end
         local file = state.files[state.current_file]
         local comment = require("codereview.mr.comment")
-        comment.create_inline_draft(state.review, file.new_path, data.item.new_line, refresh_discussions)
+        comment.create_inline_draft(state.review, file.new_path, data.item.new_line,
+          add_local_draft(file.new_path, data.item.new_line))
       else
         M.create_comment_at_cursor(layout, state, refresh_discussions)
       end
@@ -1407,7 +1440,7 @@ function M.setup_keymaps(layout, state)
           file.new_path,
           start_data.item.new_line,
           end_data.item.new_line,
-          refresh_discussions
+          add_local_draft(file.new_path, end_data.item.new_line, start_data.item.new_line)
         )
       else
         comment.create_inline_range(
@@ -1438,7 +1471,7 @@ function M.setup_keymaps(layout, state)
           file.new_path,
           start_data.item.new_line,
           end_data.item.new_line,
-          refresh_discussions
+          add_local_draft(file.new_path, end_data.item.new_line, start_data.item.new_line)
         )
       else
         M.create_comment_range(layout, state, refresh_discussions)
@@ -1730,6 +1763,7 @@ function M.setup_keymaps(layout, state)
     end
 
     submit_mod.submit_and_publish(state.review, state.ai_suggestions)
+    state.local_drafts = {}
     rerender_ai()
     session.stop()
     M.render_sidebar(layout.sidebar_buf, state)
@@ -2000,6 +2034,7 @@ function M.open(review, discussions)
     ai_suggestions = nil,
     row_ai_cache = {},
     scroll_row_ai = {},
+    local_drafts = {},
   }
 
   M.render_sidebar(layout.sidebar_buf, state)

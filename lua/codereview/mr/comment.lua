@@ -245,7 +245,7 @@ function M.create_inline_draft(mr, new_path, new_line, on_success)
       vim.notify("Failed to create draft comment: " .. err, vim.log.levels.ERROR)
     else
       vim.notify("Draft comment created", vim.log.levels.INFO)
-      if on_success then on_success() end
+      if on_success then on_success(text) end
     end
   end)
 end
@@ -263,7 +263,7 @@ function M.create_inline_range_draft(mr, new_path, start_line, end_line, on_succ
       vim.notify("Failed to create draft comment: " .. err, vim.log.levels.ERROR)
     else
       vim.notify("Draft comment created", vim.log.levels.INFO)
-      if on_success then on_success() end
+      if on_success then on_success(text) end
     end
   end)
 end
