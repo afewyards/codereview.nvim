@@ -522,6 +522,25 @@ describe("mr.diff", function()
     end)
   end)
 
+  describe("cycle_note_selection", function()
+    it("cycles nil -> 1 -> 2 -> nil for 2-note thread", function()
+      assert.equals(1, diff.cycle_note_selection(nil, 2, 1))
+      assert.equals(2, diff.cycle_note_selection(1, 2, 1))
+      assert.is_nil(diff.cycle_note_selection(2, 2, 1))
+    end)
+
+    it("cycles backward nil -> 2 -> 1 -> nil", function()
+      assert.equals(2, diff.cycle_note_selection(nil, 2, -1))
+      assert.equals(1, diff.cycle_note_selection(2, 2, -1))
+      assert.is_nil(diff.cycle_note_selection(1, 2, -1))
+    end)
+
+    it("handles single-note thread", function()
+      assert.equals(1, diff.cycle_note_selection(nil, 1, 1))
+      assert.is_nil(diff.cycle_note_selection(1, 1, 1))
+    end)
+  end)
+
   describe("load_diffs_into_state", function()
     it("sets state.files when not yet loaded", function()
       local state = {

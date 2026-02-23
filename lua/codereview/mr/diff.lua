@@ -18,6 +18,22 @@ function M.get_state(buf)
   return active_states[buf]
 end
 
+--- Cycle note selection within a discussion thread.
+--- @param current number|nil  currently selected note index (1-based), or nil if none
+--- @param note_count number   total number of notes in the thread
+--- @param direction number    +1 for forward, -1 for backward
+--- @return number|nil         next selected index, or nil to deselect
+function M.cycle_note_selection(current, note_count, direction)
+  if not current then
+    return direction > 0 and 1 or note_count
+  end
+  local next_idx = current + direction
+  if next_idx < 1 or next_idx > note_count then
+    return nil
+  end
+  return next_idx
+end
+
 -- ─── Formatting helpers ───────────────────────────────────────────────────────
 
 function M.format_line_number(old_nr, new_nr)
@@ -123,7 +139,7 @@ local function is_resolved(discussion)
   return note and note.resolved
 end
 
-function M.place_comment_signs(buf, line_data, discussions, file_diff)
+function M.place_comment_signs(buf, line_data, discussions, file_diff, note_selection, current_user)
   -- Remove old signs for this buffer
   pcall(vim.fn.sign_unplace, "CodeReview", { buffer = buf })
 
@@ -176,20 +192,25 @@ function M.place_comment_signs(buf, line_data, discussions, file_diff)
               local header_text = "@" .. first.author
               local fill = math.max(0, 62 - #header_text - #header_meta - #status_str)
 
+              local sel_idx = note_selection and note_selection[discussion.id]
+
               local virt_lines = {}
 
               -- ┌ @author · 02/15 14:30 · Unresolved ─────────
+              local n1_bdr = (sel_idx == 1) and "CodeReviewSelectedNote" or bdr
+              local n1_aut = (sel_idx == 1) and "CodeReviewSelectedNote" or aut
+              local n1_body_hl = (sel_idx == 1) and "CodeReviewSelectedNote" or body_hl
               table.insert(virt_lines, {
-                { "  ┌ ", bdr },
-                { header_text, aut },
-                { header_meta, bdr },
+                { "  ┌ ", n1_bdr },
+                { header_text, n1_aut },
+                { header_meta, n1_bdr },
                 { status_str, status_hl },
-                { string.rep("─", fill), bdr },
+                { string.rep("─", fill), n1_bdr },
               })
 
               -- Comment body (wrapped, full)
               for _, bl in ipairs(wrap_text(first.body, config.get().diff.comment_width)) do
-                table.insert(virt_lines, md_virt_line({ "  │ ", bdr }, bl, body_hl))
+                table.insert(virt_lines, md_virt_line({ "  │ ", n1_bdr }, bl, n1_body_hl))
               end
 
               -- Replies
@@ -198,14 +219,17 @@ function M.place_comment_signs(buf, line_data, discussions, file_diff)
                 if not reply.system then
                   local rt = format_time_short(reply.created_at)
                   local rmeta = rt ~= "" and (" · " .. rt) or ""
-                  table.insert(virt_lines, { { "  │", bdr } })
+                  local ri_bdr = (sel_idx == i) and "CodeReviewSelectedNote" or bdr
+                  local ri_aut = (sel_idx == i) and "CodeReviewSelectedNote" or aut
+                  local ri_body_hl = (sel_idx == i) and "CodeReviewSelectedNote" or body_hl
+                  table.insert(virt_lines, { { "  │", ri_bdr } })
                   table.insert(virt_lines, {
-                    { "  │  ↪ ", bdr },
-                    { "@" .. reply.author, aut },
-                    { rmeta, bdr },
+                    { "  │  ↪ ", ri_bdr },
+                    { "@" .. reply.author, ri_aut },
+                    { rmeta, ri_bdr },
                   })
                   for _, rl in ipairs(wrap_text(reply.body, 58)) do
-                    table.insert(virt_lines, md_virt_line({ "  │    ", bdr }, rl, body_hl))
+                    table.insert(virt_lines, md_virt_line({ "  │    ", ri_bdr }, rl, ri_body_hl))
                   end
                 end
               end
@@ -218,6 +242,13 @@ function M.place_comment_signs(buf, line_data, discussions, file_diff)
                 footer_content = "posting…"
               elseif discussion.is_draft then
                 footer_content = "gt:un/resolve"
+              elseif sel_idx and current_user then
+                local sel_note = notes[sel_idx]
+                if sel_note and sel_note.author == current_user then
+                  footer_content = "r:reply  gt:un/resolve  e:edit  x:delete"
+                else
+                  footer_content = "r:reply  gt:un/resolve"
+                end
               else
                 footer_content = "r:reply  gt:un/resolve"
               end
@@ -374,7 +405,7 @@ end
 
 -- ─── Diff rendering ───────────────────────────────────────────────────────────
 
-function M.render_file_diff(buf, file_diff, review, discussions, context, ai_suggestions)
+function M.render_file_diff(buf, file_diff, review, discussions, context, ai_suggestions, note_selection, current_user)
   local parser = require("codereview.mr.diff_parser")
   if not context then
     context = config.get().diff.context
@@ -501,7 +532,7 @@ function M.render_file_diff(buf, file_diff, review, discussions, context, ai_sug
 
   local row_discussions = {}
   if discussions then
-    row_discussions = M.place_comment_signs(buf, line_data, discussions, file_diff) or {}
+    row_discussions = M.place_comment_signs(buf, line_data, discussions, file_diff, note_selection, current_user) or {}
   end
 
   local row_ai = {}
@@ -514,7 +545,7 @@ end
 
 -- ─── All-files scroll view ────────────────────────────────────────────────────
 
-function M.render_all_files(buf, files, review, discussions, context, file_contexts, ai_suggestions)
+function M.render_all_files(buf, files, review, discussions, context, file_contexts, ai_suggestions, note_selection, current_user)
   local parser = require("codereview.mr.diff_parser")
   context = context or config.get().diff.context
   file_contexts = file_contexts or {}
@@ -738,26 +769,34 @@ function M.render_all_files(buf, files, review, discussions, context, file_conte
                 local header_text = "@" .. first.author
                 local fill = math.max(0, 62 - #header_text - #header_meta - #status_str)
 
+                local sel_idx = note_selection and note_selection[disc.id]
+
                 local virt_lines = {}
+                local n1_bdr = (sel_idx == 1) and "CodeReviewSelectedNote" or bdr
+                local n1_aut = (sel_idx == 1) and "CodeReviewSelectedNote" or aut
+                local n1_body_hl = (sel_idx == 1) and "CodeReviewSelectedNote" or body_hl
                 table.insert(virt_lines, {
-                  { "  ┌ ", bdr }, { header_text, aut },
-                  { header_meta, bdr }, { status_str, status_hl },
-                  { string.rep("─", fill), bdr },
+                  { "  ┌ ", n1_bdr }, { header_text, n1_aut },
+                  { header_meta, n1_bdr }, { status_str, status_hl },
+                  { string.rep("─", fill), n1_bdr },
                 })
                 for _, bl in ipairs(wrap_text(first.body, config.get().diff.comment_width)) do
-                  table.insert(virt_lines, md_virt_line({ "  │ ", bdr }, bl, body_hl))
+                  table.insert(virt_lines, md_virt_line({ "  │ ", n1_bdr }, bl, n1_body_hl))
                 end
                 for ni = 2, #notes do
                   local reply = notes[ni]
                   if not reply.system then
                     local rt = format_time_short(reply.created_at)
                     local rmeta = rt ~= "" and (" · " .. rt) or ""
-                    table.insert(virt_lines, { { "  │", bdr } })
+                    local ri_bdr = (sel_idx == ni) and "CodeReviewSelectedNote" or bdr
+                    local ri_aut = (sel_idx == ni) and "CodeReviewSelectedNote" or aut
+                    local ri_body_hl = (sel_idx == ni) and "CodeReviewSelectedNote" or body_hl
+                    table.insert(virt_lines, { { "  │", ri_bdr } })
                     table.insert(virt_lines, {
-                      { "  │  ↪ ", bdr }, { "@" .. reply.author, aut }, { rmeta, bdr },
+                      { "  │  ↪ ", ri_bdr }, { "@" .. reply.author, ri_aut }, { rmeta, ri_bdr },
                     })
                     for _, rl in ipairs(wrap_text(reply.body, 58)) do
-                      table.insert(virt_lines, md_virt_line({ "  │    ", bdr }, rl, body_hl))
+                      table.insert(virt_lines, md_virt_line({ "  │    ", ri_bdr }, rl, ri_body_hl))
                     end
                   end
                 end
@@ -768,6 +807,13 @@ function M.render_all_files(buf, files, review, discussions, context, file_conte
                   footer_content = "posting…"
                 elseif disc.is_draft then
                   footer_content = "gt:un/resolve"
+                elseif sel_idx and current_user then
+                  local sel_note = notes[sel_idx]
+                  if sel_note and sel_note.author == current_user then
+                    footer_content = "r:reply  gt:un/resolve  e:edit  x:delete"
+                  else
+                    footer_content = "r:reply  gt:un/resolve"
+                  end
                 else
                   footer_content = "r:reply  gt:un/resolve"
                 end
@@ -1558,7 +1604,7 @@ function M.setup_keymaps(layout, state)
     local view = vim.fn.winsaveview()
 
     if state.scroll_mode then
-      local result = M.render_all_files(layout.main_buf, state.files, state.review, state.discussions, state.context, state.file_contexts, state.ai_suggestions)
+      local result = M.render_all_files(layout.main_buf, state.files, state.review, state.discussions, state.context, state.file_contexts, state.ai_suggestions, state.note_selection, state.current_user)
       state.file_sections = result.file_sections
       state.scroll_line_data = result.line_data
       state.scroll_row_disc = result.row_discussions
@@ -1566,7 +1612,7 @@ function M.setup_keymaps(layout, state)
     else
       local file = state.files and state.files[state.current_file]
       if file then
-        local ld, rd, ra = M.render_file_diff(layout.main_buf, file, state.review, state.discussions, state.context, state.ai_suggestions)
+        local ld, rd, ra = M.render_file_diff(layout.main_buf, file, state.review, state.discussions, state.context, state.ai_suggestions, state.note_selection, state.current_user)
         state.line_data_cache[state.current_file] = ld
         state.row_disc_cache[state.current_file] = rd
         state.row_ai_cache[state.current_file] = ra
@@ -2360,6 +2406,24 @@ function M.setup_keymaps(layout, state)
       review_mod.start(state.review, state, layout)
     end,
 
+    select_next_note = function()
+      if state.view_mode ~= "diff" then return end
+      local disc = get_cursor_disc()
+      if not disc or not disc.notes or #disc.notes == 0 then return end
+      local current = state.note_selection[disc.id]
+      state.note_selection[disc.id] = M.cycle_note_selection(current, #disc.notes, 1)
+      rerender_view()
+    end,
+
+    select_prev_note = function()
+      if state.view_mode ~= "diff" then return end
+      local disc = get_cursor_disc()
+      if not disc or not disc.notes or #disc.notes == 0 then return end
+      local current = state.note_selection[disc.id]
+      state.note_selection[disc.id] = M.cycle_note_selection(current, #disc.notes, -1)
+      rerender_view()
+    end,
+
     refresh = refresh,
     quit    = quit,
   }
@@ -2544,15 +2608,28 @@ function M.setup_keymaps(layout, state)
     end,
   })
 
-  -- Sync sidebar highlight with current file as cursor moves in scroll mode
+  -- Sync sidebar highlight with current file as cursor moves in scroll mode;
+  -- also clear note selection when cursor leaves a discussion row.
   vim.api.nvim_create_autocmd("CursorMoved", {
     buffer = main_buf,
     callback = function()
-      if not state.scroll_mode or state.view_mode ~= "diff" or #state.file_sections == 0 then return end
-      local file_idx = current_file_from_cursor(layout, state)
-      if file_idx ~= state.current_file then
-        state.current_file = file_idx
-        M.render_sidebar(layout.sidebar_buf, state)
+      if state.view_mode ~= "diff" then return end
+
+      -- Clear note selection when cursor moves off a discussion row
+      local disc = get_cursor_disc()
+      if not disc then
+        local had_selection = next(state.note_selection) ~= nil
+        state.note_selection = {}
+        if had_selection then rerender_view() end
+      end
+
+      -- Sync sidebar file highlight in scroll mode
+      if state.scroll_mode and #state.file_sections > 0 then
+        local file_idx = current_file_from_cursor(layout, state)
+        if file_idx ~= state.current_file then
+          state.current_file = file_idx
+          M.render_sidebar(layout.sidebar_buf, state)
+        end
       end
     end,
   })
@@ -2575,6 +2652,7 @@ function M.load_diffs_into_state(state, files)
   state.row_ai_cache = state.row_ai_cache or {}
   state.scroll_row_ai = state.scroll_row_ai or {}
   state.local_drafts = state.local_drafts or {}
+  state.note_selection = state.note_selection or {}
   state.current_file = 1
 end
 
@@ -2623,9 +2701,18 @@ function M.open(review, discussions)
     row_ai_cache = {},
     scroll_row_ai = {},
     local_drafts = {},
+    note_selection = {},
+    current_user = nil,
   }
 
   M.render_sidebar(layout.sidebar_buf, state)
+
+  -- Fetch current user for note authorship checks (edit/delete guards)
+  vim.schedule(function()
+    local client_mod = require("codereview.api.client")
+    local user, _ = provider.get_current_user(client_mod, ctx)
+    if user then state.current_user = user end
+  end)
 
   if #files > 0 then
     if state.scroll_mode then
