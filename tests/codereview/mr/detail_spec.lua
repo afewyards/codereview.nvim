@@ -44,8 +44,7 @@ describe("mr.detail", function()
         },
       }
       local result = detail.build_activity_lines(discussions)
-      local lines = result.lines
-      local joined = table.concat(lines, "\n")
+      local joined = table.concat(result.lines, "\n")
       assert.truthy(joined:find("jan"))
       assert.truthy(joined:find("Looks good"))
     end)
@@ -67,8 +66,7 @@ describe("mr.detail", function()
         },
       }
       local result = detail.build_activity_lines(discussions)
-      local lines = result.lines
-      local joined = table.concat(lines, "\n")
+      local joined = table.concat(result.lines, "\n")
       assert.truthy(joined:find("jan"))
       assert.truthy(joined:find("approved"))
     end)

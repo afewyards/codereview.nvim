@@ -132,7 +132,7 @@ function M.build_activity_lines(discussions)
       local fill = math.max(0, 62 - #header_text - #header_meta - #status_str)
 
       -- Row offset is 0-indexed from start of lines table
-      local thread_start_row = #lines  -- 0-indexed (length before insert = index of next item)
+      local thread_start_row = #lines
 
       -- Header: ┌ @author · MM/DD HH:MM  Resolved/Unresolved ──────
       table.insert(lines, string.format(
