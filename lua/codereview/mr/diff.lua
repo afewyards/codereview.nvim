@@ -227,18 +227,20 @@ function M.place_ai_suggestions(buf, line_data, suggestions, file_diff)
       if data.item and data.item.new_line == suggestion.line then
         pcall(vim.fn.sign_place, 0, "CodeReviewAI", "CodeReviewAISign", buf, { lnum = row })
 
-        local bdr = "CodeReviewAIDraftBorder"
-        local body_hl = "CodeReviewAIDraft"
+        local drafted = suggestion.status == "accepted" or suggestion.status == "edited"
+        local bdr = drafted and "CodeReviewCommentBorder" or "CodeReviewAIDraftBorder"
+        local body_hl = drafted and "CodeReviewComment" or "CodeReviewAIDraft"
         local severity = suggestion.severity or "info"
-        local header_fill = math.max(0, 62 - #(" AI [" .. severity .. "] "))
-        local footer_content = "a:accept  x:dismiss  e:edit"
+        local header_label = drafted and (" AI [" .. severity .. "] ✓ drafted ") or (" AI [" .. severity .. "] ")
+        local header_fill = math.max(0, 62 - #header_label)
+        local footer_content = drafted and "x:dismiss  S:publish" or "a:accept  x:dismiss  e:edit"
         local footer_fill = math.max(0, 62 - #footer_content - 1)
 
         local virt_lines = {}
 
         -- ┌ AI [severity] ──────────────────────────────────────────
         table.insert(virt_lines, {
-          { "  ┌ AI [" .. severity .. "] ", bdr },
+          { "  ┌" .. header_label, bdr },
           { string.rep("─", header_fill), bdr },
         })
 
@@ -294,17 +296,19 @@ function M.place_ai_suggestions_all(buf, all_line_data, file_sections, suggestio
             and data.file_idx == section.file_idx then
             pcall(vim.fn.sign_place, 0, "CodeReviewAI", "CodeReviewAISign", buf, { lnum = i })
 
-            local bdr = "CodeReviewAIDraftBorder"
-            local body_hl = "CodeReviewAIDraft"
+            local drafted = suggestion.status == "accepted" or suggestion.status == "edited"
+            local bdr = drafted and "CodeReviewCommentBorder" or "CodeReviewAIDraftBorder"
+            local body_hl = drafted and "CodeReviewComment" or "CodeReviewAIDraft"
             local severity = suggestion.severity or "info"
-            local header_fill = math.max(0, 62 - #(" AI [" .. severity .. "] "))
-            local footer_content = "a:accept  x:dismiss  e:edit"
+            local header_label = drafted and (" AI [" .. severity .. "] ✓ drafted ") or (" AI [" .. severity .. "] ")
+            local header_fill = math.max(0, 62 - #header_label)
+            local footer_content = drafted and "x:dismiss  S:publish" or "a:accept  x:dismiss  e:edit"
             local footer_fill = math.max(0, 62 - #footer_content - 1)
 
             local virt_lines = {}
 
             table.insert(virt_lines, {
-              { "  ┌ AI [" .. severity .. "] ", bdr },
+              { "  ┌" .. header_label, bdr },
               { string.rep("─", header_fill), bdr },
             })
 
@@ -1570,9 +1574,8 @@ function M.setup_keymaps(layout, state)
     end
 
     vim.notify("Draft comment posted", vim.log.levels.INFO)
-    suggestion.status = "dismissed"
+    suggestion.status = "accepted"
     rerender_ai()
-    refresh_discussions()
     nav_to_next_ai(cursor)
   end)
 
