@@ -204,9 +204,9 @@ function M.open_input_popup(title, callback, opts)
               if anchor_scr.row > 0 then
                 local anchor_vrow = anchor_scr.row - 1 - win_pos[1]
                 if anchor_vrow > max_row then
-                  local scroll = anchor_vrow - max_row
+                  local scroll_by = anchor_vrow - max_row
                   vim.api.nvim_win_call(opts.win_id, function()
-                    vim.cmd("normal! " .. scroll .. "\\<C-e>")
+                    vim.cmd('execute "normal! ' .. scroll_by .. '\\<C-e>"')
                   end)
                 end
               end
