@@ -86,10 +86,13 @@ function M.build_activity_lines(discussions)
   end
 
   local lines = result.lines
+  local highlights = result.highlights
   local row_map = result.row_map
 
   table.insert(lines, "")
-  table.insert(lines, "-- Activity " .. string.rep("-", 58))
+  local activity_line = "-- Activity " .. string.rep("-", 58)
+  table.insert(lines, activity_line)
+  table.insert(highlights, {#lines - 1, 0, #activity_line, "CodeReviewThreadBorder"})
   table.insert(lines, "")
 
   local km = require("codereview.keymaps")
@@ -141,6 +144,22 @@ function M.build_activity_lines(discussions)
         ))
         row_map[thread_start_row] = { type = "thread_start", discussion = disc }
 
+        -- Header highlights
+        table.insert(highlights, {thread_start_row, 0, 3, "CodeReviewThreadBorder"})
+        table.insert(highlights, {thread_start_row, 4, 4 + #header_text, "CodeReviewCommentAuthor"})
+        if #header_meta > 0 then
+          table.insert(highlights, {thread_start_row, 4 + #header_text, 4 + #header_text + #header_meta, "CodeReviewThreadMeta"})
+        end
+        if #status_str > 0 then
+          local status_start = 4 + #header_text + #header_meta
+          local status_hl = resolved and "CodeReviewCommentResolved" or "CodeReviewCommentUnresolved"
+          table.insert(highlights, {thread_start_row, status_start, status_start + #status_str, status_hl})
+        end
+        if fill > 0 then
+          local fill_start = 4 + #header_text + #header_meta + #status_str
+          table.insert(highlights, {thread_start_row, fill_start, fill_start + fill * 3, "CodeReviewThreadBorder"})
+        end
+
         -- Body lines (raw markdown, no prefix so treesitter can render)
         for _, bl in ipairs(vim.split(first_note.body or "", "\n")) do
           local row = #lines
@@ -162,6 +181,14 @@ function M.build_activity_lines(discussions)
             table.insert(lines, string.format("↪ @%s%s", reply.author, rmeta))
             row_map[reply_header_row] = { type = "thread", discussion = disc }
 
+            -- Reply header highlights
+            table.insert(highlights, {reply_header_row, 0, 3, "CodeReviewThreadBorder"})
+            local rauthor_len = 1 + #reply.author
+            table.insert(highlights, {reply_header_row, 4, 4 + rauthor_len, "CodeReviewCommentAuthor"})
+            if #rmeta > 0 then
+              table.insert(highlights, {reply_header_row, 4 + rauthor_len, 4 + rauthor_len + #rmeta, "CodeReviewThreadMeta"})
+            end
+
             for _, rl in ipairs(vim.split(reply.body or "", "\n")) do
               local rrow = #lines
               table.insert(lines, rl)
@@ -175,6 +202,14 @@ function M.build_activity_lines(discussions)
         local footer_row = #lines
         table.insert(lines, string.format("└ %s%s", footer_text, string.rep("─", footer_fill)))
         row_map[footer_row] = { type = "thread", discussion = disc }
+
+        -- Footer highlights
+        table.insert(highlights, {footer_row, 0, 3, "CodeReviewThreadBorder"})
+        table.insert(highlights, {footer_row, 4, 4 + #footer_text, "CodeReviewFloatFooterKey"})
+        if footer_fill > 0 then
+          local ffill_start = 4 + #footer_text
+          table.insert(highlights, {footer_row, ffill_start, ffill_start + footer_fill * 3, "CodeReviewThreadBorder"})
+        end
 
         table.insert(lines, "")
       end
