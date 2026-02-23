@@ -894,7 +894,7 @@ local function build_footer(state, sess)
   row("gt     resolve")
 
   if sess.active then
-    header("AI")
+    header("Review")
     row("a accept   x dismiss")
     row("e edit     ds dismiss all")
     row("S submit   A cancel AI")
