@@ -809,6 +809,12 @@ function M.render_summary(buf, state)
 
   markdown_mod.set_buf_markdown(buf)
   vim.bo[buf].modifiable = false
+
+  -- Enable soft wrap so markdown lines aren't clipped
+  if state.layout and state.layout.main_win then
+    vim.wo[state.layout.main_win].wrap = true
+    vim.wo[state.layout.main_win].linebreak = true
+  end
 end
 
 -- ─── Sidebar rendering ────────────────────────────────────────────────────────
@@ -2307,6 +2313,8 @@ function M.setup_keymaps(layout, state)
 
       state.view_mode = "diff"
       state.current_file = entry.idx
+      vim.wo[layout.main_win].wrap = false
+      vim.wo[layout.main_win].linebreak = false
 
       if state.scroll_mode then
         -- Always re-render all files (buffer may have summary content)

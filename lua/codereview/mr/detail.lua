@@ -144,10 +144,10 @@ function M.build_activity_lines(discussions)
       ))
       row_map[thread_start_row] = { type = "thread_start", discussion = disc }
 
-      -- Body lines
-      for _, bl in ipairs(wrap_text(first_note.body, 64)) do
+      -- Body lines (raw markdown, no prefix so treesitter can render)
+      for _, bl in ipairs(vim.split(first_note.body or "", "\n")) do
         local row = #lines
-        table.insert(lines, "│ " .. bl)
+        table.insert(lines, bl)
         row_map[row] = { type = "thread", discussion = disc }
       end
 
@@ -158,16 +158,16 @@ function M.build_activity_lines(discussions)
           local rt = format_time_short(reply.created_at)
           local rmeta = rt ~= "" and (" · " .. rt) or ""
           local sep_row = #lines
-          table.insert(lines, "│")
+          table.insert(lines, "")
           row_map[sep_row] = { type = "thread", discussion = disc }
 
           local reply_header_row = #lines
-          table.insert(lines, string.format("│  ↪ @%s%s", reply.author, rmeta))
+          table.insert(lines, string.format("↪ @%s%s", reply.author, rmeta))
           row_map[reply_header_row] = { type = "thread", discussion = disc }
 
-          for _, rl in ipairs(wrap_text(reply.body, 58)) do
+          for _, rl in ipairs(vim.split(reply.body or "", "\n")) do
             local rrow = #lines
-            table.insert(lines, "│    " .. rl)
+            table.insert(lines, rl)
             row_map[rrow] = { type = "thread", discussion = disc }
           end
         end

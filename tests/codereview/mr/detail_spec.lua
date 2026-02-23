@@ -92,7 +92,7 @@ describe("mr.detail", function()
       assert.is_table(result.row_map)
     end)
 
-    it("renders comment thread with box-drawing chars", function()
+    it("renders comment thread with header/footer and raw markdown body", function()
       local discussions = {
         {
           id = "abc",
@@ -112,8 +112,8 @@ describe("mr.detail", function()
       -- Box header with author
       assert.truthy(joined:find("┌"))
       assert.truthy(joined:find("@jan"))
-      -- Body line
-      assert.truthy(joined:find("│ Looks good"))
+      -- Body line (raw markdown, no │ prefix)
+      assert.truthy(joined:find("Looks good"))
       -- Footer with resolved keymap labels (defaults: r, gt)
       assert.truthy(joined:find("└"))
       assert.truthy(joined:find("reply"))
