@@ -1,5 +1,6 @@
 local M = {}
 local config = require("codereview.config")
+local markdown = require("codereview.ui.markdown")
 
 -- LINE_NR_WIDTH: "%5d | %-5d " = 5+3+5+1 = 14 chars
 local LINE_NR_WIDTH = 14
@@ -40,6 +41,13 @@ local function apply_word_hl(buf, row, col_start, col_end, hl_group)
 end
 
 -- ─── Text helpers ───────────────────────────────────────────────────────────
+
+local function md_virt_line(prefix_chunk, text, base_hl)
+  local segs = markdown.parse_inline(text, base_hl)
+  local line = { prefix_chunk }
+  vim.list_extend(line, segs)
+  return line
+end
 
 local function wrap_text(text, width)
   local result = {}
@@ -157,10 +165,7 @@ function M.place_comment_signs(buf, line_data, discussions, file_diff)
 
               -- Comment body (wrapped, full)
               for _, bl in ipairs(wrap_text(first.body, config.get().diff.comment_width)) do
-                table.insert(virt_lines, {
-                  { "  │ ", bdr },
-                  { bl, body_hl },
-                })
+                table.insert(virt_lines, md_virt_line({ "  │ ", bdr }, bl, body_hl))
               end
 
               -- Replies
@@ -176,10 +181,7 @@ function M.place_comment_signs(buf, line_data, discussions, file_diff)
                     { rmeta, bdr },
                   })
                   for _, rl in ipairs(wrap_text(reply.body, 58)) do
-                    table.insert(virt_lines, {
-                      { "  │    ", bdr },
-                      { rl, body_hl },
-                    })
+                    table.insert(virt_lines, md_virt_line({ "  │    ", bdr }, rl, body_hl))
                   end
                 end
               end
@@ -249,10 +251,7 @@ function M.place_ai_suggestions(buf, line_data, suggestions, file_diff)
 
             -- Comment body wrapped to configured comment_width
             for _, bl in ipairs(wrap_text(suggestion.comment, config.get().diff.comment_width)) do
-              table.insert(virt_lines, {
-                { "  │ ", bdr },
-                { bl, body_hl },
-              })
+              table.insert(virt_lines, md_virt_line({ "  │ ", bdr }, bl, body_hl))
             end
 
             -- └ a:accept  x:dismiss  e:edit ─────────────────────────
@@ -315,10 +314,7 @@ function M.place_ai_suggestions_all(buf, all_line_data, file_sections, suggestio
               })
 
               for _, bl in ipairs(wrap_text(suggestion.comment, config.get().diff.comment_width)) do
-                table.insert(virt_lines, {
-                  { "  │ ", bdr },
-                  { bl, body_hl },
-                })
+                table.insert(virt_lines, md_virt_line({ "  │ ", bdr }, bl, body_hl))
               end
 
               table.insert(virt_lines, {
@@ -712,7 +708,7 @@ function M.render_all_files(buf, files, review, discussions, context, file_conte
                   { string.rep("─", fill), bdr },
                 })
                 for _, bl in ipairs(wrap_text(first.body, config.get().diff.comment_width)) do
-                  table.insert(virt_lines, { { "  │ ", bdr }, { bl, body_hl } })
+                  table.insert(virt_lines, md_virt_line({ "  │ ", bdr }, bl, body_hl))
                 end
                 for ni = 2, #notes do
                   local reply = notes[ni]
@@ -724,7 +720,7 @@ function M.render_all_files(buf, files, review, discussions, context, file_conte
                       { "  │  ↪ ", bdr }, { "@" .. reply.author, aut }, { rmeta, bdr },
                     })
                     for _, rl in ipairs(wrap_text(reply.body, 58)) do
-                      table.insert(virt_lines, { { "  │    ", bdr }, { rl, body_hl } })
+                      table.insert(virt_lines, md_virt_line({ "  │    ", bdr }, rl, body_hl))
                     end
                   end
                 end

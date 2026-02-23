@@ -7,7 +7,6 @@ end
 
 function M.to_lines(text)
   if not text then return {} end
-  text = M.strip_links(text)
   local lines = {}
   for line in (text .. "\n"):gmatch("(.-)\n") do
     table.insert(lines, line)
@@ -39,8 +38,9 @@ local HL_SUFFIX_MAP = {
 
 function M.parse_inline(text, base_hl)
   if not text or text == "" then return { { "", base_hl } } end
+  if not HL_SUFFIX_MAP[base_hl] then return { { text, base_hl } } end
 
-  local suffix = HL_SUFFIX_MAP[base_hl] or ""
+  local suffix = HL_SUFFIX_MAP[base_hl]
   local function hl(name) return name .. suffix end
 
   local spans = {}
@@ -48,7 +48,7 @@ function M.parse_inline(text, base_hl)
   -- Helper: check if a new span overlaps any existing span
   local function overlaps_existing(s, e)
     for _, sp in ipairs(spans) do
-      if s < sp[2] and e > sp[1] then return true end
+      if s <= sp[2] and e >= sp[1] then return true end
     end
     return false
   end
@@ -76,6 +76,7 @@ function M.parse_inline(text, base_hl)
     pos = le + 1
   end
 
+  -- Note: ***triple-asterisk*** is not supported (would need nested bold+italic handling)
   -- Pass 3: bold **text**
   pos = 1
   while pos <= #text do
