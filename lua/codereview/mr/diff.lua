@@ -1225,7 +1225,7 @@ end
 
 -- ─── Comment creation ─────────────────────────────────────────────────────────
 
-function M.create_comment_at_cursor(layout, state, on_success)
+function M.create_comment_at_cursor(layout, state, optimistic)
   local line_data = state.line_data_cache[state.current_file]
   if not line_data then return end
   local cursor = vim.api.nvim_win_get_cursor(layout.main_win)
@@ -1243,6 +1243,12 @@ function M.create_comment_at_cursor(layout, state, on_success)
   local line_text = vim.api.nvim_buf_get_lines(
     vim.api.nvim_win_get_buf(layout.main_win), row - 1, row, false
   )[1] or ""
+  local built_opt = optimistic and {
+    add = optimistic.add(file.old_path, file.new_path, data.item.old_line, data.item.new_line),
+    remove = optimistic.remove,
+    mark_failed = optimistic.mark_failed,
+    refresh = optimistic.refresh,
+  } or nil
   local comment = require("codereview.mr.comment")
   comment.create_inline(
     state.review,
@@ -1250,12 +1256,12 @@ function M.create_comment_at_cursor(layout, state, on_success)
     file.new_path,
     data.item.old_line,
     data.item.new_line,
-    on_success,
+    built_opt,
     { anchor_line = row, win_id = layout.main_win, action_type = "comment", context_text = line_text }
   )
 end
 
-function M.create_comment_range(layout, state, on_success)
+function M.create_comment_range(layout, state, optimistic)
   local line_data = state.line_data_cache[state.current_file]
   if not line_data then return end
   -- Get visual selection range
@@ -1275,6 +1281,12 @@ function M.create_comment_range(layout, state, on_success)
   local line_text = vim.api.nvim_buf_get_lines(
     vim.api.nvim_win_get_buf(layout.main_win), e - 1, e, false
   )[1] or ""
+  local built_opt = optimistic and {
+    add = optimistic.add(file.old_path, file.new_path, end_data.item.old_line, end_data.item.new_line, start_data.item.new_line),
+    remove = optimistic.remove,
+    mark_failed = optimistic.mark_failed,
+    refresh = optimistic.refresh,
+  } or nil
   local comment = require("codereview.mr.comment")
   comment.create_inline_range(
     state.review,
@@ -1282,7 +1294,7 @@ function M.create_comment_range(layout, state, on_success)
     file.new_path,
     { old_line = start_data.item.old_line, new_line = start_data.item.new_line },
     { old_line = end_data.item.old_line, new_line = end_data.item.new_line },
-    on_success,
+    built_opt,
     { anchor_line = e, anchor_start = s, win_id = layout.main_win, action_type = "comment", context_text = line_text }
   )
 end
@@ -1575,6 +1587,12 @@ function M.setup_keymaps(layout, state)
     -- Merge local drafts that the API won't return
     for _, d in ipairs(state.local_drafts or {}) do
       table.insert(discs, d)
+    end
+    -- Preserve failed optimistic comments; discard still-pending ones
+    for _, d in ipairs(state.discussions or {}) do
+      if d.is_failed then
+        table.insert(discs, d)
+      end
     end
     state.discussions = discs
     if state.view_mode == "summary" then
@@ -1923,7 +1941,12 @@ function M.setup_keymaps(layout, state)
           comment.create_inline_draft(state.review, file.new_path, data.item.new_line,
             add_local_draft(file.new_path, data.item.new_line), popup_opts)
         else
-          comment.create_inline(state.review, file.old_path, file.new_path, data.item.old_line, data.item.new_line, refresh_discussions, popup_opts)
+          comment.create_inline(state.review, file.old_path, file.new_path, data.item.old_line, data.item.new_line, {
+            add = add_optimistic_comment(file.old_path, file.new_path, data.item.old_line, data.item.new_line),
+            remove = remove_optimistic,
+            mark_failed = mark_optimistic_failed,
+            refresh = refresh_discussions,
+          }, popup_opts)
         end
       else
         if session.get().active then
@@ -1949,7 +1972,12 @@ function M.setup_keymaps(layout, state)
             add_local_draft(file.new_path, data.item.new_line),
             { anchor_line = row, win_id = layout.main_win, action_type = "comment", context_text = line_text })
         else
-          M.create_comment_at_cursor(layout, state, refresh_discussions)
+          M.create_comment_at_cursor(layout, state, {
+            add = add_optimistic_comment,
+            remove = remove_optimistic,
+            mark_failed = mark_optimistic_failed,
+            refresh = refresh_discussions,
+          })
         end
       end
     end,
@@ -1992,7 +2020,12 @@ function M.setup_keymaps(layout, state)
             file.new_path,
             { old_line = start_data.item.old_line, new_line = start_data.item.new_line },
             { old_line = end_data.item.old_line, new_line = end_data.item.new_line },
-            refresh_discussions,
+            {
+              add = add_optimistic_comment(file.old_path, file.new_path, end_data.item.old_line, end_data.item.new_line, start_data.item.new_line),
+              remove = remove_optimistic,
+              mark_failed = mark_optimistic_failed,
+              refresh = refresh_discussions,
+            },
             popup_opts
           )
         end
@@ -2026,7 +2059,12 @@ function M.setup_keymaps(layout, state)
             { anchor_line = e, anchor_start = s, win_id = layout.main_win, action_type = "comment", context_text = line_text }
           )
         else
-          M.create_comment_range(layout, state, refresh_discussions)
+          M.create_comment_range(layout, state, {
+            add = add_optimistic_comment,
+            remove = remove_optimistic,
+            mark_failed = mark_optimistic_failed,
+            refresh = refresh_discussions,
+          })
         end
       end
     end,
@@ -2036,8 +2074,12 @@ function M.setup_keymaps(layout, state)
         local disc = get_summary_disc()
         if disc and not disc.is_draft then
           local comment = require("codereview.mr.comment")
-          comment.reply(disc, state.review, refresh_discussions,
-            { anchor_line = vim.api.nvim_win_get_cursor(layout.main_win)[1], win_id = layout.main_win })
+          comment.reply(disc, state.review, {
+            add_reply = add_optimistic_reply(disc),
+            remove_reply = remove_optimistic_reply,
+            mark_reply_failed = mark_reply_failed,
+            refresh = refresh_discussions,
+          }, { anchor_line = vim.api.nvim_win_get_cursor(layout.main_win)[1], win_id = layout.main_win })
         end
         return
       end
@@ -2081,8 +2123,12 @@ function M.setup_keymaps(layout, state)
           end
           thread_height = thread_height + 1 -- footer (└ r:reply...)
         end
-        comment.reply(disc, state.review, refresh_discussions,
-          { anchor_line = last_row, win_id = layout.main_win, thread_height = thread_height })
+        comment.reply(disc, state.review, {
+          add_reply = add_optimistic_reply(disc),
+          remove_reply = remove_optimistic_reply,
+          mark_reply_failed = mark_reply_failed,
+          refresh = refresh_discussions,
+        }, { anchor_line = last_row, win_id = layout.main_win, thread_height = thread_height })
       end
     end,
 
