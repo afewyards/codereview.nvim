@@ -88,6 +88,31 @@ function M.border(action_type)
   }
 end
 
+--- Highlight target lines in the diff buffer while the float is open.
+--- @param diff_buf number
+--- @param start_line number  1-indexed
+--- @param end_line number  1-indexed
+--- @return number[] extmark_ids
+function M.highlight_lines(diff_buf, start_line, end_line)
+  local ids = {}
+  for row = start_line - 1, end_line - 1 do
+    local id = vim.api.nvim_buf_set_extmark(diff_buf, NS, row, 0, {
+      line_hl_group = "CodeReviewCommentContext",
+    })
+    table.insert(ids, id)
+  end
+  return ids
+end
+
+--- Clear line highlights.
+--- @param diff_buf number
+--- @param ids number[]
+function M.clear_line_hl(diff_buf, ids)
+  for _, id in ipairs(ids) do
+    pcall(vim.api.nvim_buf_del_extmark, diff_buf, NS, id)
+  end
+end
+
 --- Apply context header highlights to the buffer.
 --- @param buf number
 --- @param header_count number

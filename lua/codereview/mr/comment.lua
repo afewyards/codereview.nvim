@@ -40,10 +40,15 @@ local function open_input_popup(title, callback, opts)
 
   local win, extmark_id
   local diff_buf
+  local line_hl_ids = {}
 
   if use_inline then
     local anchor_0 = opts.anchor_line - 1  -- convert to 0-indexed
     diff_buf = vim.api.nvim_win_get_buf(opts.win_id)
+
+    -- Highlight the target line(s)
+    local hl_start = opts.anchor_start or opts.anchor_line
+    line_hl_ids = ifloat.highlight_lines(diff_buf, hl_start, opts.anchor_line)
     local win_width = vim.api.nvim_win_get_width(opts.win_id)
     local width = win_width - 4  -- small margin
 
@@ -104,6 +109,9 @@ local function open_input_popup(title, callback, opts)
     pcall(vim.api.nvim_win_close, win, true)
     if extmark_id and diff_buf then
       ifloat.clear_space(diff_buf, extmark_id)
+    end
+    if diff_buf and #line_hl_ids > 0 then
+      ifloat.clear_line_hl(diff_buf, line_hl_ids)
     end
   end
 

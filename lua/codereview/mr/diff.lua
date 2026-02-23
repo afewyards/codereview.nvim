@@ -981,7 +981,7 @@ function M.create_comment_range(layout, state, on_success)
     { old_line = start_data.item.old_line, new_line = start_data.item.new_line },
     { old_line = end_data.item.old_line, new_line = end_data.item.new_line },
     on_success,
-    { anchor_line = e, win_id = layout.main_win, action_type = "comment", context_text = line_text }
+    { anchor_line = e, anchor_start = s, win_id = layout.main_win, action_type = "comment", context_text = line_text }
   )
 end
 
@@ -1450,7 +1450,7 @@ function M.setup_keymaps(layout, state)
       local line_text = vim.api.nvim_buf_get_lines(
         vim.api.nvim_win_get_buf(layout.main_win), e - 1, e, false
       )[1] or ""
-      local popup_opts = { anchor_line = e, win_id = layout.main_win, action_type = "comment", context_text = line_text }
+      local popup_opts = { anchor_line = e, anchor_start = s, win_id = layout.main_win, action_type = "comment", context_text = line_text }
       local comment = require("codereview.mr.comment")
       if session.get().active then
         comment.create_inline_range_draft(
@@ -1494,8 +1494,8 @@ function M.setup_keymaps(layout, state)
           file.new_path,
           start_data.item.new_line,
           end_data.item.new_line,
-          refresh_discussions,
-          { anchor_line = e, win_id = layout.main_win, action_type = "comment", context_text = line_text }
+          add_local_draft(file.new_path, end_data.item.new_line, start_data.item.new_line),
+          { anchor_line = e, anchor_start = s, win_id = layout.main_win, action_type = "comment", context_text = line_text }
         )
       else
         M.create_comment_range(layout, state, refresh_discussions)
