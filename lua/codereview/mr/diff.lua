@@ -2666,7 +2666,7 @@ function M.setup_keymaps(layout, state)
       -- Clear note selection when cursor moves off a discussion row
       local disc = get_cursor_disc()
       if not disc then
-        local had_selection = next(state.note_selection) ~= nil
+        local had_selection = state.note_selection and next(state.note_selection) ~= nil
         state.note_selection = {}
         if had_selection then rerender_view() end
       end

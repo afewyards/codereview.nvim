@@ -102,38 +102,36 @@ function M.normalize_graphql_threads(thread_nodes)
   local discussions = {}
   for _, thread in ipairs(thread_nodes) do
     local comments = thread.comments and thread.comments.nodes or {}
-    if #comments == 0 then goto continue end
+    if #comments > 0 then
+      local notes = {}
+      for _, c in ipairs(comments) do
+        table.insert(notes, {
+          id = c.databaseId,
+          node_id = c.id,
+          author = c.author and c.author.login or "",
+          body = c.body or "",
+          created_at = c.createdAt or "",
+          system = false,
+          resolvable = true,
+          resolved = thread.isResolved or false,
+          position = {
+            new_path = c.path,
+            new_line = c.line,
+            side = thread.diffSide,
+            start_line = c.startLine,
+            start_side = thread.startDiffSide,
+            commit_sha = c.commit and c.commit.oid,
+          },
+        })
+      end
 
-    local notes = {}
-    for _, c in ipairs(comments) do
-      table.insert(notes, {
-        id = c.databaseId,
-        node_id = c.id,
-        author = c.author and c.author.login or "",
-        body = c.body or "",
-        created_at = c.createdAt or "",
-        system = false,
-        resolvable = true,
+      table.insert(discussions, {
+        id = tostring(comments[1].databaseId),
+        node_id = thread.id,
         resolved = thread.isResolved or false,
-        position = {
-          new_path = c.path,
-          new_line = c.line,
-          side = thread.diffSide,
-          start_line = c.startLine,
-          start_side = thread.startDiffSide,
-          commit_sha = c.commit and c.commit.oid,
-        },
+        notes = notes,
       })
     end
-
-    table.insert(discussions, {
-      id = tostring(comments[1].databaseId),
-      node_id = thread.id,
-      resolved = thread.isResolved or false,
-      notes = notes,
-    })
-
-    ::continue::
   end
   return discussions
 end
