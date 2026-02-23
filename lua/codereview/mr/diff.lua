@@ -942,6 +942,9 @@ function M.create_comment_at_cursor(layout, state, on_success)
     return
   end
   local file = state.files[state.current_file]
+  local line_text = vim.api.nvim_buf_get_lines(
+    vim.api.nvim_win_get_buf(layout.main_win), row - 1, row, false
+  )[1] or ""
   local comment = require("codereview.mr.comment")
   comment.create_inline(
     state.review,
@@ -949,7 +952,8 @@ function M.create_comment_at_cursor(layout, state, on_success)
     file.new_path,
     data.item.old_line,
     data.item.new_line,
-    on_success
+    on_success,
+    { anchor_line = row, win_id = layout.main_win, action_type = "comment", context_text = line_text }
   )
 end
 
@@ -966,6 +970,9 @@ function M.create_comment_range(layout, state, on_success)
     return
   end
   local file = state.files[state.current_file]
+  local line_text = vim.api.nvim_buf_get_lines(
+    vim.api.nvim_win_get_buf(layout.main_win), e - 1, e, false
+  )[1] or ""
   local comment = require("codereview.mr.comment")
   comment.create_inline_range(
     state.review,
@@ -973,7 +980,8 @@ function M.create_comment_range(layout, state, on_success)
     file.new_path,
     { old_line = start_data.item.old_line, new_line = start_data.item.new_line },
     { old_line = end_data.item.old_line, new_line = end_data.item.new_line },
-    on_success
+    on_success,
+    { anchor_line = e, win_id = layout.main_win, action_type = "comment", context_text = line_text }
   )
 end
 
@@ -1393,12 +1401,15 @@ function M.setup_keymaps(layout, state)
         return
       end
       local file = state.files[data.file_idx]
+      local line_text = vim.api.nvim_buf_get_lines(
+        vim.api.nvim_win_get_buf(layout.main_win), row - 1, row, false
+      )[1] or ""
+      local popup_opts = { anchor_line = row, win_id = layout.main_win, action_type = "comment", context_text = line_text }
       local comment = require("codereview.mr.comment")
       if session.get().active then
-        comment.create_inline_draft(state.review, file.new_path, data.item.new_line,
-          add_local_draft(file.new_path, data.item.new_line))
+        comment.create_inline_draft(state.review, file.new_path, data.item.new_line, refresh_discussions, popup_opts)
       else
-        comment.create_inline(state.review, file.old_path, file.new_path, data.item.old_line, data.item.new_line, refresh_discussions)
+        comment.create_inline(state.review, file.old_path, file.new_path, data.item.old_line, data.item.new_line, refresh_discussions, popup_opts)
       end
     else
       if session.get().active then
@@ -1412,9 +1423,12 @@ function M.setup_keymaps(layout, state)
           return
         end
         local file = state.files[state.current_file]
+        local line_text = vim.api.nvim_buf_get_lines(
+          vim.api.nvim_win_get_buf(layout.main_win), row - 1, row, false
+        )[1] or ""
         local comment = require("codereview.mr.comment")
-        comment.create_inline_draft(state.review, file.new_path, data.item.new_line,
-          add_local_draft(file.new_path, data.item.new_line))
+        comment.create_inline_draft(state.review, file.new_path, data.item.new_line, refresh_discussions,
+          { anchor_line = row, win_id = layout.main_win, action_type = "comment", context_text = line_text })
       else
         M.create_comment_at_cursor(layout, state, refresh_discussions)
       end
@@ -1433,6 +1447,10 @@ function M.setup_keymaps(layout, state)
         return
       end
       local file = state.files[start_data.file_idx]
+      local line_text = vim.api.nvim_buf_get_lines(
+        vim.api.nvim_win_get_buf(layout.main_win), e - 1, e, false
+      )[1] or ""
+      local popup_opts = { anchor_line = e, win_id = layout.main_win, action_type = "comment", context_text = line_text }
       local comment = require("codereview.mr.comment")
       if session.get().active then
         comment.create_inline_range_draft(
@@ -1440,7 +1458,8 @@ function M.setup_keymaps(layout, state)
           file.new_path,
           start_data.item.new_line,
           end_data.item.new_line,
-          add_local_draft(file.new_path, end_data.item.new_line, start_data.item.new_line)
+          refresh_discussions,
+          popup_opts
         )
       else
         comment.create_inline_range(
@@ -1449,7 +1468,8 @@ function M.setup_keymaps(layout, state)
           file.new_path,
           { old_line = start_data.item.old_line, new_line = start_data.item.new_line },
           { old_line = end_data.item.old_line, new_line = end_data.item.new_line },
-          refresh_discussions
+          refresh_discussions,
+          popup_opts
         )
       end
     else
@@ -1465,13 +1485,17 @@ function M.setup_keymaps(layout, state)
           return
         end
         local file = state.files[state.current_file]
+        local line_text = vim.api.nvim_buf_get_lines(
+          vim.api.nvim_win_get_buf(layout.main_win), e - 1, e, false
+        )[1] or ""
         local comment = require("codereview.mr.comment")
         comment.create_inline_range_draft(
           state.review,
           file.new_path,
           start_data.item.new_line,
           end_data.item.new_line,
-          add_local_draft(file.new_path, end_data.item.new_line, start_data.item.new_line)
+          refresh_discussions,
+          { anchor_line = e, win_id = layout.main_win, action_type = "comment", context_text = line_text }
         )
       else
         M.create_comment_range(layout, state, refresh_discussions)
@@ -1511,7 +1535,9 @@ function M.setup_keymaps(layout, state)
     local disc = get_cursor_disc()
     if disc then
       local comment = require("codereview.mr.comment")
-      comment.reply(disc, state.review, refresh_discussions)
+      local row = vim.api.nvim_win_get_cursor(layout.main_win)[1]
+      comment.reply(disc, state.review, refresh_discussions,
+        { anchor_line = row, win_id = layout.main_win })
     end
   end)
 
