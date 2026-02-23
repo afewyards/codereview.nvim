@@ -1719,21 +1719,46 @@ function M.setup_keymaps(layout, state)
     end, { buffer = float_buf, noremap = true, silent = true })
   end)
 
-  -- S: post remaining edited suggestions + publish all drafts
+  -- S: publish all drafts (human + AI) and end review session
   map(main_buf, "n", "S", function()
-    if state.view_mode ~= "diff" or not state.ai_suggestions then return end
+    if state.view_mode ~= "diff" then return end
+    local session = require("codereview.review.session")
     local submit_mod = require("codereview.review.submit")
-    -- Post any remaining accepted/edited suggestions not yet individually posted
-    local remaining = submit_mod.filter_accepted(state.ai_suggestions)
-    if #remaining > 0 then
-      submit_mod.submit_review(state.review, state.ai_suggestions)
-    else
-      -- All were posted individually via 'a', just publish the review
-      submit_mod.bulk_publish(state.review)
+    -- Warn if AI still running, but continue with available drafts
+    if session.get().ai_pending then
+      vim.notify("AI review still running — publishing available drafts", vim.log.levels.WARN)
     end
-    -- Clean up AI suggestions after submit
-    for _, s in ipairs(state.ai_suggestions) do s.status = "dismissed" end
-    rerender_ai()
+    -- Post remaining accepted AI suggestions as drafts (without publishing yet)
+    if state.ai_suggestions then
+      local accepted = submit_mod.filter_accepted(state.ai_suggestions)
+      if #accepted > 0 then
+        local client_mod = require("codereview.api.client")
+        local provider, ctx, err = require("codereview.providers").detect()
+        if provider then
+          for _, suggestion in ipairs(accepted) do
+            local _, post_err = provider.create_draft_comment(client_mod, ctx, state.review, {
+              body = suggestion.comment,
+              path = suggestion.file,
+              line = suggestion.line,
+            })
+            if not post_err then suggestion.drafted = true end
+          end
+        else
+          vim.notify("Could not detect platform: " .. (err or ""), vim.log.levels.ERROR)
+        end
+      end
+    end
+    -- Publish all drafts (human + AI) in one shot
+    submit_mod.bulk_publish(state.review)
+    -- Dismiss all AI suggestions and rerender
+    if state.ai_suggestions then
+      for _, s in ipairs(state.ai_suggestions) do s.status = "dismissed" end
+      rerender_ai()
+    end
+    -- End review session
+    session.stop()
+    -- Re-render sidebar, refresh discussions
+    M.render_sidebar(layout.sidebar_buf, state)
     refresh_discussions()
   end)
 
