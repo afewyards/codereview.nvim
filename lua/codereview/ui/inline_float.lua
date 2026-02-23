@@ -88,6 +88,27 @@ function M.border(action_type)
   }
 end
 
+--- Build styled title as {text, hl} tuples.
+--- @param text string
+--- @return table[]
+function M.title(text)
+  return { { " " .. text .. " ", "CodeReviewFloatTitle" } }
+end
+
+--- Build styled footer with highlighted keys.
+--- @return table[]
+function M.footer()
+  return {
+    { " ", "CodeReviewFloatFooterText" },
+    { "<C-CR>", "CodeReviewFloatFooterKey" },
+    { " submit  ", "CodeReviewFloatFooterText" },
+    { "<C-p>", "CodeReviewFloatFooterKey" },
+    { " preview  ", "CodeReviewFloatFooterText" },
+    { "q", "CodeReviewFloatFooterKey" },
+    { " cancel ", "CodeReviewFloatFooterText" },
+  }
+end
+
 --- Highlight target lines in the diff buffer while the float is open.
 --- @param diff_buf number
 --- @param start_line number  1-indexed

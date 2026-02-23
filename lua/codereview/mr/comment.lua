@@ -36,7 +36,8 @@ local function open_input_popup(title, callback, opts)
   local content_count = #init_lines - header_count
   local total_height = ifloat.compute_height(content_count, header_count)
 
-  local footer = " <C-CR> submit  <C-p> preview  q cancel "
+  local styled_title = ifloat.title(title)
+  local styled_footer = ifloat.footer()
 
   local win, extmark_id
   local diff_buf
@@ -65,9 +66,9 @@ local function open_input_popup(title, callback, opts)
       col = 1,
       style = "minimal",
       border = ifloat.border(opts.action_type),
-      title = " " .. title .. " ",
+      title = styled_title,
       title_pos = "center",
-      footer = footer,
+      footer = styled_footer,
       footer_pos = "center",
       noautocmd = true,
     })
@@ -85,9 +86,9 @@ local function open_input_popup(title, callback, opts)
       col = col,
       style = "minimal",
       border = ifloat.border(opts.action_type),
-      title = " " .. title .. " ",
+      title = styled_title,
       title_pos = "center",
-      footer = footer,
+      footer = styled_footer,
       footer_pos = "center",
       noautocmd = true,
     })
@@ -173,7 +174,7 @@ local function open_input_popup(title, callback, opts)
       if saved_cursor then
         pcall(vim.api.nvim_win_set_cursor, win, saved_cursor)
       end
-      vim.api.nvim_win_set_config(win, { title = " " .. title .. " " })
+      vim.api.nvim_win_set_config(win, { title = styled_title })
       preview_buf = nil
     else
       -- Switch to preview
@@ -185,7 +186,7 @@ local function open_input_popup(title, callback, opts)
       vim.bo[preview_buf].bufhidden = "wipe"
       markdown.set_buf_markdown(preview_buf)
       vim.api.nvim_win_set_buf(win, preview_buf)
-      vim.api.nvim_win_set_config(win, { title = " Preview " })
+      vim.api.nvim_win_set_config(win, { title = ifloat.title("Preview") })
       -- Preview keymaps
       local pmap = { buffer = preview_buf, nowait = true }
       vim.keymap.set({ "n", "i" }, "<C-p>", toggle_preview, pmap)
