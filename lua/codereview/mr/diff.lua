@@ -1644,9 +1644,8 @@ function M.setup_keymaps(layout, state)
       end
 
       vim.notify("Draft comment posted", vim.log.levels.INFO)
-      suggestion.status = "dismissed"
+      suggestion.status = "accepted"
       rerender_ai()
-      refresh_discussions()
       nav_to_next_ai(cursor)
     end, { buffer = float_buf, noremap = true, silent = true })
 
