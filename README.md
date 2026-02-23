@@ -17,7 +17,7 @@
 
 ## Review pull requests and merge requests without leaving Neovim
 
-<video src="https://github.com/afewyards/codereview.nvim/raw/main/demo.mp4" controls muted></video>
+https://github.com/user-attachments/assets/e805a264-edf7-47ab-ab4d-5a2361826131
 
 > **Note: This project is in active development.** Core features are operational, but some areas are still being refined. Please report issues or unexpected behavior via [GitHub Issues](https://github.com/afewyards/codereview.nvim/issues).
 
