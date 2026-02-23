@@ -777,14 +777,6 @@ function M.render_summary(buf, state)
     table.insert(lines, line)
   end
 
-  local total, unresolved = detail.count_discussions(state.discussions)
-  table.insert(lines, "")
-  table.insert(lines, string.rep("-", 70))
-  table.insert(lines, string.format(
-    "  %d discussions (%d unresolved)",
-    total, unresolved
-  ))
-
   vim.bo[buf].modifiable = true
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
 
