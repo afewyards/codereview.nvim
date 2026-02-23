@@ -34,6 +34,7 @@ end
 local HL_SUFFIX_MAP = {
   CodeReviewComment = "",
   CodeReviewCommentUnresolved = "Unresolved",
+  CodeReviewSelectedNote = "SelectedNote",
 }
 
 -- ─── Flanking delimiter helpers ───────────────────────────────────────────────

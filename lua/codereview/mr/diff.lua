@@ -234,30 +234,34 @@ function M.place_comment_signs(buf, line_data, discussions, file_diff, note_sele
                 end
               end
 
-              -- └ footer keyhints ──────────────────────
+              -- └ footer ──────────────────────
               local footer_content
               if is_err then
                 footer_content = "gR:retry  D:discard"
               elseif is_pending then
                 footer_content = "posting…"
-              elseif discussion.is_draft then
-                footer_content = "gt:un/resolve"
-              elseif sel_idx and current_user then
+              elseif sel_idx then
                 local sel_note = notes[sel_idx]
-                if sel_note and sel_note.author == current_user then
+                if sel_note and current_user and sel_note.author == current_user then
                   footer_content = "r:reply  gt:un/resolve  e:edit  x:delete"
                 else
                   footer_content = "r:reply  gt:un/resolve"
                 end
               else
-                footer_content = "r:reply  gt:un/resolve"
+                footer_content = ""
               end
-              local footer_fill = math.max(0, 62 - #footer_content - 1)
-              table.insert(virt_lines, {
-                { "  └ ", bdr },
-                { footer_content, body_hl },
-                { " " .. string.rep("─", footer_fill), bdr },
-              })
+              local footer_fill = math.max(0, 62 - #footer_content - (footer_content ~= "" and 1 or 0))
+              if footer_content ~= "" then
+                table.insert(virt_lines, {
+                  { "  └ ", bdr },
+                  { footer_content, body_hl },
+                  { " " .. string.rep("─", footer_fill), bdr },
+                })
+              else
+                table.insert(virt_lines, {
+                  { "  └" .. string.rep("─", 63), bdr },
+                })
+              end
 
               pcall(vim.api.nvim_buf_set_extmark, buf, DIFF_NS, row - 1, 0, {
                 virt_lines = virt_lines,
@@ -805,23 +809,27 @@ function M.render_all_files(buf, files, review, discussions, context, file_conte
                   footer_content = "gR:retry  D:discard"
                 elseif is_pending then
                   footer_content = "posting…"
-                elseif disc.is_draft then
-                  footer_content = "gt:un/resolve"
-                elseif sel_idx and current_user then
+                elseif sel_idx then
                   local sel_note = notes[sel_idx]
-                  if sel_note and sel_note.author == current_user then
+                  if sel_note and current_user and sel_note.author == current_user then
                     footer_content = "r:reply  gt:un/resolve  e:edit  x:delete"
                   else
                     footer_content = "r:reply  gt:un/resolve"
                   end
                 else
-                  footer_content = "r:reply  gt:un/resolve"
+                  footer_content = ""
                 end
-                local footer_fill = math.max(0, 62 - #footer_content - 1)
-                table.insert(virt_lines, {
-                  { "  └ ", bdr }, { footer_content, body_hl },
-                  { " " .. string.rep("─", footer_fill), bdr },
-                })
+                local footer_fill = math.max(0, 62 - #footer_content - (footer_content ~= "" and 1 or 0))
+                if footer_content ~= "" then
+                  table.insert(virt_lines, {
+                    { "  └ ", bdr }, { footer_content, body_hl },
+                    { " " .. string.rep("─", footer_fill), bdr },
+                  })
+                else
+                  table.insert(virt_lines, {
+                    { "  └" .. string.rep("─", 63), bdr },
+                  })
+                end
                 pcall(vim.api.nvim_buf_set_extmark, buf, DIFF_NS, i - 1, 0, {
                   virt_lines = virt_lines, virt_lines_above = false,
                 })
@@ -2663,9 +2671,18 @@ function M.setup_keymaps(layout, state)
     callback = function()
       if state.view_mode ~= "diff" then return end
 
-      -- Clear note selection when cursor moves off a discussion row
+      -- Auto-select root note when cursor enters a discussion row, clear when leaving
       local disc = get_cursor_disc()
-      if not disc then
+      if disc then
+        local prev = state.note_selection or {}
+        local cur_sel = prev[disc.id] or 1
+        local new_sel = { [disc.id] = cur_sel }
+        -- Rerender if selection changed (new disc, cleared others, or first select)
+        if not prev[disc.id] or next(prev, next(prev)) then
+          state.note_selection = new_sel
+          rerender_view()
+        end
+      else
         local had_selection = state.note_selection and next(state.note_selection) ~= nil
         state.note_selection = {}
         if had_selection then rerender_view() end
