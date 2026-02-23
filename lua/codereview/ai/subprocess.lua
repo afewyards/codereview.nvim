@@ -3,8 +3,13 @@ local config = require("codereview.config")
 local log = require("codereview.log")
 local M = {}
 
-function M.build_cmd(claude_cmd)
-  return { claude_cmd, "-p" }
+function M.build_cmd(claude_cmd, agent)
+  local cmd = { claude_cmd, "-p" }
+  if agent then
+    table.insert(cmd, "--agent")
+    table.insert(cmd, agent)
+  end
+  return cmd
 end
 
 --- Run Claude CLI in pipe mode.
@@ -17,7 +22,7 @@ function M.run(prompt, callback)
     return
   end
 
-  local cmd = M.build_cmd(cfg.ai.claude_cmd)
+  local cmd = M.build_cmd(cfg.ai.claude_cmd, cfg.ai.agent)
   log.debug("AI subprocess: starting " .. table.concat(cmd, " "))
   local stdout_chunks = {}
   local stderr_chunks = {}
