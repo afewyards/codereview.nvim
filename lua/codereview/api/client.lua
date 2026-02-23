@@ -2,7 +2,10 @@ local curl = require("plenary.curl")
 local async = require("plenary.async")
 local async_util = require("plenary.async.util")
 local log = require("codereview.log")
+local cache = require("codereview.utils.cache")
 local M = {}
+
+local DEFAULT_TIMEOUT = 30000  -- 30 seconds
 
 local function build_headers(token, token_type)
   if token_type == "oauth" then
@@ -95,7 +98,17 @@ function M.request(method, base_url, path, opts)
   end
 
   local params = build_params(method, base_url, path, opts)
+  params.timeout = opts.timeout or DEFAULT_TIMEOUT
   log.debug(string.format("REQ %s %s", method:upper(), params.url))
+
+  -- Check cache for GET requests
+  if method == "get" and not opts.no_cache then
+    local cached = cache.get("http:" .. params.url)
+    if cached then
+      log.debug(string.format("CACHE HIT %s", params.url))
+      return cached
+    end
+  end
 
   local response = curl.request(params)
   if not response then
@@ -119,7 +132,18 @@ function M.request(method, base_url, path, opts)
     return nil, err
   end
 
-  return process_response(response)
+  local result = process_response(response)
+
+  -- Cache successful GET responses
+  if method == "get" and result then
+    local cfg = require("codereview.config").get()
+    local ttl = (cfg.cache and cfg.cache.enabled) and (cfg.cache.ttl or 300) or 0
+    if ttl > 0 then
+      cache.set("http:" .. params.url, result, ttl)
+    end
+  end
+
+  return result
 end
 
 function M.async_request(method, base_url, path, opts)
