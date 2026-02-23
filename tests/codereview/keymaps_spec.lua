@@ -2,7 +2,14 @@
 -- Must set _G.vim so required modules can see it, then alias the spec's
 -- local _ENV.vim to the same table so that mutations in tests are visible
 -- to the module at call time.
-_G.vim = _G.vim or { notify = function() end }
+local function _deep_copy(orig)
+  local copy = {}
+  for k, v in pairs(orig) do
+    copy[k] = type(v) == "table" and _deep_copy(v) or v
+  end
+  return copy
+end
+_G.vim = _G.vim or { notify = function() end, deepcopy = _deep_copy }
 vim = _G.vim
 
 local keymaps = require("codereview.keymaps")
@@ -60,6 +67,17 @@ describe("keymaps", function()
 
     it("lazy-inits if setup not called", function()
       assert.equals("]f", keymaps.get("next_file"))
+    end)
+  end)
+
+  describe("full config flow", function()
+    it("setup via config propagates to keymaps", function()
+      local config = require("codereview.config")
+      config.setup({ keymaps = { next_file = "<Tab>", approve = false } })
+      assert.equals("<Tab>", keymaps.get("next_file"))
+      assert.is_false(keymaps.get("approve"))
+      assert.equals("q", keymaps.get("quit"))
+      config.reset()
     end)
   end)
 end)
