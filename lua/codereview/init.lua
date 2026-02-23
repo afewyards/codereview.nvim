@@ -74,4 +74,22 @@ function M.create_mr()
   require("codereview.mr.create").create()
 end
 
+function M.start_review()
+  local session = require("codereview.review.session")
+  if session.get().active then
+    vim.notify("Review already in progress", vim.log.levels.WARN)
+    return
+  end
+  local buf = vim.api.nvim_get_current_buf()
+  local diff_mod = require("codereview.mr.diff")
+  local active = diff_mod.get_state(buf)
+  if not active then
+    vim.notify("Open a diff view first", vim.log.levels.WARN)
+    return
+  end
+  session.start()
+  diff_mod.render_sidebar(active.layout.sidebar_buf, active.state)
+  vim.notify("Review started — comments will be drafts until published", vim.log.levels.INFO)
+end
+
 return M

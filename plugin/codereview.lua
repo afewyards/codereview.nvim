@@ -26,3 +26,7 @@ end, { desc = "Approve current review" })
 vim.api.nvim_create_user_command("CodeReviewOpen", function()
   require("codereview").create_mr()
 end, { desc = "Create new review" })
+
+vim.api.nvim_create_user_command("CodeReviewStart", function()
+  require("codereview").start_review()
+end, { desc = "Start manual review session (comments become drafts)" })
