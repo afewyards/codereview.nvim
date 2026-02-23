@@ -233,7 +233,7 @@ function M.place_ai_suggestions(buf, line_data, suggestions, file_diff)
         local severity = suggestion.severity or "info"
         local header_label = drafted and (" AI [" .. severity .. "] ✓ drafted ") or (" AI [" .. severity .. "] ")
         local header_fill = math.max(0, 62 - #header_label)
-        local footer_content = drafted and "x:dismiss  S:publish" or "a:accept  x:dismiss  e:edit"
+        local footer_content = drafted and "x:dismiss" or "a:accept  x:dismiss  e:edit"
         local footer_fill = math.max(0, 62 - #footer_content - 1)
 
         local virt_lines = {}
@@ -302,7 +302,7 @@ function M.place_ai_suggestions_all(buf, all_line_data, file_sections, suggestio
             local severity = suggestion.severity or "info"
             local header_label = drafted and (" AI [" .. severity .. "] ✓ drafted ") or (" AI [" .. severity .. "] ")
             local header_fill = math.max(0, 62 - #header_label)
-            local footer_content = drafted and "x:dismiss  S:publish" or "a:accept  x:dismiss  e:edit"
+            local footer_content = drafted and "x:dismiss" or "a:accept  x:dismiss  e:edit"
             local footer_fill = math.max(0, 62 - #footer_content - 1)
 
             local virt_lines = {}
