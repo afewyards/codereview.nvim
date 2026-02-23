@@ -119,6 +119,7 @@ function M.highlight_lines(diff_buf, start_line, end_line)
   for row = start_line - 1, end_line - 1 do
     local id = vim.api.nvim_buf_set_extmark(diff_buf, NS, row, 0, {
       line_hl_group = "CodeReviewCommentContext",
+      priority = 4097,
     })
     table.insert(ids, id)
   end

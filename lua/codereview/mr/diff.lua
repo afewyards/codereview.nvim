@@ -7,6 +7,7 @@ local LINE_NR_WIDTH = 14
 local DIFF_NS = vim.api.nvim_create_namespace("codereview_diff")
 local AIDRAFT_NS = vim.api.nvim_create_namespace("codereview_ai_draft")
 
+
 -- ─── Active state tracking ────────────────────────────────────────────────────
 
 local active_states = {}
@@ -26,7 +27,7 @@ end
 -- ─── Highlight application ────────────────────────────────────────────────────
 
 local function apply_line_hl(buf, row, hl_group)
-  vim.api.nvim_buf_set_extmark(buf, DIFF_NS, row, 0, { line_hl_group = hl_group })
+  vim.api.nvim_buf_set_extmark(buf, DIFF_NS, row, 0, { line_hl_group = hl_group, priority = 50 })
 end
 
 local function apply_word_hl(buf, row, col_start, col_end, hl_group)
@@ -764,6 +765,12 @@ end
 -- ─── Summary rendering ──────────────────────────────────────────────────────
 
 function M.render_summary(buf, state)
+  vim.schedule(function()
+    local split = require("codereview.ui.split")
+    if split.saved_visual then
+      vim.api.nvim_set_hl(0, "Visual", split.saved_visual)
+    end
+  end)
   local detail = require("codereview.mr.detail")
   local markdown_mod = require("codereview.ui.markdown")
 
