@@ -474,4 +474,27 @@ function M.create_mr_comment(review, provider, ctx, on_success)
   end)
 end
 
+function M.post_with_retry(api_fn, on_success, on_failure, opts)
+  opts = opts or {}
+  local max = opts.max_retries or 3
+  local delay = opts.delay_ms or 2000
+  local attempt = 0
+
+  local function try()
+    local _, err = api_fn()
+    if not err then
+      vim.schedule(on_success)
+      return
+    end
+    attempt = attempt + 1
+    if attempt >= max then
+      vim.schedule(function() on_failure(err) end)
+      return
+    end
+    vim.defer_fn(try, delay)
+  end
+
+  try()
+end
+
 return M

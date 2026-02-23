@@ -231,6 +231,8 @@ _G.vim = {
   },
   notify = function() end,
   schedule = function(fn) fn() end,
+  defer_fn = function(fn, ms) fn() end,
+  wait = function(ms, condition) return condition() end,
   cmd = function() end,
   split = function(s, sep, opts)
     local result = {}

@@ -33,4 +33,29 @@ describe("mr.comment", function()
       assert.truthy(joined:find("Resolved"))
     end)
   end)
+
+  describe("post_with_retry", function()
+    it("calls on_success on first success", function()
+      local called = false
+      comment.post_with_retry(
+        function() return nil, nil end,
+        function() called = true end,
+        function() end
+      )
+      vim.wait(100, function() return called end)
+      assert.truthy(called)
+    end)
+
+    it("calls on_failure after max retries", function()
+      local failed = false
+      comment.post_with_retry(
+        function() return nil, "server error" end,
+        function() end,
+        function() failed = true end,
+        { max_retries = 1, delay_ms = 10 }
+      )
+      vim.wait(500, function() return failed end)
+      assert.truthy(failed)
+    end)
+  end)
 end)
