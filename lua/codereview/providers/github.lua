@@ -309,6 +309,24 @@ function M.reply_to_discussion(client, ctx, review, discussion_id, body)
   return client.post(ctx.base_url, path_url, { body = { body = body }, headers = headers })
 end
 
+--- Edit an existing review comment. discussion_id unused for GitHub (kept for API consistency with GitLab).
+function M.edit_note(client, ctx, review, discussion_id, note_id, body)
+  local headers, err = get_headers()
+  if not headers then return nil, err end
+  local owner, repo = parse_owner_repo(ctx)
+  local path_url = string.format("/repos/%s/%s/pulls/%d/comments/%s", owner, repo, review.id, note_id)
+  return client.patch(ctx.base_url, path_url, { body = { body = body }, headers = headers })
+end
+
+--- Delete a review comment. discussion_id unused for GitHub (kept for API consistency with GitLab).
+function M.delete_note(client, ctx, review, discussion_id, note_id)
+  local headers, err = get_headers()
+  if not headers then return nil, err end
+  local owner, repo = parse_owner_repo(ctx)
+  local path_url = string.format("/repos/%s/%s/pulls/%d/comments/%s", owner, repo, review.id, note_id)
+  return client.delete(ctx.base_url, path_url, { headers = headers })
+end
+
 --- Close a PR (state = "closed"). Uses PATCH.
 function M.close(client, ctx, review)
   local headers, err = get_headers()
@@ -415,6 +433,23 @@ end
 --- GitHub does not support un-approving reviews via the REST API.
 function M.unapprove(client, ctx, review) -- luacheck: ignore
   return nil, "not supported"
+end
+
+--- Fetch the authenticated user's login. Cached after first call.
+M._cached_user = nil
+
+function M.get_current_user(client, ctx)
+  if M._cached_user then return M._cached_user end
+  local headers, err = get_headers()
+  if not headers then return nil, err end
+  local resp = client.get(ctx.base_url, "/user", { headers = headers })
+  if not resp or resp.status ~= 200 then
+    return nil, "Failed to fetch current user"
+  end
+  local ok, data = pcall(vim.json.decode, resp.body)
+  if not ok then return nil, "Failed to parse user response" end
+  M._cached_user = data.login
+  return M._cached_user
 end
 
 --- Merge a PR.

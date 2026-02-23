@@ -237,6 +237,28 @@ function M.reply_to_discussion(client, ctx, review, discussion_id, body)
   )
 end
 
+--- Edit a note in a discussion.
+function M.edit_note(client, ctx, review, discussion_id, note_id, body)
+  local headers, err = get_headers()
+  if not headers then return nil, err end
+  return client.put(
+    ctx.base_url,
+    mr_base(ctx, review.id) .. "/discussions/" .. discussion_id .. "/notes/" .. note_id,
+    { body = { body = body }, headers = headers }
+  )
+end
+
+--- Delete a note from a discussion.
+function M.delete_note(client, ctx, review, discussion_id, note_id)
+  local headers, err = get_headers()
+  if not headers then return nil, err end
+  return client.delete(
+    ctx.base_url,
+    mr_base(ctx, review.id) .. "/discussions/" .. discussion_id .. "/notes/" .. note_id,
+    { headers = headers }
+  )
+end
+
 --- Toggle resolve status on a discussion.
 function M.resolve_discussion(client, ctx, review, discussion_id, resolved)
   local headers, err = get_headers()
@@ -262,6 +284,23 @@ function M.unapprove(client, ctx, review)
   local headers, err = get_headers()
   if not headers then return nil, err end
   return client.post(ctx.base_url, mr_base(ctx, review.id) .. "/unapprove", { body = {}, headers = headers })
+end
+
+--- Fetch the authenticated user's username. Cached after first call.
+M._cached_user = nil
+
+function M.get_current_user(client, ctx)
+  if M._cached_user then return M._cached_user end
+  local headers, err = get_headers()
+  if not headers then return nil, err end
+  local resp = client.get(ctx.base_url, "/api/v4/user", { headers = headers })
+  if not resp or resp.status ~= 200 then
+    return nil, "Failed to fetch current user"
+  end
+  local ok, data = pcall(vim.json.decode, resp.body)
+  if not ok then return nil, "Failed to parse user response" end
+  M._cached_user = data.username
+  return M._cached_user
 end
 
 --- Merge an MR.

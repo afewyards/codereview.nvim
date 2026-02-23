@@ -65,6 +65,46 @@ describe("providers.gitlab", function()
     end)
   end)
 
+  describe("get_current_user", function()
+    before_each(function()
+      package.loaded["codereview.api.auth"] = {
+        get_token = function() return "glpat-test", "pat" end,
+      }
+      gitlab._cached_user = nil
+    end)
+
+    after_each(function()
+      package.loaded["codereview.api.auth"] = nil
+      gitlab._cached_user = nil
+    end)
+
+    it("returns username from /api/v4/user endpoint", function()
+      local mock_client = {
+        get = function(_, path, _)
+          assert.equals("/api/v4/user", path)
+          return { status = 200, body = vim.json.encode({ username = "testuser" }) }
+        end,
+      }
+      local user, err = gitlab.get_current_user(mock_client, { base_url = "https://gitlab.com" })
+      assert.is_nil(err)
+      assert.equals("testuser", user)
+    end)
+
+    it("caches result after first call", function()
+      local call_count = 0
+      local mock_client = {
+        get = function(_, _, _)
+          call_count = call_count + 1
+          return { status = 200, body = vim.json.encode({ username = "cached" }) }
+        end,
+      }
+      local ctx = { base_url = "https://gitlab.com" }
+      gitlab.get_current_user(mock_client, ctx)
+      gitlab.get_current_user(mock_client, ctx)
+      assert.equals(1, call_count)
+    end)
+  end)
+
   describe("create_draft_comment", function()
     it("exists as a function", function()
       assert.is_function(gitlab.create_draft_comment)
@@ -80,6 +120,60 @@ describe("providers.gitlab", function()
   describe("create_review", function()
     it("exists as a function", function()
       assert.is_function(gitlab.create_review)
+    end)
+  end)
+
+  describe("edit_note", function()
+    before_each(function()
+      package.loaded["codereview.api.auth"] = {
+        get_token = function() return "glpat-test", "pat" end,
+      }
+    end)
+    after_each(function()
+      package.loaded["codereview.api.auth"] = nil
+    end)
+
+    it("PUTs to discussions/:disc_id/notes/:note_id with new body", function()
+      local put_url, put_body
+      local mock_client = {
+        put = function(_, path, opts)
+          put_url = path
+          put_body = opts.body
+          return { status = 200, body = vim.json.encode({ id = 5, body = "updated" }) }
+        end,
+      }
+      local ctx = { base_url = "https://gitlab.com", project = "owner/repo" }
+      local review = { id = 10 }
+      local result, err = gitlab.edit_note(mock_client, ctx, review, "disc1", 5, "updated")
+      assert.is_nil(err)
+      assert.truthy(put_url:find("/discussions/disc1/notes/5"))
+      assert.equals("updated", put_body.body)
+    end)
+  end)
+
+  describe("delete_note", function()
+    before_each(function()
+      package.loaded["codereview.api.auth"] = {
+        get_token = function() return "glpat-test", "pat" end,
+      }
+    end)
+    after_each(function()
+      package.loaded["codereview.api.auth"] = nil
+    end)
+
+    it("DELETEs discussions/:disc_id/notes/:note_id", function()
+      local deleted_url
+      local mock_client = {
+        delete = function(_, path, _)
+          deleted_url = path
+          return { status = 204 }
+        end,
+      }
+      local ctx = { base_url = "https://gitlab.com", project = "owner/repo" }
+      local review = { id = 10 }
+      local result, err = gitlab.delete_note(mock_client, ctx, review, "disc1", 5)
+      assert.is_nil(err)
+      assert.truthy(deleted_url:find("/discussions/disc1/notes/5"))
     end)
   end)
 end)

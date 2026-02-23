@@ -304,6 +304,46 @@ describe("providers.github", function()
     end)
   end)
 
+  describe("get_current_user", function()
+    before_each(function()
+      package.loaded["codereview.api.auth"] = {
+        get_token = function() return "ghp_test", "pat" end,
+      }
+      github._cached_user = nil
+    end)
+
+    after_each(function()
+      package.loaded["codereview.api.auth"] = nil
+      github._cached_user = nil
+    end)
+
+    it("returns login from /user endpoint", function()
+      local mock_client = {
+        get = function(_, path, _)
+          assert.equals("/user", path)
+          return { status = 200, body = vim.json.encode({ login = "testuser" }) }
+        end,
+      }
+      local user, err = github.get_current_user(mock_client, { base_url = "https://api.github.com" })
+      assert.is_nil(err)
+      assert.equals("testuser", user)
+    end)
+
+    it("caches result after first call", function()
+      local call_count = 0
+      local mock_client = {
+        get = function(_, _, _)
+          call_count = call_count + 1
+          return { status = 200, body = vim.json.encode({ login = "cached" }) }
+        end,
+      }
+      local ctx = { base_url = "https://api.github.com" }
+      github.get_current_user(mock_client, ctx)
+      github.get_current_user(mock_client, ctx)
+      assert.equals(1, call_count)
+    end)
+  end)
+
   describe("create_draft_comment", function()
     it("accumulates comments in _pending_comments", function()
       github._pending_comments = {} -- reset
@@ -326,6 +366,60 @@ describe("providers.github", function()
   describe("create_review", function()
     it("exists as a function", function()
       assert.is_function(github.create_review)
+    end)
+  end)
+
+  describe("edit_note", function()
+    before_each(function()
+      package.loaded["codereview.api.auth"] = {
+        get_token = function() return "ghp_test", "pat" end,
+      }
+    end)
+    after_each(function()
+      package.loaded["codereview.api.auth"] = nil
+    end)
+
+    it("PATCHes the comment with new body", function()
+      local patched_url, patched_body
+      local mock_client = {
+        patch = function(_, path, opts)
+          patched_url = path
+          patched_body = opts.body
+          return { status = 200, body = vim.json.encode({ id = 42, body = "updated" }) }
+        end,
+      }
+      local ctx = { base_url = "https://api.github.com", project = "owner/repo" }
+      local review = { id = 1 }
+      local result, err = github.edit_note(mock_client, ctx, review, "disc_ignored", 42, "updated")
+      assert.is_nil(err)
+      assert.truthy(patched_url:find("/pulls/1/comments/42"))
+      assert.equals("updated", patched_body.body)
+    end)
+  end)
+
+  describe("delete_note", function()
+    before_each(function()
+      package.loaded["codereview.api.auth"] = {
+        get_token = function() return "ghp_test", "pat" end,
+      }
+    end)
+    after_each(function()
+      package.loaded["codereview.api.auth"] = nil
+    end)
+
+    it("DELETEs the comment", function()
+      local deleted_url
+      local mock_client = {
+        delete = function(_, path, _)
+          deleted_url = path
+          return { status = 204 }
+        end,
+      }
+      local ctx = { base_url = "https://api.github.com", project = "owner/repo" }
+      local review = { id = 1 }
+      local result, err = github.delete_note(mock_client, ctx, review, "disc_ignored", 42)
+      assert.is_nil(err)
+      assert.truthy(deleted_url:find("/pulls/1/comments/42"))
     end)
   end)
 end)
