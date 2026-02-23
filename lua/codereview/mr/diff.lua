@@ -1003,6 +1003,23 @@ function M.render_sidebar(buf, state)
   if state.sidebar_threads_row and stats.unresolved > 0 then
     pcall(apply_line_hl, buf, state.sidebar_threads_row - 1, "CodeReviewCommentUnresolved")
   end
+
+  -- Per-segment highlights on drafts+AI line
+  if state.sidebar_drafts_row then
+    local row0 = state.sidebar_drafts_row - 1
+    local line = vim.api.nvim_buf_get_lines(buf, row0, row0 + 1, false)[1] or ""
+    local segments = {
+      { pat = "✓%d+", hl = "CodeReviewFileAdded" },
+      { pat = "✗%d+", hl = "CodeReviewFileDeleted" },
+      { pat = "⏳%d+", hl = "CodeReviewHidden" },
+    }
+    for _, seg in ipairs(segments) do
+      local s, e = string.find(line, seg.pat)
+      if s then
+        pcall(apply_word_hl, buf, row0, s - 1, e, seg.hl)
+      end
+    end
+  end
 end
 
 -- ─── Comment creation ─────────────────────────────────────────────────────────
