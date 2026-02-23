@@ -232,6 +232,42 @@ function M.create_inline_range(mr, old_path, new_path, start_pos, end_pos, on_su
   end)
 end
 
+function M.create_inline_draft(mr, new_path, new_line, on_success)
+  open_input_popup("Draft Comment", function(text)
+    local provider, client, ctx = get_provider()
+    if not provider then return end
+    local _, err = provider.create_draft_comment(client, ctx, mr, {
+      body = text,
+      path = new_path,
+      line = new_line,
+    })
+    if err then
+      vim.notify("Failed to create draft comment: " .. err, vim.log.levels.ERROR)
+    else
+      vim.notify("Draft comment created", vim.log.levels.INFO)
+      if on_success then on_success() end
+    end
+  end)
+end
+
+function M.create_inline_range_draft(mr, new_path, start_line, end_line, on_success)
+  open_input_popup("Draft Comment", function(text)
+    local provider, client, ctx = get_provider()
+    if not provider then return end
+    local _, err = provider.create_draft_comment(client, ctx, mr, {
+      body = text,
+      path = new_path,
+      line = end_line,
+    })
+    if err then
+      vim.notify("Failed to create draft comment: " .. err, vim.log.levels.ERROR)
+    else
+      vim.notify("Draft comment created", vim.log.levels.INFO)
+      if on_success then on_success() end
+    end
+  end)
+end
+
 function M.create_mr_comment(review, provider, ctx, on_success)
   open_input_popup("Comment on MR", function(text)
     if not provider or not ctx then return end
