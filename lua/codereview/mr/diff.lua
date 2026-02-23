@@ -57,11 +57,29 @@ local function wrap_text(text, width)
     elseif #paragraph <= width then
       table.insert(result, paragraph)
     else
+      local spans = markdown.find_spans(paragraph)
+      local function in_span(pos)
+        for _, r in ipairs(spans) do
+          if pos > r[1] and pos < r[2] then return true end
+        end
+        return false
+      end
+
       local line = ""
+      local char_pos = 1 -- tracks position in original paragraph
       for word in paragraph:gmatch("%S+") do
+        local ws = paragraph:find("%S", char_pos)
+        char_pos = ws + #word
+
         if line ~= "" and #line + #word + 1 > width then
-          table.insert(result, line)
-          line = word
+          -- The break point is the space before this word (at ws - 1)
+          if #spans > 0 and in_span(ws - 1) then
+            -- Inside a markdown span: don't break, keep the line going
+            line = line .. " " .. word
+          else
+            table.insert(result, line)
+            line = word
+          end
         else
           line = line == "" and word or (line .. " " .. word)
         end

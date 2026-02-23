@@ -83,6 +83,93 @@ describe("parse_inline", function()
       { "italic", "CodeReviewCommentItalic" },
     }, segs)
   end)
+
+  -- Flanking rules tests
+  it("rejects bold inside word boundaries (no flanking)", function()
+    -- 2**3 should not be bold
+    local segs = markdown.parse_inline("2**3 = 8 and 3**2 = 9", "CodeReviewComment")
+    assert.same({ { "2**3 = 8 and 3**2 = 9", "CodeReviewComment" } }, segs)
+  end)
+
+  it("rejects italic with leading/trailing whitespace in inner text", function()
+    local segs = markdown.parse_inline("a * b * c", "CodeReviewComment")
+    assert.same({ { "a * b * c", "CodeReviewComment" } }, segs)
+  end)
+
+  it("rejects italic inside word boundaries", function()
+    local segs = markdown.parse_inline("a*b*c", "CodeReviewComment")
+    assert.same({ { "a*b*c", "CodeReviewComment" } }, segs)
+  end)
+
+  it("accepts bold preceded by punctuation", function()
+    local segs = markdown.parse_inline("(**bold**)", "CodeReviewComment")
+    assert.same({
+      { "(", "CodeReviewComment" },
+      { "bold", "CodeReviewCommentBold" },
+      { ")", "CodeReviewComment" },
+    }, segs)
+  end)
+
+  it("accepts italic at start of line", function()
+    local segs = markdown.parse_inline("*italic* text", "CodeReviewComment")
+    assert.same({
+      { "italic", "CodeReviewCommentItalic" },
+      { " text", "CodeReviewComment" },
+    }, segs)
+  end)
+
+  it("rejects bold with inner text starting with space", function()
+    local segs = markdown.parse_inline("** not bold **", "CodeReviewComment")
+    assert.same({ { "** not bold **", "CodeReviewComment" } }, segs)
+  end)
+
+  it("rejects strikethrough inside word boundaries", function()
+    local segs = markdown.parse_inline("a~~b~~c", "CodeReviewComment")
+    assert.same({ { "a~~b~~c", "CodeReviewComment" } }, segs)
+  end)
+
+  it("renders bold around code spans", function()
+    local segs = markdown.parse_inline("**Missing `code` here.**", "CodeReviewComment")
+    assert.same({
+      { "Missing ", "CodeReviewCommentBold" },
+      { "code", "CodeReviewCommentCode" },
+      { " here.", "CodeReviewCommentBold" },
+    }, segs)
+  end)
+
+  it("renders bold around multiple code spans", function()
+    local segs = markdown.parse_inline("**use `foo` and `bar`**", "CodeReviewComment")
+    assert.same({
+      { "use ", "CodeReviewCommentBold" },
+      { "foo", "CodeReviewCommentCode" },
+      { " and ", "CodeReviewCommentBold" },
+      { "bar", "CodeReviewCommentCode" },
+    }, segs)
+  end)
+
+  it("renders bold with code span and unresolved hl", function()
+    local segs = markdown.parse_inline("**check `val`**", "CodeReviewCommentUnresolved")
+    assert.same({
+      { "check ", "CodeReviewCommentBoldUnresolved" },
+      { "val", "CodeReviewCommentCodeUnresolved" },
+    }, segs)
+  end)
+end)
+
+describe("find_spans", function()
+  it("returns empty for plain text", function()
+    assert.same({}, markdown.find_spans("hello world"))
+  end)
+
+  it("finds bold span positions", function()
+    local spans = markdown.find_spans("a **bold** b")
+    assert.same({ { 3, 10 } }, spans)
+  end)
+
+  it("finds multiple span positions", function()
+    local spans = markdown.find_spans("**bold** and *italic*")
+    assert.equals(2, #spans)
+  end)
 end)
 
 describe("ui.markdown", function()
