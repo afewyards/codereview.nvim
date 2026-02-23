@@ -213,7 +213,7 @@ function M.place_comment_signs(buf, line_data, discussions, file_diff)
               -- └ footer keyhints ──────────────────────
               local footer_content
               if is_err then
-                footer_content = "R:retry  d:discard"
+                footer_content = "gR:retry  D:discard"
               elseif is_pending then
                 footer_content = "posting…"
               elseif discussion.is_draft then
@@ -763,7 +763,7 @@ function M.render_all_files(buf, files, review, discussions, context, file_conte
                 end
                 local footer_content
                 if is_err then
-                  footer_content = "R:retry  d:discard"
+                  footer_content = "gR:retry  D:discard"
                 elseif is_pending then
                   footer_content = "posting…"
                 elseif disc.is_draft then
@@ -2388,6 +2388,43 @@ function M.setup_keymaps(layout, state)
   km.apply(sidebar_buf, sidebar_callbacks)
 
   -- ── Non-registry keymaps ─────────────────────────────────────────────────────
+
+  -- gR: retry a failed optimistic comment
+  map(main_buf, "n", "gR", function()
+    if state.view_mode ~= "diff" then return end
+    local disc = get_cursor_disc()
+    if not disc or not disc.is_failed then return end
+    disc.is_failed = false
+    disc.is_optimistic = true
+    rerender_view()
+    local note = disc.notes and disc.notes[1]
+    if not note then return end
+    local provider, _, ctx = require("codereview.providers").detect()
+    if not provider then return end
+    local client = require("codereview.api.client")
+    local comment = require("codereview.mr.comment")
+    local pos = note.position or {}
+    comment.post_with_retry(
+      function() return provider.post_comment(client, ctx, state.review, note.body, pos) end,
+      function()
+        vim.notify("Comment posted", vim.log.levels.INFO)
+        refresh_discussions()
+      end,
+      function(err)
+        vim.notify("Retry failed: " .. err, vim.log.levels.ERROR)
+        mark_optimistic_failed(disc)
+      end
+    )
+  end)
+
+  -- D: discard a failed optimistic comment
+  map(main_buf, "n", "D", function()
+    if state.view_mode ~= "diff" then return end
+    local disc = get_cursor_disc()
+    if not disc or not disc.is_failed then return end
+    remove_optimistic(disc)
+    vim.notify("Discarded failed comment", vim.log.levels.INFO)
+  end)
 
   -- Load more context (<CR> on a load_more line)
   map(main_buf, "n", "<CR>", function()
