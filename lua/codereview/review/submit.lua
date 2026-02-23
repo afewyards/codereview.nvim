@@ -6,7 +6,7 @@ local M = {}
 function M.filter_accepted(suggestions)
   local accepted = {}
   for _, s in ipairs(suggestions) do
-    if s.status == "accepted" or s.status == "edited" then
+    if (s.status == "accepted" or s.status == "edited") and not s.drafted then
       table.insert(accepted, s)
     end
   end
@@ -35,6 +35,8 @@ function M.submit_review(review, suggestions)
     })
     if post_err then
       table.insert(errors, string.format("%s:%d - %s", suggestion.file, suggestion.line, post_err))
+    else
+      suggestion.drafted = true
     end
   end
 

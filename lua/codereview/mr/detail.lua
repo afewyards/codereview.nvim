@@ -2,7 +2,7 @@ local providers = require("codereview.providers")
 local client = require("codereview.api.client")
 local markdown = require("codereview.ui.markdown")
 local list_mod = require("codereview.mr.list")
-local spinner = require("codereview.ui.spinner")
+
 local M = {}
 
 function M.format_time(iso_str)
@@ -120,36 +120,32 @@ function M.count_discussions(discussions)
 end
 
 function M.open(entry)
-  local win = vim.api.nvim_get_current_win()
-  spinner.start(win, "Loading MR details…")
+  local ok, provider, ctx, review, discussions, files = pcall(function()
+    local prov, pctx, perr = providers.detect()
+    if not prov then error(perr or "Could not detect platform") end
 
-  local provider, ctx, err = providers.detect()
-  if not provider then
-    spinner.stop(win)
-    vim.notify(err or "Could not detect platform", vim.log.levels.ERROR)
+    local rev, review_err = prov.get_review(client, pctx, entry.id)
+    if not rev then error("Failed to load MR: " .. (review_err or "unknown error")) end
+
+    local disc, disc_err = prov.get_discussions(client, pctx, rev)
+    if not disc then
+      vim.notify("Failed to load discussions: " .. (disc_err or "unknown error"), vim.log.levels.WARN)
+      disc = {}
+    end
+
+    local f, diffs_err = prov.get_diffs(client, pctx, rev)
+    if not f then
+      vim.notify("Failed to load diffs: " .. (diffs_err or "unknown error"), vim.log.levels.WARN)
+      f = {}
+    end
+
+    return prov, pctx, rev, disc, f
+  end)
+
+  if not ok then
+    vim.notify(tostring(provider), vim.log.levels.ERROR)
     return
   end
-
-  local review, review_err = provider.get_review(client, ctx, entry.id)
-  if not review then
-    spinner.stop(win)
-    vim.notify("Failed to load MR: " .. (review_err or "unknown error"), vim.log.levels.ERROR)
-    return
-  end
-
-  local discussions, disc_err = provider.get_discussions(client, ctx, review)
-  if not discussions then
-    vim.notify("Failed to load discussions: " .. (disc_err or "unknown error"), vim.log.levels.WARN)
-    discussions = {}
-  end
-
-  local files, diffs_err = provider.get_diffs(client, ctx, review)
-  if not files then
-    vim.notify("Failed to load diffs: " .. (diffs_err or "unknown error"), vim.log.levels.WARN)
-    files = {}
-  end
-
-  spinner.stop(win)
 
   local diff = require("codereview.mr.diff")
   local split = require("codereview.ui.split")
