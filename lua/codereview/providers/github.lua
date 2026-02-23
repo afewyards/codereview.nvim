@@ -444,9 +444,8 @@ function M.get_current_user(client, ctx)
   if not resp or resp.status ~= 200 then
     return nil, "Failed to fetch current user"
   end
-  local ok, data = pcall(vim.json.decode, resp.body)
-  if not ok then return nil, "Failed to parse user response" end
-  M._cached_user = data.login
+  if not resp.data or not resp.data.login then return nil, "Failed to parse user response" end
+  M._cached_user = resp.data.login
   return M._cached_user
 end
 

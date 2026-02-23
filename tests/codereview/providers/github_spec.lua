@@ -321,7 +321,7 @@ describe("providers.github", function()
       local mock_client = {
         get = function(_, path, _)
           assert.equals("/user", path)
-          return { status = 200, body = vim.json.encode({ login = "testuser" }) }
+          return { status = 200, data = { login = "testuser" } }
         end,
       }
       local user, err = github.get_current_user(mock_client, { base_url = "https://api.github.com" })
@@ -334,7 +334,7 @@ describe("providers.github", function()
       local mock_client = {
         get = function(_, _, _)
           call_count = call_count + 1
-          return { status = 200, body = vim.json.encode({ login = "cached" }) }
+          return { status = 200, data = { login = "cached" } }
         end,
       }
       local ctx = { base_url = "https://api.github.com" }

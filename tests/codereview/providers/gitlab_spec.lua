@@ -82,7 +82,7 @@ describe("providers.gitlab", function()
       local mock_client = {
         get = function(_, path, _)
           assert.equals("/api/v4/user", path)
-          return { status = 200, body = vim.json.encode({ username = "testuser" }) }
+          return { status = 200, data = { username = "testuser" } }
         end,
       }
       local user, err = gitlab.get_current_user(mock_client, { base_url = "https://gitlab.com" })
@@ -95,7 +95,7 @@ describe("providers.gitlab", function()
       local mock_client = {
         get = function(_, _, _)
           call_count = call_count + 1
-          return { status = 200, body = vim.json.encode({ username = "cached" }) }
+          return { status = 200, data = { username = "cached" } }
         end,
       }
       local ctx = { base_url = "https://gitlab.com" }
