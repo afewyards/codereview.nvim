@@ -27,6 +27,10 @@ local defaults = {
   ai_review            = { key = "A",     mode = "n", desc = "Start/cancel AI" },
   refresh              = { key = "R",     mode = "n", desc = "Refresh" },
   quit                 = { key = "Q",     mode = "n", desc = "Quit" },
+  select_next_note     = { key = "<Tab>",   mode = "n", desc = "Select next note" },
+  select_prev_note     = { key = "<S-Tab>", mode = "n", desc = "Select prev note" },
+  edit_note            = { key = "e",       mode = "n", desc = "Edit note" },
+  delete_note          = { key = "x",       mode = "n", desc = "Delete note" },
 }
 
 local function deep_copy(orig)
