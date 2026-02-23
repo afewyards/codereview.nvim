@@ -81,6 +81,12 @@ describe("mr.comment", function()
     end)
   end)
 
+  describe("delete_note", function()
+    it("function exists and is callable", function()
+      assert.is_function(comment.delete_note)
+    end)
+  end)
+
   describe("post_with_retry", function()
     it("calls on_success on first success", function()
       local called = false

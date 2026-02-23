@@ -432,6 +432,39 @@ function M.edit_note(disc, note, mr, on_success, opts)
   end, opts)
 end
 
+--- Delete a note. Shows Yes/No confirmation, calls provider delete_note on confirm.
+--- @param disc table  discussion containing the note
+--- @param note table  the note to delete
+--- @param mr table    the MR/PR object
+--- @param on_success fun(result?: table)  called after successful delete
+function M.delete_note(disc, note, mr, on_success)
+  vim.ui.select({ "Yes", "No" }, { prompt = "Delete this comment?" }, function(choice)
+    if choice ~= "Yes" then return end
+    vim.schedule(function()
+      local provider, client, ctx = get_provider()
+      if not provider then return end
+      local _, err = provider.delete_note(client, ctx, mr, disc.id, note.id)
+      if err then
+        vim.notify("Delete failed: " .. err, vim.log.levels.ERROR)
+        return
+      end
+      -- Remove note from discussion
+      for i, n in ipairs(disc.notes) do
+        if n.id == note.id then
+          table.remove(disc.notes, i)
+          break
+        end
+      end
+      -- If thread is now empty, signal caller to remove the discussion
+      if #disc.notes == 0 then
+        if on_success then on_success({ removed_disc = true }) end
+      else
+        if on_success then on_success() end
+      end
+    end)
+  end)
+end
+
 function M.resolve_toggle(disc, mr, callback)
   local first = disc.notes and disc.notes[1]
   if not first then return end

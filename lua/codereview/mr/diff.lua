@@ -2426,6 +2426,34 @@ function M.setup_keymaps(layout, state)
       end, { win_id = layout.main_win, anchor_line = cursor_row })
     end,
 
+    delete_note = function()
+      if state.view_mode ~= "diff" then return end
+      local disc = get_cursor_disc()
+      if not disc then return end
+      local sel_idx = state.note_selection[disc.id]
+      if not sel_idx then return end  -- no note selected; let dismiss_suggestion handle "x"
+      local note = disc.notes[sel_idx]
+      if not note then return end
+      if not state.current_user then return end
+      if note.author ~= state.current_user then
+        vim.notify("Can only delete your own comments", vim.log.levels.WARN)
+        return
+      end
+      local comment = require("codereview.mr.comment")
+      comment.delete_note(disc, note, state.review, function(result)
+        state.note_selection[disc.id] = nil  -- clear selection
+        if result and result.removed_disc then
+          for i, d in ipairs(state.discussions) do
+            if d.id == disc.id then
+              table.remove(state.discussions, i)
+              break
+            end
+          end
+        end
+        rerender_view()
+      end)
+    end,
+
     select_next_note = function()
       if state.view_mode ~= "diff" then return end
       local disc = get_cursor_disc()
