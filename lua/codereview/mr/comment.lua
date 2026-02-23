@@ -42,6 +42,7 @@ local function open_input_popup(title, callback, opts)
   local win, extmark_id
   local diff_buf
   local line_hl_ids = {}
+  local reserve_line, reserve_above
 
   if use_inline then
     local anchor_0 = opts.anchor_line - 1  -- convert to 0-indexed
@@ -53,8 +54,15 @@ local function open_input_popup(title, callback, opts)
     local win_width = vim.api.nvim_win_get_width(opts.win_id)
     local width = win_width - 4  -- small margin
 
-    -- Reserve space
-    extmark_id = ifloat.reserve_space(diff_buf, anchor_0, total_height + 2)
+    -- Reserve space: when replying to a thread, place the gap on the next
+    -- buffer line (above it) so it appears after the comment's virt_lines.
+    reserve_line = anchor_0
+    reserve_above = false
+    if opts.thread_height and opts.thread_height > 0 then
+      reserve_line = anchor_0 + 1
+      reserve_above = true
+    end
+    extmark_id = ifloat.reserve_space(diff_buf, reserve_line, total_height + 2, reserve_above)
 
     win = vim.api.nvim_open_win(buf, true, {
       relative = "win",
@@ -62,7 +70,7 @@ local function open_input_popup(title, callback, opts)
       bufpos = { anchor_0, 0 },
       width = width,
       height = total_height,
-      row = 1,
+      row = (opts.thread_height or 0) + 1,
       col = 1,
       style = "minimal",
       border = ifloat.border(opts.action_type),
@@ -161,7 +169,7 @@ local function open_input_popup(title, callback, opts)
           vim.api.nvim_win_set_height(win, new_height)
         end
         if extmark_id and diff_buf and vim.api.nvim_buf_is_valid(diff_buf) then
-          ifloat.update_space(diff_buf, extmark_id, opts.anchor_line - 1, new_height + 2)
+          ifloat.update_space(diff_buf, extmark_id, reserve_line, new_height + 2, reserve_above)
         end
       end)
     end,

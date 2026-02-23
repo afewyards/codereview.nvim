@@ -32,14 +32,16 @@ end
 --- @param diff_buf number
 --- @param anchor_line number  0-indexed line
 --- @param line_count number
+--- @param above? boolean  use virt_lines_above (for placing after existing virt_lines)
 --- @return number extmark_id
-function M.reserve_space(diff_buf, anchor_line, line_count)
+function M.reserve_space(diff_buf, anchor_line, line_count, above)
   local virt = {}
   for _ = 1, line_count do
     table.insert(virt, { { "", "" } })
   end
   return vim.api.nvim_buf_set_extmark(diff_buf, NS, anchor_line, 0, {
     virt_lines = virt,
+    virt_lines_above = above or false,
   })
 end
 
@@ -48,7 +50,8 @@ end
 --- @param extmark_id number
 --- @param anchor_line number  0-indexed
 --- @param line_count number
-function M.update_space(diff_buf, extmark_id, anchor_line, line_count)
+--- @param above? boolean  use virt_lines_above
+function M.update_space(diff_buf, extmark_id, anchor_line, line_count, above)
   local virt = {}
   for _ = 1, line_count do
     table.insert(virt, { { "", "" } })
@@ -56,6 +59,7 @@ function M.update_space(diff_buf, extmark_id, anchor_line, line_count)
   vim.api.nvim_buf_set_extmark(diff_buf, NS, anchor_line, 0, {
     id = extmark_id,
     virt_lines = virt,
+    virt_lines_above = above or false,
   })
 end
 

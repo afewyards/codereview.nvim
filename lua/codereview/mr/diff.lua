@@ -109,16 +109,14 @@ function M.place_comment_signs(buf, line_data, discussions, file_diff)
       if target_line then
         local sign_name = is_resolved(discussion) and "CodeReviewCommentSign"
           or "CodeReviewUnresolvedSign"
-        -- Place signs on all lines in the range and map rows to discussion
+        -- Place signs on all lines in the range (visual only; navigation uses target_line)
         if range_start and range_start ~= target_line then
           for row, data in ipairs(line_data) do
             local item = data.item
             if item then
               local ln = tonumber(item.new_line) or tonumber(item.old_line)
-              if ln and ln >= range_start and ln <= target_line then
+              if ln and ln >= range_start and ln < target_line then
                 pcall(vim.fn.sign_place, 0, "CodeReview", sign_name, buf, { lnum = row })
-                if not row_discussions[row] then row_discussions[row] = {} end
-                table.insert(row_discussions[row], discussion)
               end
             end
           end
@@ -672,16 +670,14 @@ function M.render_all_files(buf, files, review, discussions, context, file_conte
         if target_line then
           local sign_name = is_resolved(disc) and "CodeReviewCommentSign"
             or "CodeReviewUnresolvedSign"
-          -- Place signs on all lines in the range and map rows to discussion
+          -- Place signs on range lines (visual only; navigation uses target_line)
           if range_start and range_start ~= target_line then
             for i = section.start_line, section.end_line do
               local data = all_line_data[i]
               if data.item then
                 local ln = tonumber(data.item.new_line) or tonumber(data.item.old_line)
-                if ln and ln >= range_start and ln <= target_line then
+                if ln and ln >= range_start and ln < target_line then
                   pcall(vim.fn.sign_place, 0, "CodeReview", sign_name, buf, { lnum = i })
-                  if not all_row_discussions[i] then all_row_discussions[i] = {} end
-                  table.insert(all_row_discussions[i], disc)
                 end
               end
             end
@@ -1766,8 +1762,24 @@ function M.setup_keymaps(layout, state)
           end
         end
       end
+      -- Calculate how many virtual lines the comment thread occupies
+      -- so the reply float can be positioned below them.
+      local thread_height = 0
+      local notes = disc.notes
+      if notes and #notes > 0 then
+        thread_height = 1 -- header (┌ @author...)
+        thread_height = thread_height + #wrap_text(notes[1].body, 64)
+        for i = 2, #notes do
+          if not notes[i].system then
+            thread_height = thread_height + 1 -- separator (│)
+            thread_height = thread_height + 1 -- reply header (│  ↪ @author)
+            thread_height = thread_height + #wrap_text(notes[i].body, 58)
+          end
+        end
+        thread_height = thread_height + 1 -- footer (└ r:reply...)
+      end
       comment.reply(disc, state.review, refresh_discussions,
-        { anchor_line = last_row, win_id = layout.main_win })
+        { anchor_line = last_row, win_id = layout.main_win, thread_height = thread_height })
     end
   end)
 
@@ -2234,6 +2246,9 @@ function M.load_diffs_into_state(state, files)
   state.scroll_line_data = state.scroll_line_data or {}
   state.scroll_row_disc = state.scroll_row_disc or {}
   state.file_contexts = state.file_contexts or {}
+  state.row_ai_cache = state.row_ai_cache or {}
+  state.scroll_row_ai = state.scroll_row_ai or {}
+  state.local_drafts = state.local_drafts or {}
   state.current_file = 1
 end
 
