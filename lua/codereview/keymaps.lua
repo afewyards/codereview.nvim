@@ -45,7 +45,8 @@ function M.setup(user_opts)
   for action, value in pairs(user_opts) do
     if not defaults[action] then
       if vim and vim.notify then
-        vim.notify(string.format("[codereview] Unknown keymap action: %q", action), vim.log.levels.WARN)
+        local level = vim.log and vim.log.levels and vim.log.levels.WARN or 2
+        vim.notify(string.format("[codereview] Unknown keymap action: %q", action), level)
       end
     elseif value == false then
       resolved[action].key = false
