@@ -26,6 +26,43 @@ describe("providers.github", function()
     end)
   end)
 
+  describe("normalize_graphql_threads", function()
+    it("maps GraphQL reviewThread nodes to discussion shape", function()
+      local threads = {
+        {
+          id = "PRRT_abc123",
+          isResolved = true,
+          diffSide = "RIGHT",
+          startDiffSide = nil,
+          comments = { nodes = {
+            { databaseId = 1, author = { login = "alice" }, body = "root comment",
+              createdAt = "2026-01-01T00:00:00Z", path = "foo.lua", line = 10,
+              startLine = nil, commit = { oid = "sha123" } },
+            { databaseId = 2, author = { login = "bob" }, body = "reply",
+              createdAt = "2026-01-01T00:01:00Z", path = "foo.lua", line = 10,
+              startLine = nil, commit = { oid = "sha123" } },
+          }},
+        },
+      }
+      local discussions = github.normalize_graphql_threads(threads)
+      assert.equal(1, #discussions)
+      assert.equal("1", discussions[1].id)
+      assert.equal("PRRT_abc123", discussions[1].node_id)
+      assert.is_true(discussions[1].resolved)
+      assert.equal(2, #discussions[1].notes)
+      assert.equal("alice", discussions[1].notes[1].author)
+      assert.equal("bob", discussions[1].notes[2].author)
+      assert.equal("foo.lua", discussions[1].notes[1].position.new_path)
+      assert.equal(10, discussions[1].notes[1].position.new_line)
+    end)
+
+    it("handles thread with no comments gracefully", function()
+      local threads = { { id = "PRRT_empty", isResolved = false, comments = { nodes = {} } } }
+      local discussions = github.normalize_graphql_threads(threads)
+      assert.equal(0, #discussions)
+    end)
+  end)
+
   describe("normalize_review_comments_to_discussions", function()
     it("groups by in_reply_to_id and sorts by created_at", function()
       local comments = {
@@ -145,21 +182,54 @@ describe("providers.github", function()
       assert.is_true(diffs[2].renamed_file)
     end)
 
-    it("get_discussions calls paginate_all_url and normalizes", function()
-      local called_url
-      local client = make_client({
-        paginate_all_url = function(url, _)
-          called_url = url
-          return {
-            { id = 1, user = { login = "a" }, body = "root", created_at = "2026-01-01T00:00:00Z",
-              path = "f.lua", line = 5, side = "RIGHT", commit_id = "abc", in_reply_to_id = nil },
-          }
-        end,
-      })
-      local discs, err = github.get_discussions(client, ctx, review)
+    it("get_discussions fetches threads via GraphQL", function()
+      -- Use raw JSON strings to avoid vim.json.encode array/object issues in test env
+      local body = '{"data":{"repository":{"pullRequest":{"reviewThreads":'
+        .. '{"pageInfo":{"hasNextPage":false,"endCursor":null},'
+        .. '"nodes":[{"id":"PRRT_1","isResolved":false,"diffSide":"RIGHT","startDiffSide":null,"comments":{"nodes":['
+        .. '{"databaseId":1,"author":{"login":"a"},"body":"root",'
+        .. '"createdAt":"2026-01-01T00:00:00Z","path":"f.lua","line":5,'
+        .. '"startLine":null,'
+        .. '"commit":{"oid":"abc"}}]}}]}}}}}}'
+      package.loaded["plenary.curl"] = {
+        request = function() return { status = 200, body = body } end,
+      }
+      local discs, err = github.get_discussions(make_client({}), ctx, review)
       assert.is_nil(err)
-      assert.truthy(called_url:find("/repos/owner/repo/pulls/42/comments"))
       assert.equal(1, #discs)
+      assert.equal("1", discs[1].id)
+      assert.equal("PRRT_1", discs[1].node_id)
+    end)
+
+    it("get_discussions paginates when hasNextPage is true", function()
+      -- Use raw JSON strings to avoid vim.json.encode array/object issues in test env
+      local page1 = '{"data":{"repository":{"pullRequest":{"reviewThreads":'
+        .. '{"pageInfo":{"hasNextPage":true,"endCursor":"cursor1"},'
+        .. '"nodes":[{"id":"PRRT_1","isResolved":false,"diffSide":"RIGHT","startDiffSide":null,"comments":{"nodes":['
+        .. '{"databaseId":1,"author":{"login":"a"},"body":"first",'
+        .. '"createdAt":"2026-01-01T00:00:00Z","path":"a.lua","line":1,'
+        .. '"startLine":null,'
+        .. '"commit":{"oid":"abc"}}]}}]}}}}}}'
+      local page2 = '{"data":{"repository":{"pullRequest":{"reviewThreads":'
+        .. '{"pageInfo":{"hasNextPage":false,"endCursor":"cursor2"},'
+        .. '"nodes":[{"id":"PRRT_2","isResolved":true,"diffSide":"RIGHT","startDiffSide":null,"comments":{"nodes":['
+        .. '{"databaseId":2,"author":{"login":"b"},"body":"second",'
+        .. '"createdAt":"2026-01-01T00:01:00Z","path":"b.lua","line":5,'
+        .. '"startLine":null,'
+        .. '"commit":{"oid":"def"}}]}}]}}}}}}'
+      local call_count = 0
+      package.loaded["plenary.curl"] = {
+        request = function()
+          call_count = call_count + 1
+          return { status = 200, body = call_count == 1 and page1 or page2 }
+        end,
+      }
+      local discs, err = github.get_discussions(make_client({}), ctx, review)
+      assert.is_nil(err)
+      assert.equal(2, #discs)
+      assert.equal(2, call_count)
+      assert.equal("1", discs[1].id)
+      assert.equal("2", discs[2].id)
     end)
 
     it("post_comment inline posts to pulls comments endpoint", function()

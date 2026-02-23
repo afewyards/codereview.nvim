@@ -167,6 +167,46 @@ function M.normalize_review_comments_to_discussions(comments)
   return discussions
 end
 
+function M.normalize_graphql_threads(thread_nodes)
+  local discussions = {}
+  for _, thread in ipairs(thread_nodes) do
+    local comments = thread.comments and thread.comments.nodes or {}
+    if #comments == 0 then goto continue end
+
+    local notes = {}
+    for _, c in ipairs(comments) do
+      table.insert(notes, {
+        id = c.databaseId,
+        node_id = c.id,
+        author = c.author and c.author.login or "",
+        body = c.body or "",
+        created_at = c.createdAt or "",
+        system = false,
+        resolvable = true,
+        resolved = thread.isResolved or false,
+        position = {
+          new_path = c.path,
+          new_line = c.line,
+          side = thread.diffSide,
+          start_line = c.startLine,
+          start_side = thread.startDiffSide,
+          commit_sha = c.commit and c.commit.oid,
+        },
+      })
+    end
+
+    table.insert(discussions, {
+      id = tostring(comments[1].databaseId),
+      node_id = thread.id,
+      resolved = thread.isResolved or false,
+      notes = notes,
+    })
+
+    ::continue::
+  end
+  return discussions
+end
+
 -- Provider interface ---------------------------------------------------------
 
 --- List open PRs for the repo (owner/repo from ctx.project).
@@ -266,24 +306,65 @@ function M.get_discussions(client, ctx, review)
   local headers, err = get_headers()
   if not headers then return nil, err end
   local owner, repo = parse_owner_repo(ctx)
-  local start_url = string.format("%s/repos/%s/%s/pulls/%d/comments", ctx.base_url, owner, repo, review.id)
-  local all_comments = client.paginate_all_url(start_url, { headers = headers })
-  if not all_comments then return nil, "Failed to fetch discussions" end
-  local discussions = M.normalize_review_comments_to_discussions(all_comments)
 
-  -- Enrich with resolved status from GraphQL
-  local resolved_map = fetch_thread_resolved_map(headers, owner, repo, review.id)
-  for _, disc in ipairs(discussions) do
-    local root_id = tonumber(disc.id)
-    if root_id and resolved_map[root_id] ~= nil then
-      disc.resolved = resolved_map[root_id]
-      if disc.notes and disc.notes[1] then
-        disc.notes[1].resolved = resolved_map[root_id]
-      end
+  local all_threads = {}
+  local cursor = vim.NIL
+
+  repeat
+    local query = [[
+      query($owner: String!, $repo: String!, $pr: Int!, $cursor: String) {
+        repository(owner: $owner, name: $repo) {
+          pullRequest(number: $pr) {
+            reviewThreads(first: 100, after: $cursor) {
+              pageInfo { hasNextPage endCursor }
+              nodes {
+                id
+                isResolved
+                diffSide
+                startDiffSide
+                comments(first: 100) {
+                  nodes {
+                    databaseId
+                    author { login }
+                    body
+                    createdAt
+                    path
+                    line
+                    startLine
+                    commit { oid }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    ]]
+
+    local data, gql_err = graphql(ctx.base_url, headers, query, {
+      owner = owner, repo = repo, pr = review.id, cursor = cursor,
+    })
+    if not data then return nil, gql_err end
+
+    local connection = data
+      and data.repository
+      and data.repository.pullRequest
+      and data.repository.pullRequest.reviewThreads
+    if not connection then return {}, nil end
+
+    for _, node in ipairs(connection.nodes or {}) do
+      table.insert(all_threads, node)
     end
-  end
 
-  return discussions
+    local page_info = connection.pageInfo
+    if page_info and page_info.hasNextPage then
+      cursor = page_info.endCursor
+    else
+      cursor = nil
+    end
+  until not cursor
+
+  return M.normalize_graphql_threads(all_threads)
 end
 
 --- Post an inline comment or general PR comment.
