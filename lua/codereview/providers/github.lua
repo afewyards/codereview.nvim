@@ -75,29 +75,6 @@ function M.parse_next_page(headers)
   return link:match('<([^>]+)>%s*;%s*rel="next"')
 end
 
--- Normalization helpers -------------------------------------------------------
-
-local function normalize_comment_to_note(comment)
-  return {
-    id = comment.id,
-    node_id = comment.node_id,
-    author = comment.user and comment.user.login or "",
-    body = comment.body or "",
-    created_at = comment.created_at or "",
-    system = false,
-    resolvable = true,
-    resolved = false,
-    position = {
-      new_path = comment.path,
-      new_line = comment.line,
-      side = comment.side,   -- stored UPPERCASE: "RIGHT" or "LEFT"
-      start_line = comment.start_line,   -- nil for single-line comments
-      start_side = comment.start_side,
-      commit_sha = comment.commit_id,
-    },
-  }
-end
-
 -- PR normalization -----------------------------------------------------------
 
 --- Maps a GitHub PR object to the normalized Review shape.
@@ -120,52 +97,6 @@ function M.normalize_pr(pr)
 end
 
 -- Discussion normalization ---------------------------------------------------
-
---- Groups GitHub review comments into discussion threads.
---- Comments with in_reply_to_id = nil are thread roots.
---- Replies are grouped under their root comment, sorted by created_at.
-function M.normalize_review_comments_to_discussions(comments)
-  local roots = {}   -- ordered list of root comment IDs
-  local by_id = {}   -- { [id] = comment }
-  local replies = {} -- { [root_id] = { comments... } }
-
-  for _, comment in ipairs(comments) do
-    by_id[comment.id] = comment
-    if not comment.in_reply_to_id then
-      table.insert(roots, comment.id)
-    else
-      local root_id = comment.in_reply_to_id
-      if not replies[root_id] then
-        replies[root_id] = {}
-      end
-      table.insert(replies[root_id], comment)
-    end
-  end
-
-  local discussions = {}
-  for _, root_id in ipairs(roots) do
-    local root = by_id[root_id]
-    local thread = { root }
-    for _, reply in ipairs(replies[root_id] or {}) do
-      table.insert(thread, reply)
-    end
-
-    table.sort(thread, function(a, b) return a.created_at < b.created_at end)
-
-    local notes = {}
-    for _, c in ipairs(thread) do
-      table.insert(notes, normalize_comment_to_note(c))
-    end
-
-    table.insert(discussions, {
-      id = tostring(root_id),
-      resolved = false,
-      notes = notes,
-    })
-  end
-
-  return discussions
-end
 
 function M.normalize_graphql_threads(thread_nodes)
   local discussions = {}
@@ -260,45 +191,6 @@ function M.get_diffs(client, ctx, review)
     })
   end
   return diffs
-end
-
---- Fetch thread resolved status via GraphQL, returns { [root_comment_db_id] = bool }.
-local function fetch_thread_resolved_map(headers, owner, repo, pr_number)
-  local query = string.format([[
-    query {
-      repository(owner: "%s", name: "%s") {
-        pullRequest(number: %d) {
-          reviewThreads(first: 100) {
-            nodes {
-              isResolved
-              comments(first: 1) {
-                nodes { databaseId }
-              }
-            }
-          }
-        }
-      }
-    }
-  ]], owner, repo, pr_number)
-
-  local data = graphql(nil, headers, query)
-  if not data then return {} end
-
-  local threads = data
-    and data.repository
-    and data.repository.pullRequest
-    and data.repository.pullRequest.reviewThreads
-    and data.repository.pullRequest.reviewThreads.nodes
-  if not threads then return {} end
-
-  local map = {}
-  for _, thread in ipairs(threads) do
-    local comments = thread.comments and thread.comments.nodes
-    if comments and #comments > 0 then
-      map[comments[1].databaseId] = thread.isResolved
-    end
-  end
-  return map
 end
 
 --- Get all review comment discussions for a PR.

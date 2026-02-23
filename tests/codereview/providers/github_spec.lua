@@ -63,22 +63,6 @@ describe("providers.github", function()
     end)
   end)
 
-  describe("normalize_review_comments_to_discussions", function()
-    it("groups by in_reply_to_id and sorts by created_at", function()
-      local comments = {
-        { id = 2, user = { login = "b" }, body = "reply", created_at = "2026-01-01T00:01:00Z",
-          path = "foo.lua", line = 10, side = "RIGHT", commit_id = "abc", in_reply_to_id = 1 },
-        { id = 1, user = { login = "a" }, body = "first", created_at = "2026-01-01T00:00:00Z",
-          path = "foo.lua", line = 10, side = "RIGHT", commit_id = "abc", in_reply_to_id = nil },
-      }
-      local discussions = github.normalize_review_comments_to_discussions(comments)
-      assert.equal(1, #discussions)
-      assert.equal(2, #discussions[1].notes)
-      assert.equal("a", discussions[1].notes[1].author)
-      assert.equal("b", discussions[1].notes[2].author)
-    end)
-  end)
-
   describe("build_auth_header", function()
     it("uses Authorization Bearer", function()
       assert.equal("Bearer ghp_123", github.build_auth_header("ghp_123")["Authorization"])
