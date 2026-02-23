@@ -1535,9 +1535,28 @@ function M.setup_keymaps(layout, state)
     local disc = get_cursor_disc()
     if disc then
       local comment = require("codereview.mr.comment")
-      local row = vim.api.nvim_win_get_cursor(layout.main_win)[1]
+      local cursor_row = vim.api.nvim_win_get_cursor(layout.main_win)[1]
+      -- Find last row belonging to this discussion so float opens below the comment block
+      local row_disc = state.scroll_mode and state.scroll_row_disc
+        or state.row_disc_cache[state.current_file]
+      local last_row = cursor_row
+      if row_disc then
+        local total = vim.api.nvim_buf_line_count(vim.api.nvim_win_get_buf(layout.main_win))
+        for r = cursor_row, math.min(cursor_row + 50, total) do
+          local discs = row_disc[r]
+          if discs then
+            local found = false
+            for _, d in ipairs(discs) do
+              if d.id == disc.id then found = true; break end
+            end
+            if found then last_row = r else break end
+          else
+            break
+          end
+        end
+      end
       comment.reply(disc, state.review, refresh_discussions,
-        { anchor_line = row, win_id = layout.main_win })
+        { anchor_line = last_row, win_id = layout.main_win })
     end
   end)
 
