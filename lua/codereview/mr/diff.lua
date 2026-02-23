@@ -901,9 +901,8 @@ local function build_footer(state, sess)
   end
 
   header("View")
-  row("+/-    context   ⌃F full")
-  row("⌃A     scroll    R  refresh")
-  row("q quit")
+  row("⌃F     full      ⌃A scroll")
+  row("R      refresh   q  quit")
 
   return lines, hls
 end
@@ -1782,15 +1781,6 @@ function M.setup_keymaps(layout, state)
   end)
 
   -- Context adjustment
-  map(main_buf, "n", "+", function()
-    if state.view_mode ~= "diff" then return end
-    adjust_context(layout, state, 5)
-  end)
-  map(main_buf, "n", "-", function()
-    if state.view_mode ~= "diff" then return end
-    adjust_context(layout, state, -5)
-  end)
-
   -- Toggle full file (current file only in scroll mode)
   map(main_buf, "n", "<C-f>", function()
     if state.view_mode ~= "diff" then return end
