@@ -1413,10 +1413,14 @@ end
 -- ─── Keymaps ─────────────────────────────────────────────────────────────────
 
 function M.setup_keymaps(layout, state)
+  local km = require("codereview.keymaps")
   local main_buf = layout.main_buf
   local sidebar_buf = layout.sidebar_buf
   local opts = { noremap = true, silent = true, nowait = true }
 
+  -- map() is kept for NON-registry keymaps only:
+  -- <CR> load-more on main_buf, <CR> file-select on sidebar_buf,
+  -- and float keymaps inside the edit_suggestion handler.
   local function map(buf, mode, lhs, fn)
     vim.keymap.set(mode, lhs, fn, vim.tbl_extend("force", opts, { buffer = buf }))
   end
@@ -1424,93 +1428,7 @@ function M.setup_keymaps(layout, state)
   -- Track active state for external access (e.g. from AI review module)
   active_states[main_buf] = { state = state, layout = layout }
 
-  -- Scroll mode toggle
-  map(main_buf, "n", "<C-a>", function()
-    if state.view_mode ~= "diff" then return end
-    toggle_scroll_mode(layout, state)
-  end)
-  map(sidebar_buf, "n", "<C-a>", function()
-    if state.view_mode ~= "diff" then return end
-    toggle_scroll_mode(layout, state)
-  end)
-
-  -- File navigation
-  map(main_buf, "n", "]f", function()
-    if state.view_mode ~= "diff" then return end
-    if state.scroll_mode then
-      local cursor = vim.api.nvim_win_get_cursor(layout.main_win)[1]
-      for _, sec in ipairs(state.file_sections) do
-        if sec.start_line > cursor then
-          vim.api.nvim_win_set_cursor(layout.main_win, { sec.start_line, 0 })
-          state.current_file = sec.file_idx
-          M.render_sidebar(layout.sidebar_buf, state)
-          return
-        end
-      end
-    else
-      nav_file(layout, state, 1)
-    end
-  end)
-  map(main_buf, "n", "[f", function()
-    if state.view_mode ~= "diff" then return end
-    if state.scroll_mode then
-      local cursor = vim.api.nvim_win_get_cursor(layout.main_win)[1]
-      for i = #state.file_sections, 1, -1 do
-        if state.file_sections[i].start_line < cursor then
-          vim.api.nvim_win_set_cursor(layout.main_win, { state.file_sections[i].start_line, 0 })
-          state.current_file = state.file_sections[i].file_idx
-          M.render_sidebar(layout.sidebar_buf, state)
-          return
-        end
-      end
-    else
-      nav_file(layout, state, -1)
-    end
-  end)
-  map(sidebar_buf, "n", "]f", function()
-    if state.view_mode ~= "diff" then return end
-    nav_file(layout, state, 1)
-  end)
-  map(sidebar_buf, "n", "[f", function()
-    if state.view_mode ~= "diff" then return end
-    nav_file(layout, state, -1)
-  end)
-
-  -- Comment navigation
-  map(main_buf, "n", "]c", function()
-    if state.view_mode ~= "diff" then return end
-    if state.scroll_mode then
-      local cursor = vim.api.nvim_win_get_cursor(layout.main_win)[1]
-      local rows = {}
-      for r in pairs(state.scroll_row_disc or {}) do table.insert(rows, r) end
-      table.sort(rows)
-      for _, r in ipairs(rows) do
-        if r > cursor then
-          vim.api.nvim_win_set_cursor(layout.main_win, { r, 0 })
-          return
-        end
-      end
-    else
-      nav_comment(layout, state, 1)
-    end
-  end)
-  map(main_buf, "n", "[c", function()
-    if state.view_mode ~= "diff" then return end
-    if state.scroll_mode then
-      local cursor = vim.api.nvim_win_get_cursor(layout.main_win)[1]
-      local rows = {}
-      for r in pairs(state.scroll_row_disc or {}) do table.insert(rows, r) end
-      table.sort(rows)
-      for i = #rows, 1, -1 do
-        if rows[i] < cursor then
-          vim.api.nvim_win_set_cursor(layout.main_win, { rows[i], 0 })
-          return
-        end
-      end
-    else
-      nav_comment(layout, state, -1)
-    end
-  end)
+  -- ── Local helper functions (must be defined before callbacks table) ──────────
 
   -- Re-render discussions without re-fetching from API
   local function rerender_view()
@@ -1574,269 +1492,7 @@ function M.setup_keymaps(layout, state)
     end
   end
 
-  -- Comment creation (works in both diff and summary modes)
-  map(main_buf, "n", "cc", function()
-    if state.view_mode == "summary" then
-      local comment = require("codereview.mr.comment")
-      comment.create_mr_comment(state.review, state.provider, state.ctx, refresh_discussions)
-      return
-    end
-    if state.view_mode ~= "diff" then return end
-    local session = require("codereview.review.session")
-    if state.scroll_mode then
-      local cursor = vim.api.nvim_win_get_cursor(layout.main_win)
-      local row = cursor[1]
-      local data = state.scroll_line_data[row]
-      if not data or not data.item then
-        vim.notify("No diff line at cursor", vim.log.levels.WARN)
-        return
-      end
-      if data.type == "context" then
-        vim.notify("Cannot comment on unchanged lines", vim.log.levels.WARN)
-        return
-      end
-      local file = state.files[data.file_idx]
-      local line_text = vim.api.nvim_buf_get_lines(
-        vim.api.nvim_win_get_buf(layout.main_win), row - 1, row, false
-      )[1] or ""
-      local popup_opts = { anchor_line = row, win_id = layout.main_win, action_type = "comment", context_text = line_text }
-      local comment = require("codereview.mr.comment")
-      if session.get().active then
-        comment.create_inline_draft(state.review, file.new_path, data.item.new_line, refresh_discussions, popup_opts)
-      else
-        comment.create_inline(state.review, file.old_path, file.new_path, data.item.old_line, data.item.new_line, refresh_discussions, popup_opts)
-      end
-    else
-      if session.get().active then
-        local line_data = state.line_data_cache[state.current_file]
-        if not line_data then return end
-        local cursor = vim.api.nvim_win_get_cursor(layout.main_win)
-        local row = cursor[1]
-        local data = line_data[row]
-        if not data or not data.item then
-          vim.notify("No diff line at cursor", vim.log.levels.WARN)
-          return
-        end
-        if data.type == "context" then
-          vim.notify("Cannot comment on unchanged lines", vim.log.levels.WARN)
-          return
-        end
-        local file = state.files[state.current_file]
-        local line_text = vim.api.nvim_buf_get_lines(
-          vim.api.nvim_win_get_buf(layout.main_win), row - 1, row, false
-        )[1] or ""
-        local comment = require("codereview.mr.comment")
-        comment.create_inline_draft(state.review, file.new_path, data.item.new_line, refresh_discussions,
-          { anchor_line = row, win_id = layout.main_win, action_type = "comment", context_text = line_text })
-      else
-        M.create_comment_at_cursor(layout, state, refresh_discussions)
-      end
-    end
-  end)
-  map(main_buf, "v", "cc", function()
-    if state.view_mode ~= "diff" then return end
-    local session = require("codereview.review.session")
-    if state.scroll_mode then
-      local s, e = vim.fn.line("v"), vim.fn.line(".")
-      if s > e then s, e = e, s end
-      local start_data = state.scroll_line_data[s]
-      local end_data = state.scroll_line_data[e]
-      if not start_data or not start_data.item or not end_data or not end_data.item then
-        vim.notify("Invalid selection range", vim.log.levels.WARN)
-        return
-      end
-      if start_data.type == "context" or end_data.type == "context" then
-        vim.notify("Cannot comment on unchanged lines", vim.log.levels.WARN)
-        return
-      end
-      local file = state.files[start_data.file_idx]
-      local line_text = vim.api.nvim_buf_get_lines(
-        vim.api.nvim_win_get_buf(layout.main_win), e - 1, e, false
-      )[1] or ""
-      local popup_opts = { anchor_line = e, anchor_start = s, win_id = layout.main_win, action_type = "comment", context_text = line_text }
-      local comment = require("codereview.mr.comment")
-      if session.get().active then
-        comment.create_inline_range_draft(
-          state.review,
-          file.new_path,
-          start_data.item.new_line,
-          end_data.item.new_line,
-          refresh_discussions,
-          popup_opts
-        )
-      else
-        comment.create_inline_range(
-          state.review,
-          file.old_path,
-          file.new_path,
-          { old_line = start_data.item.old_line, new_line = start_data.item.new_line },
-          { old_line = end_data.item.old_line, new_line = end_data.item.new_line },
-          refresh_discussions,
-          popup_opts
-        )
-      end
-    else
-      if session.get().active then
-        local line_data = state.line_data_cache[state.current_file]
-        if not line_data then return end
-        local s, e = vim.fn.line("v"), vim.fn.line(".")
-        if s > e then s, e = e, s end
-        local start_data = line_data[s]
-        local end_data = line_data[e]
-        if not start_data or not start_data.item or not end_data or not end_data.item then
-          vim.notify("Invalid selection range", vim.log.levels.WARN)
-          return
-        end
-        if start_data.type == "context" or end_data.type == "context" then
-          vim.notify("Cannot comment on unchanged lines", vim.log.levels.WARN)
-          return
-        end
-        local file = state.files[state.current_file]
-        local line_text = vim.api.nvim_buf_get_lines(
-          vim.api.nvim_win_get_buf(layout.main_win), e - 1, e, false
-        )[1] or ""
-        local comment = require("codereview.mr.comment")
-        comment.create_inline_range_draft(
-          state.review,
-          file.new_path,
-          start_data.item.new_line,
-          end_data.item.new_line,
-          add_local_draft(file.new_path, end_data.item.new_line, start_data.item.new_line),
-          { anchor_line = e, anchor_start = s, win_id = layout.main_win, action_type = "comment", context_text = line_text }
-        )
-      else
-        M.create_comment_range(layout, state, refresh_discussions)
-      end
-    end
-  end)
-
-  -- Load more context
-  map(main_buf, "n", "<CR>", function()
-    if state.view_mode ~= "diff" then return end
-    local cursor = vim.api.nvim_win_get_cursor(layout.main_win)
-    local row = cursor[1]
-    local line_data = state.line_data_cache[state.current_file]
-    if not line_data or not line_data[row] then return end
-    if line_data[row].type == "load_more" then
-      adjust_context(layout, state, 10)
-    end
-  end)
-
-  -- Reply to comment thread on current line
-  local function get_cursor_disc()
-    local cursor = vim.api.nvim_win_get_cursor(layout.main_win)
-    if state.scroll_mode then
-      if state.scroll_row_disc and state.scroll_row_disc[cursor[1]] then
-        return state.scroll_row_disc[cursor[1]][1]
-      end
-    else
-      local row_disc = state.row_disc_cache[state.current_file]
-      if row_disc and row_disc[cursor[1]] then
-        return row_disc[cursor[1]][1]
-      end
-    end
-  end
-
-  map(main_buf, "n", "r", function()
-    if state.view_mode ~= "diff" then return end
-    local disc = get_cursor_disc()
-    if disc then
-      local comment = require("codereview.mr.comment")
-      local cursor_row = vim.api.nvim_win_get_cursor(layout.main_win)[1]
-      -- Find last row belonging to this discussion so float opens below the comment block
-      local row_disc = state.scroll_mode and state.scroll_row_disc
-        or state.row_disc_cache[state.current_file]
-      local last_row = cursor_row
-      if row_disc then
-        local total = vim.api.nvim_buf_line_count(vim.api.nvim_win_get_buf(layout.main_win))
-        for r = cursor_row, math.min(cursor_row + 50, total) do
-          local discs = row_disc[r]
-          if discs then
-            local found = false
-            for _, d in ipairs(discs) do
-              if d.id == disc.id then found = true; break end
-            end
-            if found then last_row = r else break end
-          else
-            break
-          end
-        end
-      end
-      -- Calculate how many virtual lines the comment thread occupies
-      -- so the reply float can be positioned below them.
-      local thread_height = 0
-      local notes = disc.notes
-      if notes and #notes > 0 then
-        thread_height = 1 -- header (┌ @author...)
-        thread_height = thread_height + #wrap_text(notes[1].body, 64)
-        for i = 2, #notes do
-          if not notes[i].system then
-            thread_height = thread_height + 1 -- separator (│)
-            thread_height = thread_height + 1 -- reply header (│  ↪ @author)
-            thread_height = thread_height + #wrap_text(notes[i].body, 58)
-          end
-        end
-        thread_height = thread_height + 1 -- footer (└ r:reply...)
-      end
-      comment.reply(disc, state.review, refresh_discussions,
-        { anchor_line = last_row, win_id = layout.main_win, thread_height = thread_height })
-    end
-  end)
-
-  map(main_buf, "n", "gt", function()
-    if state.view_mode ~= "diff" then return end
-    local disc = get_cursor_disc()
-    if disc then
-      local comment = require("codereview.mr.comment")
-      comment.resolve_toggle(disc, state.review, refresh_discussions)
-    end
-  end)
-
-  -- Context adjustment
-  -- Toggle full file (current file only in scroll mode)
-  map(main_buf, "n", "<C-f>", function()
-    if state.view_mode ~= "diff" then return end
-    local cursor_row = vim.api.nvim_win_get_cursor(layout.main_win)[1]
-    if state.scroll_mode then
-      local file_idx = current_file_from_cursor(layout, state)
-      local anchor = M.find_anchor(state.scroll_line_data, cursor_row)
-      if state.file_contexts[file_idx] then
-        state.file_contexts[file_idx] = nil
-      else
-        state.file_contexts[file_idx] = 99999
-      end
-      local result = M.render_all_files(layout.main_buf, state.files, state.review, state.discussions, state.context, state.file_contexts, state.ai_suggestions)
-      state.file_sections = result.file_sections
-      state.scroll_line_data = result.line_data
-      state.scroll_row_disc = result.row_discussions
-      state.scroll_row_ai = result.row_ai
-      local row = M.find_row_for_anchor(state.scroll_line_data, anchor)
-      vim.api.nvim_win_set_cursor(layout.main_win, { row, 0 })
-    else
-      local per_file_ld = state.line_data_cache[state.current_file]
-      local anchor = M.find_anchor(per_file_ld or {}, cursor_row, state.current_file)
-      if state.context == 99999 then
-        state.context = config.get().diff.context
-      else
-        state.context = 99999
-      end
-      local file = state.files and state.files[state.current_file]
-      if not file then return end
-      local ld, rd, ra = M.render_file_diff(layout.main_buf, file, state.review, state.discussions, state.context, state.ai_suggestions)
-      state.line_data_cache[state.current_file] = ld
-      state.row_disc_cache[state.current_file] = rd
-      state.row_ai_cache[state.current_file] = ra
-      local row = M.find_row_for_anchor(ld, anchor, state.current_file)
-      vim.api.nvim_win_set_cursor(layout.main_win, { row, 0 })
-    end
-  end)
-
-  -- Summary-mode general comment (uses cc, same key as inline comment in diff mode)
-  -- The cc handler above (line ~1095) checks view_mode == "diff", so this only
-  -- fires when in summary mode because that handler returns early for summary.
-  -- NOTE: We must NOT map bare "c" with nowait — it blocks cc from ever firing.
-
-  -- Helper: re-render current view after AI suggestion state change
+  -- Re-render current view after AI suggestion state change
   local function rerender_ai()
     if state.scroll_mode then
       local result = M.render_all_files(layout.main_buf, state.files, state.review, state.discussions, state.context, state.file_contexts, state.ai_suggestions)
@@ -1855,7 +1511,7 @@ function M.setup_keymaps(layout, state)
     M.render_sidebar(layout.sidebar_buf, state)
   end
 
-  -- Helper: navigate to next AI suggestion at or after cursor row
+  -- Navigate to next AI suggestion at or after cursor row
   local function nav_to_next_ai(from_row)
     local row_ai_new = state.scroll_mode and state.scroll_row_ai or (state.row_ai_cache[state.current_file] or {})
     local rows = {}
@@ -1872,217 +1528,22 @@ function M.setup_keymaps(layout, state)
     end
   end
 
-  -- AI suggestion navigation: ]s / [s
-  map(main_buf, "n", "]s", function()
-    if state.view_mode ~= "diff" then return end
-    local cursor = vim.api.nvim_win_get_cursor(layout.main_win)[1]
-    local row_ai = state.scroll_mode and state.scroll_row_ai or (state.row_ai_cache[state.current_file] or {})
-    local rows = {}
-    for r in pairs(row_ai) do table.insert(rows, r) end
-    table.sort(rows)
-    for _, r in ipairs(rows) do
-      if r > cursor then
-        vim.api.nvim_win_set_cursor(layout.main_win, { r, 0 })
-        return
+  -- Get the first discussion at the current cursor line
+  local function get_cursor_disc()
+    local cursor = vim.api.nvim_win_get_cursor(layout.main_win)
+    if state.scroll_mode then
+      if state.scroll_row_disc and state.scroll_row_disc[cursor[1]] then
+        return state.scroll_row_disc[cursor[1]][1]
+      end
+    else
+      local row_disc = state.row_disc_cache[state.current_file]
+      if row_disc and row_disc[cursor[1]] then
+        return row_disc[cursor[1]][1]
       end
     end
-  end)
+  end
 
-  map(main_buf, "n", "[s", function()
-    if state.view_mode ~= "diff" then return end
-    local cursor = vim.api.nvim_win_get_cursor(layout.main_win)[1]
-    local row_ai = state.scroll_mode and state.scroll_row_ai or (state.row_ai_cache[state.current_file] or {})
-    local rows = {}
-    for r in pairs(row_ai) do table.insert(rows, r) end
-    table.sort(rows)
-    for i = #rows, 1, -1 do
-      if rows[i] < cursor then
-        vim.api.nvim_win_set_cursor(layout.main_win, { rows[i], 0 })
-        return
-      end
-    end
-  end)
-
-  -- a: approve (summary mode) or accept AI suggestion at cursor (diff mode)
-  -- Accept = post as draft comment, remove AI box, refresh to show as regular comment
-  map(main_buf, "n", "a", function()
-    if state.view_mode == "summary" then
-      require("codereview.mr.actions").approve(state.review)
-      return
-    end
-    if state.view_mode ~= "diff" then return end
-    local cursor = vim.api.nvim_win_get_cursor(layout.main_win)[1]
-    local row_ai = state.scroll_mode and state.scroll_row_ai or (state.row_ai_cache[state.current_file] or {})
-    local suggestion = row_ai[cursor]
-    if not suggestion then return end
-
-    -- Post as draft comment via API
-    local client_mod = require("codereview.api.client")
-    local _, post_err = state.provider.create_draft_comment(client_mod, state.ctx, state.review, {
-      body = suggestion.comment,
-      path = suggestion.file,
-      line = suggestion.line,
-    })
-    if post_err then
-      vim.notify("Failed to post draft: " .. post_err, vim.log.levels.ERROR)
-      return
-    end
-
-    vim.notify("Draft comment posted", vim.log.levels.INFO)
-    suggestion.status = "accepted"
-    suggestion.drafted = true
-    rerender_ai()
-    nav_to_next_ai(cursor)
-  end)
-
-  -- x: dismiss AI suggestion at cursor
-  map(main_buf, "n", "x", function()
-    if state.view_mode ~= "diff" then return end
-    local cursor = vim.api.nvim_win_get_cursor(layout.main_win)[1]
-    local row_ai = state.scroll_mode and state.scroll_row_ai or (state.row_ai_cache[state.current_file] or {})
-    local suggestion = row_ai[cursor]
-    if not suggestion then return end
-    suggestion.status = "dismissed"
-    rerender_ai()
-    nav_to_next_ai(cursor)
-  end)
-
-  -- e: edit AI suggestion comment at cursor
-  map(main_buf, "n", "e", function()
-    if state.view_mode ~= "diff" then return end
-    local cursor = vim.api.nvim_win_get_cursor(layout.main_win)[1]
-    local row_ai = state.scroll_mode and state.scroll_row_ai or (state.row_ai_cache[state.current_file] or {})
-    local suggestion = row_ai[cursor]
-    if not suggestion then return end
-
-    -- Open a scratch float with the current comment text for editing
-    local width = 70
-    local height = 10
-    local float_buf = vim.api.nvim_create_buf(false, true)
-    vim.bo[float_buf].buftype = "nofile"
-    local initial_lines = vim.split(suggestion.comment or "", "\n")
-    vim.api.nvim_buf_set_lines(float_buf, 0, -1, false, initial_lines)
-    local ui = vim.api.nvim_list_uis()[1]
-    local float_win = vim.api.nvim_open_win(float_buf, true, {
-      relative = "editor",
-      row = math.floor((ui.height - height) / 2),
-      col = math.floor((ui.width - width) / 2),
-      width = width,
-      height = height,
-      style = "minimal",
-      border = "rounded",
-      title = " Edit AI Suggestion (Enter: save, q: cancel) ",
-      title_pos = "center",
-    })
-
-    local function close_float()
-      pcall(vim.api.nvim_win_close, float_win, true)
-      pcall(vim.api.nvim_buf_delete, float_buf, { force = true })
-    end
-
-    vim.keymap.set("n", "<CR>", function()
-      local new_lines = vim.api.nvim_buf_get_lines(float_buf, 0, -1, false)
-      suggestion.comment = table.concat(new_lines, "\n")
-      close_float()
-
-      -- Post edited suggestion as draft comment
-      local client_mod = require("codereview.api.client")
-      local _, post_err = state.provider.create_draft_comment(client_mod, state.ctx, state.review, {
-        body = suggestion.comment,
-        path = suggestion.file,
-        line = suggestion.line,
-      })
-      if post_err then
-        vim.notify("Failed to post draft: " .. post_err, vim.log.levels.ERROR)
-        suggestion.status = "edited"
-        rerender_ai()
-        return
-      end
-
-      vim.notify("Draft comment posted", vim.log.levels.INFO)
-      suggestion.status = "accepted"
-      suggestion.drafted = true
-      rerender_ai()
-      nav_to_next_ai(cursor)
-    end, { buffer = float_buf, noremap = true, silent = true })
-
-    vim.keymap.set("n", "q", function()
-      close_float()
-    end, { buffer = float_buf, noremap = true, silent = true })
-  end)
-
-  -- S: publish all drafts (human + AI) and end review session
-  map(main_buf, "n", "S", function()
-    if state.view_mode ~= "diff" then return end
-    local session = require("codereview.review.session")
-    local submit_mod = require("codereview.review.submit")
-
-    if session.get().ai_pending then
-      vim.notify("AI review still running — publishing available drafts", vim.log.levels.WARN)
-    end
-
-    submit_mod.submit_and_publish(state.review, state.ai_suggestions)
-    state.local_drafts = {}
-    rerender_ai()
-    session.stop()
-    M.render_sidebar(layout.sidebar_buf, state)
-    refresh_discussions()
-  end)
-
-  -- ds: dismiss all non-accepted/edited AI suggestions
-  map(main_buf, "n", "ds", function()
-    if state.view_mode ~= "diff" or not state.ai_suggestions then return end
-    for _, s in ipairs(state.ai_suggestions) do
-      if s.status ~= "accepted" and s.status ~= "edited" then
-        s.status = "dismissed"
-      end
-    end
-    rerender_ai()
-  end)
-
-  map(main_buf, "n", "o", function()
-    if state.view_mode ~= "summary" then return end
-    if state.review.web_url then vim.ui.open(state.review.web_url) end
-  end)
-
-  map(main_buf, "n", "m", function()
-    if state.view_mode ~= "summary" then return end
-    vim.ui.select({ "Merge", "Merge when pipeline succeeds", "Cancel" }, {
-      prompt = string.format("Merge MR #%d?", state.review.id),
-    }, function(choice)
-      if not choice or choice == "Cancel" then return end
-      local ok, actions = pcall(require, "codereview.mr.actions")
-      if not ok then
-        vim.notify("Merge actions not yet implemented", vim.log.levels.WARN)
-        return
-      end
-      if choice == "Merge when pipeline succeeds" then
-        actions.merge(state.review, { auto_merge = true })
-      else
-        actions.merge(state.review)
-      end
-    end)
-  end)
-
-  map(main_buf, "n", "p", function()
-    if state.view_mode ~= "summary" then return end
-    vim.notify("Pipeline view (Stage 4)", vim.log.levels.WARN)
-  end)
-
-  map(main_buf, "n", "A", function()
-    local session = require("codereview.review.session")
-    local s = session.get()
-    if s.ai_pending then
-      if s.ai_job_id then vim.fn.jobstop(s.ai_job_id) end
-      session.ai_finish()
-      vim.notify("AI review cancelled", vim.log.levels.INFO)
-      return
-    end
-    local review_mod = require("codereview.review")
-    review_mod.start(state.review, state, layout)
-  end)
-
-  -- Refresh
+  -- Refresh: close and reopen the MR view
   local function refresh()
     require("codereview.review.session").stop()
     local split_mod = require("codereview.ui.split")
@@ -2090,10 +1551,8 @@ function M.setup_keymaps(layout, state)
     local detail = require("codereview.mr.detail")
     detail.open(state.entry or state.review)
   end
-  map(main_buf, "n", "R", refresh)
-  map(sidebar_buf, "n", "R", refresh)
 
-  -- Quit
+  -- Quit: clean up session and close layout
   local function quit()
     local session = require("codereview.review.session")
     local sess = session.get()
@@ -2111,8 +1570,578 @@ function M.setup_keymaps(layout, state)
     split.close(layout)
     pcall(vim.api.nvim_buf_delete, layout.main_buf, { force = true })
   end
-  map(main_buf, "n", "Q", quit)
-  map(sidebar_buf, "n", "Q", quit)
+
+  -- ── Main buffer callbacks (all 26 remappable actions) ───────────────────────
+
+  local main_callbacks = {
+    next_file = function()
+      if state.view_mode ~= "diff" then return end
+      if state.scroll_mode then
+        local cursor = vim.api.nvim_win_get_cursor(layout.main_win)[1]
+        for _, sec in ipairs(state.file_sections) do
+          if sec.start_line > cursor then
+            vim.api.nvim_win_set_cursor(layout.main_win, { sec.start_line, 0 })
+            state.current_file = sec.file_idx
+            M.render_sidebar(layout.sidebar_buf, state)
+            return
+          end
+        end
+      else
+        nav_file(layout, state, 1)
+      end
+    end,
+
+    prev_file = function()
+      if state.view_mode ~= "diff" then return end
+      if state.scroll_mode then
+        local cursor = vim.api.nvim_win_get_cursor(layout.main_win)[1]
+        for i = #state.file_sections, 1, -1 do
+          if state.file_sections[i].start_line < cursor then
+            vim.api.nvim_win_set_cursor(layout.main_win, { state.file_sections[i].start_line, 0 })
+            state.current_file = state.file_sections[i].file_idx
+            M.render_sidebar(layout.sidebar_buf, state)
+            return
+          end
+        end
+      else
+        nav_file(layout, state, -1)
+      end
+    end,
+
+    next_comment = function()
+      if state.view_mode ~= "diff" then return end
+      if state.scroll_mode then
+        local cursor = vim.api.nvim_win_get_cursor(layout.main_win)[1]
+        local rows = {}
+        for r in pairs(state.scroll_row_disc or {}) do table.insert(rows, r) end
+        table.sort(rows)
+        for _, r in ipairs(rows) do
+          if r > cursor then
+            vim.api.nvim_win_set_cursor(layout.main_win, { r, 0 })
+            return
+          end
+        end
+      else
+        nav_comment(layout, state, 1)
+      end
+    end,
+
+    prev_comment = function()
+      if state.view_mode ~= "diff" then return end
+      if state.scroll_mode then
+        local cursor = vim.api.nvim_win_get_cursor(layout.main_win)[1]
+        local rows = {}
+        for r in pairs(state.scroll_row_disc or {}) do table.insert(rows, r) end
+        table.sort(rows)
+        for i = #rows, 1, -1 do
+          if rows[i] < cursor then
+            vim.api.nvim_win_set_cursor(layout.main_win, { rows[i], 0 })
+            return
+          end
+        end
+      else
+        nav_comment(layout, state, -1)
+      end
+    end,
+
+    next_suggestion = function()
+      if state.view_mode ~= "diff" then return end
+      local cursor = vim.api.nvim_win_get_cursor(layout.main_win)[1]
+      local row_ai = state.scroll_mode and state.scroll_row_ai or (state.row_ai_cache[state.current_file] or {})
+      local rows = {}
+      for r in pairs(row_ai) do table.insert(rows, r) end
+      table.sort(rows)
+      for _, r in ipairs(rows) do
+        if r > cursor then
+          vim.api.nvim_win_set_cursor(layout.main_win, { r, 0 })
+          return
+        end
+      end
+    end,
+
+    prev_suggestion = function()
+      if state.view_mode ~= "diff" then return end
+      local cursor = vim.api.nvim_win_get_cursor(layout.main_win)[1]
+      local row_ai = state.scroll_mode and state.scroll_row_ai or (state.row_ai_cache[state.current_file] or {})
+      local rows = {}
+      for r in pairs(row_ai) do table.insert(rows, r) end
+      table.sort(rows)
+      for i = #rows, 1, -1 do
+        if rows[i] < cursor then
+          vim.api.nvim_win_set_cursor(layout.main_win, { rows[i], 0 })
+          return
+        end
+      end
+    end,
+
+    -- Comment creation (works in both diff and summary modes)
+    -- NOTE: We must NOT map bare "c" with nowait — it blocks cc from ever firing.
+    create_comment = function()
+      if state.view_mode == "summary" then
+        local comment = require("codereview.mr.comment")
+        comment.create_mr_comment(state.review, state.provider, state.ctx, refresh_discussions)
+        return
+      end
+      if state.view_mode ~= "diff" then return end
+      local session = require("codereview.review.session")
+      if state.scroll_mode then
+        local cursor = vim.api.nvim_win_get_cursor(layout.main_win)
+        local row = cursor[1]
+        local data = state.scroll_line_data[row]
+        if not data or not data.item then
+          vim.notify("No diff line at cursor", vim.log.levels.WARN)
+          return
+        end
+        if data.type == "context" then
+          vim.notify("Cannot comment on unchanged lines", vim.log.levels.WARN)
+          return
+        end
+        local file = state.files[data.file_idx]
+        local line_text = vim.api.nvim_buf_get_lines(
+          vim.api.nvim_win_get_buf(layout.main_win), row - 1, row, false
+        )[1] or ""
+        local popup_opts = { anchor_line = row, win_id = layout.main_win, action_type = "comment", context_text = line_text }
+        local comment = require("codereview.mr.comment")
+        if session.get().active then
+          comment.create_inline_draft(state.review, file.new_path, data.item.new_line,
+            add_local_draft(file.new_path, data.item.new_line), popup_opts)
+        else
+          comment.create_inline(state.review, file.old_path, file.new_path, data.item.old_line, data.item.new_line, refresh_discussions, popup_opts)
+        end
+      else
+        if session.get().active then
+          local line_data = state.line_data_cache[state.current_file]
+          if not line_data then return end
+          local cursor = vim.api.nvim_win_get_cursor(layout.main_win)
+          local row = cursor[1]
+          local data = line_data[row]
+          if not data or not data.item then
+            vim.notify("No diff line at cursor", vim.log.levels.WARN)
+            return
+          end
+          if data.type == "context" then
+            vim.notify("Cannot comment on unchanged lines", vim.log.levels.WARN)
+            return
+          end
+          local file = state.files[state.current_file]
+          local line_text = vim.api.nvim_buf_get_lines(
+            vim.api.nvim_win_get_buf(layout.main_win), row - 1, row, false
+          )[1] or ""
+          local comment = require("codereview.mr.comment")
+          comment.create_inline_draft(state.review, file.new_path, data.item.new_line,
+            add_local_draft(file.new_path, data.item.new_line),
+            { anchor_line = row, win_id = layout.main_win, action_type = "comment", context_text = line_text })
+        else
+          M.create_comment_at_cursor(layout, state, refresh_discussions)
+        end
+      end
+    end,
+
+    create_range_comment = function()
+      if state.view_mode ~= "diff" then return end
+      local session = require("codereview.review.session")
+      if state.scroll_mode then
+        local s, e = vim.fn.line("v"), vim.fn.line(".")
+        if s > e then s, e = e, s end
+        local start_data = state.scroll_line_data[s]
+        local end_data = state.scroll_line_data[e]
+        if not start_data or not start_data.item or not end_data or not end_data.item then
+          vim.notify("Invalid selection range", vim.log.levels.WARN)
+          return
+        end
+        if start_data.type == "context" or end_data.type == "context" then
+          vim.notify("Cannot comment on unchanged lines", vim.log.levels.WARN)
+          return
+        end
+        local file = state.files[start_data.file_idx]
+        local line_text = vim.api.nvim_buf_get_lines(
+          vim.api.nvim_win_get_buf(layout.main_win), e - 1, e, false
+        )[1] or ""
+        local popup_opts = { anchor_line = e, anchor_start = s, win_id = layout.main_win, action_type = "comment", context_text = line_text }
+        local comment = require("codereview.mr.comment")
+        if session.get().active then
+          comment.create_inline_range_draft(
+            state.review,
+            file.new_path,
+            start_data.item.new_line,
+            end_data.item.new_line,
+            add_local_draft(file.new_path, end_data.item.new_line, start_data.item.new_line),
+            popup_opts
+          )
+        else
+          comment.create_inline_range(
+            state.review,
+            file.old_path,
+            file.new_path,
+            { old_line = start_data.item.old_line, new_line = start_data.item.new_line },
+            { old_line = end_data.item.old_line, new_line = end_data.item.new_line },
+            refresh_discussions,
+            popup_opts
+          )
+        end
+      else
+        if session.get().active then
+          local line_data = state.line_data_cache[state.current_file]
+          if not line_data then return end
+          local s, e = vim.fn.line("v"), vim.fn.line(".")
+          if s > e then s, e = e, s end
+          local start_data = line_data[s]
+          local end_data = line_data[e]
+          if not start_data or not start_data.item or not end_data or not end_data.item then
+            vim.notify("Invalid selection range", vim.log.levels.WARN)
+            return
+          end
+          if start_data.type == "context" or end_data.type == "context" then
+            vim.notify("Cannot comment on unchanged lines", vim.log.levels.WARN)
+            return
+          end
+          local file = state.files[state.current_file]
+          local line_text = vim.api.nvim_buf_get_lines(
+            vim.api.nvim_win_get_buf(layout.main_win), e - 1, e, false
+          )[1] or ""
+          local comment = require("codereview.mr.comment")
+          comment.create_inline_range_draft(
+            state.review,
+            file.new_path,
+            start_data.item.new_line,
+            end_data.item.new_line,
+            add_local_draft(file.new_path, end_data.item.new_line, start_data.item.new_line),
+            { anchor_line = e, anchor_start = s, win_id = layout.main_win, action_type = "comment", context_text = line_text }
+          )
+        else
+          M.create_comment_range(layout, state, refresh_discussions)
+        end
+      end
+    end,
+
+    reply = function()
+      if state.view_mode ~= "diff" then return end
+      local disc = get_cursor_disc()
+      if disc then
+        local comment = require("codereview.mr.comment")
+        local cursor_row = vim.api.nvim_win_get_cursor(layout.main_win)[1]
+        -- Find last row belonging to this discussion so float opens below the comment block
+        local row_disc = state.scroll_mode and state.scroll_row_disc
+          or state.row_disc_cache[state.current_file]
+        local last_row = cursor_row
+        if row_disc then
+          local total = vim.api.nvim_buf_line_count(vim.api.nvim_win_get_buf(layout.main_win))
+          for r = cursor_row, math.min(cursor_row + 50, total) do
+            local discs = row_disc[r]
+            if discs then
+              local found = false
+              for _, d in ipairs(discs) do
+                if d.id == disc.id then found = true; break end
+              end
+              if found then last_row = r else break end
+            else
+              break
+            end
+          end
+        end
+        -- Calculate how many virtual lines the comment thread occupies
+        -- so the reply float can be positioned below them.
+        local thread_height = 0
+        local notes = disc.notes
+        if notes and #notes > 0 then
+          thread_height = 1 -- header (┌ @author...)
+          thread_height = thread_height + #wrap_text(notes[1].body, 64)
+          for i = 2, #notes do
+            if not notes[i].system then
+              thread_height = thread_height + 1 -- separator (│)
+              thread_height = thread_height + 1 -- reply header (│  ↪ @author)
+              thread_height = thread_height + #wrap_text(notes[i].body, 58)
+            end
+          end
+          thread_height = thread_height + 1 -- footer (└ r:reply...)
+        end
+        comment.reply(disc, state.review, refresh_discussions,
+          { anchor_line = last_row, win_id = layout.main_win, thread_height = thread_height })
+      end
+    end,
+
+    toggle_resolve = function()
+      if state.view_mode ~= "diff" then return end
+      local disc = get_cursor_disc()
+      if disc then
+        local comment = require("codereview.mr.comment")
+        comment.resolve_toggle(disc, state.review, refresh_discussions)
+      end
+    end,
+
+    increase_context = function()
+      if state.view_mode ~= "diff" then return end
+      adjust_context(layout, state, 1)
+    end,
+
+    decrease_context = function()
+      if state.view_mode ~= "diff" then return end
+      adjust_context(layout, state, -1)
+    end,
+
+    toggle_full_file = function()
+      if state.view_mode ~= "diff" then return end
+      local cursor_row = vim.api.nvim_win_get_cursor(layout.main_win)[1]
+      if state.scroll_mode then
+        local file_idx = current_file_from_cursor(layout, state)
+        local anchor = M.find_anchor(state.scroll_line_data, cursor_row)
+        if state.file_contexts[file_idx] then
+          state.file_contexts[file_idx] = nil
+        else
+          state.file_contexts[file_idx] = 99999
+        end
+        local result = M.render_all_files(layout.main_buf, state.files, state.review, state.discussions, state.context, state.file_contexts, state.ai_suggestions)
+        state.file_sections = result.file_sections
+        state.scroll_line_data = result.line_data
+        state.scroll_row_disc = result.row_discussions
+        state.scroll_row_ai = result.row_ai
+        local row = M.find_row_for_anchor(state.scroll_line_data, anchor)
+        vim.api.nvim_win_set_cursor(layout.main_win, { row, 0 })
+      else
+        local per_file_ld = state.line_data_cache[state.current_file]
+        local anchor = M.find_anchor(per_file_ld or {}, cursor_row, state.current_file)
+        if state.context == 99999 then
+          state.context = config.get().diff.context
+        else
+          state.context = 99999
+        end
+        local file = state.files and state.files[state.current_file]
+        if not file then return end
+        local ld, rd, ra = M.render_file_diff(layout.main_buf, file, state.review, state.discussions, state.context, state.ai_suggestions)
+        state.line_data_cache[state.current_file] = ld
+        state.row_disc_cache[state.current_file] = rd
+        state.row_ai_cache[state.current_file] = ra
+        local row = M.find_row_for_anchor(ld, anchor, state.current_file)
+        vim.api.nvim_win_set_cursor(layout.main_win, { row, 0 })
+      end
+    end,
+
+    toggle_scroll_mode = function()
+      if state.view_mode ~= "diff" then return end
+      toggle_scroll_mode(layout, state)
+    end,
+
+    -- a: approve (summary mode) or accept AI suggestion at cursor (diff mode)
+    accept_suggestion = function()
+      if state.view_mode == "summary" then
+        require("codereview.mr.actions").approve(state.review)
+        return
+      end
+      if state.view_mode ~= "diff" then return end
+      local cursor = vim.api.nvim_win_get_cursor(layout.main_win)[1]
+      local row_ai = state.scroll_mode and state.scroll_row_ai or (state.row_ai_cache[state.current_file] or {})
+      local suggestion = row_ai[cursor]
+      if not suggestion then return end
+
+      -- Post as draft comment via API
+      local client_mod = require("codereview.api.client")
+      local _, post_err = state.provider.create_draft_comment(client_mod, state.ctx, state.review, {
+        body = suggestion.comment,
+        path = suggestion.file,
+        line = suggestion.line,
+      })
+      if post_err then
+        vim.notify("Failed to post draft: " .. post_err, vim.log.levels.ERROR)
+        return
+      end
+
+      vim.notify("Draft comment posted", vim.log.levels.INFO)
+      suggestion.status = "accepted"
+      suggestion.drafted = true
+      rerender_ai()
+      nav_to_next_ai(cursor)
+    end,
+
+    -- approve shares default key "a" with accept_suggestion; independent remapping supported
+    approve = function()
+      if state.view_mode ~= "summary" then return end
+      require("codereview.mr.actions").approve(state.review)
+    end,
+
+    dismiss_suggestion = function()
+      if state.view_mode ~= "diff" then return end
+      local cursor = vim.api.nvim_win_get_cursor(layout.main_win)[1]
+      local row_ai = state.scroll_mode and state.scroll_row_ai or (state.row_ai_cache[state.current_file] or {})
+      local suggestion = row_ai[cursor]
+      if not suggestion then return end
+      suggestion.status = "dismissed"
+      rerender_ai()
+      nav_to_next_ai(cursor)
+    end,
+
+    edit_suggestion = function()
+      if state.view_mode ~= "diff" then return end
+      local cursor = vim.api.nvim_win_get_cursor(layout.main_win)[1]
+      local row_ai = state.scroll_mode and state.scroll_row_ai or (state.row_ai_cache[state.current_file] or {})
+      local suggestion = row_ai[cursor]
+      if not suggestion then return end
+
+      -- Open a scratch float with the current comment text for editing
+      local width = 70
+      local height = 10
+      local float_buf = vim.api.nvim_create_buf(false, true)
+      vim.bo[float_buf].buftype = "nofile"
+      local initial_lines = vim.split(suggestion.comment or "", "\n")
+      vim.api.nvim_buf_set_lines(float_buf, 0, -1, false, initial_lines)
+      local ui = vim.api.nvim_list_uis()[1]
+      local float_win = vim.api.nvim_open_win(float_buf, true, {
+        relative = "editor",
+        row = math.floor((ui.height - height) / 2),
+        col = math.floor((ui.width - width) / 2),
+        width = width,
+        height = height,
+        style = "minimal",
+        border = "rounded",
+        title = " Edit AI Suggestion (Enter: save, q: cancel) ",
+        title_pos = "center",
+      })
+
+      local function close_float()
+        pcall(vim.api.nvim_win_close, float_win, true)
+        pcall(vim.api.nvim_buf_delete, float_buf, { force = true })
+      end
+
+      -- Float keymaps are ephemeral — use direct vim.keymap.set (not registry)
+      vim.keymap.set("n", "<CR>", function()
+        local new_lines = vim.api.nvim_buf_get_lines(float_buf, 0, -1, false)
+        suggestion.comment = table.concat(new_lines, "\n")
+        close_float()
+
+        -- Post edited suggestion as draft comment
+        local client_mod = require("codereview.api.client")
+        local _, post_err = state.provider.create_draft_comment(client_mod, state.ctx, state.review, {
+          body = suggestion.comment,
+          path = suggestion.file,
+          line = suggestion.line,
+        })
+        if post_err then
+          vim.notify("Failed to post draft: " .. post_err, vim.log.levels.ERROR)
+          suggestion.status = "edited"
+          rerender_ai()
+          return
+        end
+
+        vim.notify("Draft comment posted", vim.log.levels.INFO)
+        suggestion.status = "accepted"
+        suggestion.drafted = true
+        rerender_ai()
+        nav_to_next_ai(cursor)
+      end, { buffer = float_buf, noremap = true, silent = true })
+
+      vim.keymap.set("n", "q", function()
+        close_float()
+      end, { buffer = float_buf, noremap = true, silent = true })
+    end,
+
+    dismiss_all_suggestions = function()
+      if state.view_mode ~= "diff" or not state.ai_suggestions then return end
+      for _, s in ipairs(state.ai_suggestions) do
+        if s.status ~= "accepted" and s.status ~= "edited" then
+          s.status = "dismissed"
+        end
+      end
+      rerender_ai()
+    end,
+
+    submit = function()
+      if state.view_mode ~= "diff" then return end
+      local session = require("codereview.review.session")
+      local submit_mod = require("codereview.review.submit")
+
+      if session.get().ai_pending then
+        vim.notify("AI review still running — publishing available drafts", vim.log.levels.WARN)
+      end
+
+      submit_mod.submit_and_publish(state.review, state.ai_suggestions)
+      state.local_drafts = {}
+      rerender_ai()
+      session.stop()
+      M.render_sidebar(layout.sidebar_buf, state)
+      refresh_discussions()
+    end,
+
+    open_in_browser = function()
+      if state.view_mode ~= "summary" then return end
+      if state.review.web_url then vim.ui.open(state.review.web_url) end
+    end,
+
+    merge = function()
+      if state.view_mode ~= "summary" then return end
+      vim.ui.select({ "Merge", "Merge when pipeline succeeds", "Cancel" }, {
+        prompt = string.format("Merge MR #%d?", state.review.id),
+      }, function(choice)
+        if not choice or choice == "Cancel" then return end
+        local ok, actions = pcall(require, "codereview.mr.actions")
+        if not ok then
+          vim.notify("Merge actions not yet implemented", vim.log.levels.WARN)
+          return
+        end
+        if choice == "Merge when pipeline succeeds" then
+          actions.merge(state.review, { auto_merge = true })
+        else
+          actions.merge(state.review)
+        end
+      end)
+    end,
+
+    show_pipeline = function()
+      if state.view_mode ~= "summary" then return end
+      vim.notify("Pipeline view (Stage 4)", vim.log.levels.WARN)
+    end,
+
+    ai_review = function()
+      local session = require("codereview.review.session")
+      local s = session.get()
+      if s.ai_pending then
+        if s.ai_job_id then vim.fn.jobstop(s.ai_job_id) end
+        session.ai_finish()
+        vim.notify("AI review cancelled", vim.log.levels.INFO)
+        return
+      end
+      local review_mod = require("codereview.review")
+      review_mod.start(state.review, state, layout)
+    end,
+
+    refresh = refresh,
+    quit    = quit,
+  }
+
+  km.apply(main_buf, main_callbacks)
+
+  -- ── Sidebar buffer callbacks (subset of actions that apply to sidebar) ───────
+
+  local sidebar_callbacks = {
+    next_file = function()
+      if state.view_mode ~= "diff" then return end
+      nav_file(layout, state, 1)
+    end,
+    prev_file = function()
+      if state.view_mode ~= "diff" then return end
+      nav_file(layout, state, -1)
+    end,
+    toggle_scroll_mode = function()
+      if state.view_mode ~= "diff" then return end
+      toggle_scroll_mode(layout, state)
+    end,
+    refresh = refresh,
+    quit    = quit,
+  }
+
+  km.apply(sidebar_buf, sidebar_callbacks)
+
+  -- ── Non-registry keymaps ─────────────────────────────────────────────────────
+
+  -- Load more context (<CR> on a load_more line)
+  map(main_buf, "n", "<CR>", function()
+    if state.view_mode ~= "diff" then return end
+    local cursor = vim.api.nvim_win_get_cursor(layout.main_win)
+    local row = cursor[1]
+    local line_data = state.line_data_cache[state.current_file]
+    if not line_data or not line_data[row] then return end
+    if line_data[row].type == "load_more" then
+      adjust_context(layout, state, 10)
+    end
+  end)
 
   -- Sidebar: <CR> to select file, toggle directory, or open summary
   map(sidebar_buf, "n", "<CR>", function()
