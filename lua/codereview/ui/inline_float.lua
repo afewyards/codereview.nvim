@@ -75,6 +75,19 @@ function M.border_hl(action_type)
   return "CodeReviewCommentBorder"
 end
 
+--- Build rounded border with highlight group as {char, hl} tuples.
+--- @param action_type string|nil
+--- @return table[]
+function M.border(action_type)
+  local hl = M.border_hl(action_type)
+  return {
+    { "╭", hl }, { "─", hl }, { "╮", hl },
+    { "│", hl },
+    { "╯", hl }, { "─", hl }, { "╰", hl },
+    { "│", hl },
+  }
+end
+
 --- Apply context header highlights to the buffer.
 --- @param buf number
 --- @param header_count number

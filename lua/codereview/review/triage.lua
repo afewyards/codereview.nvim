@@ -161,8 +161,7 @@ function M.edit(state)
     col = 2,
     row = 1,
     style = "minimal",
-    border = "rounded",
-    border_hl_group = ifloat.border_hl("edit"),
+    border = ifloat.border("edit"),
     title = " Edit Comment ",
     title_pos = "center",
   })

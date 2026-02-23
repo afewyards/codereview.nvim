@@ -39,8 +39,6 @@ local function open_input_popup(title, callback, opts)
   local content_count = #init_lines - header_count
   local total_height = ifloat.compute_height(content_count, header_count)
 
-  -- Border highlight
-  local border_hl = ifloat.border_hl(opts.action_type)
   local footer = " <C-CR> submit  <C-p> preview  q cancel "
 
   local win, extmark_id
@@ -64,8 +62,7 @@ local function open_input_popup(title, callback, opts)
       row = 1,
       col = 1,
       style = "minimal",
-      border = "rounded",
-      border_hl_group = border_hl,
+      border = ifloat.border(opts.action_type),
       title = " " .. title .. " ",
       title_pos = "center",
       footer = footer,
@@ -84,8 +81,7 @@ local function open_input_popup(title, callback, opts)
       row = row,
       col = col,
       style = "minimal",
-      border = "rounded",
-      border_hl_group = border_hl,
+      border = ifloat.border(opts.action_type),
       title = " " .. title .. " ",
       title_pos = "center",
       footer = footer,
