@@ -820,6 +820,16 @@ function M.render_sidebar(buf, state)
   table.insert(lines, (review.title or ""):sub(1, 28))
   table.insert(lines, list.pipeline_icon(review.pipeline_status) .. " " .. (review.source_branch or ""))
   table.insert(lines, string.rep("─", 30))
+  local session = require("codereview.review.session")
+  local sess = session.get()
+  if sess.active then
+    if sess.ai_pending then
+      table.insert(lines, "⟳ AI reviewing…")
+    else
+      table.insert(lines, "● Review in progress")
+    end
+    table.insert(lines, "")
+  end
   table.insert(lines, string.format("%d files changed", #files))
   local mode_str = state.scroll_mode and "All files" or "Per file"
   table.insert(lines, mode_str)
@@ -1736,6 +1746,17 @@ function M.setup_keymaps(layout, state)
 
   -- Quit
   local function quit()
+    local session = require("codereview.review.session")
+    local sess = session.get()
+    if sess.ai_pending then
+      if sess.ai_job_id then vim.fn.jobstop(sess.ai_job_id) end
+      session.ai_finish()
+      vim.notify("AI review cancelled", vim.log.levels.WARN)
+    end
+    if sess.active then
+      session.stop()
+      vim.notify("Review session ended — unpublished drafts remain on server", vim.log.levels.WARN)
+    end
     active_states[main_buf] = nil
     local split = require("codereview.ui.split")
     split.close(layout)
