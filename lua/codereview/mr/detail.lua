@@ -48,16 +48,54 @@ function M.build_header_lines(review)
   return lines
 end
 
+local function wrap_text(text, width)
+  local result = {}
+  for _, paragraph in ipairs(vim.split(text or "", "\n")) do
+    if paragraph == "" then
+      table.insert(result, "")
+    elseif #paragraph <= width then
+      table.insert(result, paragraph)
+    else
+      local line = ""
+      for word in paragraph:gmatch("%S+") do
+        if line ~= "" and #line + #word + 1 > width then
+          table.insert(result, line)
+          line = word
+        else
+          line = line == "" and word or (line .. " " .. word)
+        end
+      end
+      if line ~= "" then table.insert(result, line) end
+    end
+  end
+  return result
+end
+
+local function format_time_short(iso_str)
+  if not iso_str then return "" end
+  local mo, d, h, mi = iso_str:match("%d+-(%d+)-(%d+)T(%d+):(%d+)")
+  if not mo then return "" end
+  return string.format("%s/%s %s:%s", mo, d, h, mi)
+end
+
 function M.build_activity_lines(discussions)
-  local lines = {}
+  local result = { lines = {}, highlights = {}, row_map = {} }
 
   if not discussions or #discussions == 0 then
-    return lines
+    return result
   end
+
+  local lines = result.lines
+  local row_map = result.row_map
 
   table.insert(lines, "")
   table.insert(lines, "-- Activity " .. string.rep("-", 58))
   table.insert(lines, "")
+
+  local km = require("codereview.keymaps")
+  local reply_key = km.get("reply") or "r"
+  local resolve_key = km.get("toggle_resolve") or "gt"
+  local footer_text = string.format("%s:reply  %s:un/resolve", reply_key, resolve_key)
 
   for _, disc in ipairs(discussions) do
     local first_note = disc.notes and disc.notes[1]
@@ -73,25 +111,73 @@ function M.build_activity_lines(discussions)
         M.format_time(first_note.created_at)
       ))
     else
-      table.insert(lines, string.format(
-        "  @%s (%s)",
-        first_note.author,
-        M.format_time(first_note.created_at)
-      ))
-      for _, body_line in ipairs(markdown.to_lines(first_note.body)) do
-        table.insert(lines, "  " .. body_line)
+      local resolved = disc.resolved
+      if resolved == nil then
+        for _, note in ipairs(disc.notes) do
+          if note.resolvable ~= nil then
+            resolved = note.resolved
+            break
+          end
+        end
       end
 
+      local status_str = ""
+      if first_note.resolvable ~= nil or disc.resolved ~= nil then
+        status_str = resolved and " Resolved " or " Unresolved "
+      end
+
+      local time_str = format_time_short(first_note.created_at)
+      local header_meta = time_str ~= "" and (" · " .. time_str) or ""
+      local header_text = "@" .. first_note.author
+      local fill = math.max(0, 62 - #header_text - #header_meta - #status_str)
+
+      -- Row offset is 0-indexed from start of lines table
+      local thread_start_row = #lines  -- 0-indexed (length before insert = index of next item)
+
+      -- Header: ┌ @author · MM/DD HH:MM  Resolved/Unresolved ──────
+      table.insert(lines, string.format(
+        "┌ %s%s%s%s",
+        header_text,
+        header_meta,
+        status_str,
+        string.rep("─", fill)
+      ))
+      row_map[thread_start_row] = { type = "thread_start", discussion = disc }
+
+      -- Body lines
+      for _, bl in ipairs(wrap_text(first_note.body, 64)) do
+        local row = #lines
+        table.insert(lines, "│ " .. bl)
+        row_map[row] = { type = "thread", discussion = disc }
+      end
+
+      -- Replies
       for i = 2, #disc.notes do
         local reply = disc.notes[i]
         if not reply.system then
-          table.insert(lines, string.format(
-            "    -> @%s: %s",
-            reply.author,
-            reply.body:gsub("\n", " "):sub(1, 80)
-          ))
+          local rt = format_time_short(reply.created_at)
+          local rmeta = rt ~= "" and (" · " .. rt) or ""
+          local sep_row = #lines
+          table.insert(lines, "│")
+          row_map[sep_row] = { type = "thread", discussion = disc }
+
+          local reply_header_row = #lines
+          table.insert(lines, string.format("│  ↪ @%s%s", reply.author, rmeta))
+          row_map[reply_header_row] = { type = "thread", discussion = disc }
+
+          for _, rl in ipairs(wrap_text(reply.body, 58)) do
+            local rrow = #lines
+            table.insert(lines, "│    " .. rl)
+            row_map[rrow] = { type = "thread", discussion = disc }
+          end
         end
       end
+
+      -- Footer: └ r:reply  gt:un/resolve ──────────────────────
+      local footer_fill = math.max(0, 44 - #footer_text)
+      local footer_row = #lines
+      table.insert(lines, string.format("└ %s%s", footer_text, string.rep("─", footer_fill)))
+      row_map[footer_row] = { type = "thread", discussion = disc }
 
       table.insert(lines, "")
     end
@@ -99,7 +185,7 @@ function M.build_activity_lines(discussions)
     ::continue::
   end
 
-  return lines
+  return result
 end
 
 function M.count_discussions(discussions)
