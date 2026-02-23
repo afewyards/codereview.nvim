@@ -6,24 +6,26 @@ on:
 
 permissions:
   contents: write
-  pull-requests: write
 
 jobs:
-  release-please:
+  release:
     runs-on: ubuntu-latest
     steps:
-      - uses: googleapis/release-please-action@v4
-        id: release
+      - uses: actions/checkout@v4
         with:
-          config-file: release-please-config.json
-          manifest-file: .release-please-manifest.json
+          fetch-depth: 0
+
+      - uses: go-semantic-release/action@v1
+        id: release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # Uncomment when ready to publish to LuaRocks:
   #
   # luarocks:
-  #   needs: release-please
+  #   needs: release
   #   runs-on: ubuntu-latest
-  #   if: ${{ needs.release-please.outputs.release_created }}
+  #   if: ${{ needs.release.outputs.version != '' }}
   #   steps:
   #     - uses: actions/checkout@v4
   #
@@ -36,4 +38,4 @@ jobs:
   #     - name: Upload to LuaRocks
   #       env:
   #         LUAROCKS_API_KEY: ${{ secrets.LUAROCKS_API_KEY }}
-  #       run: luarocks upload codereview.nvim-${{ needs.release-please.outputs.tag_name }}.rockspec --api-key=$LUAROCKS_API_KEY
+  #       run: luarocks upload codereview.nvim-v${{ needs.release.outputs.version_tag }}.rockspec --api-key=$LUAROCKS_API_KEY
