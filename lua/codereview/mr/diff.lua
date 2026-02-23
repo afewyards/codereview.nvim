@@ -875,7 +875,7 @@ local function build_footer(state, sess)
   if state.view_mode == "summary" then
     row("a approve   o open")
     row("m merge     R refresh")
-    row("q quit")
+    row("Q quit")
     return lines, hls
   end
 
@@ -902,7 +902,7 @@ local function build_footer(state, sess)
 
   header("View")
   row("⌃F     full      ⌃A scroll")
-  row("R      refresh   q  quit")
+  row("R      refresh   Q  quit")
 
   return lines, hls
 end
@@ -2099,8 +2099,8 @@ function M.setup_keymaps(layout, state)
     split.close(layout)
     pcall(vim.api.nvim_buf_delete, layout.main_buf, { force = true })
   end
-  map(main_buf, "n", "q", quit)
-  map(sidebar_buf, "n", "q", quit)
+  map(main_buf, "n", "Q", quit)
+  map(sidebar_buf, "n", "Q", quit)
 
   -- Sidebar: <CR> to select file, toggle directory, or open summary
   map(sidebar_buf, "n", "<CR>", function()
