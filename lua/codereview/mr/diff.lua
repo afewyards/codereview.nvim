@@ -850,12 +850,17 @@ function M.render_sidebar(buf, state)
   local stats = count_session_stats(state)
   local status_start_row = #lines  -- track where status lines begin for highlights
 
+  state.sidebar_status_row = nil
+  state.sidebar_drafts_row = nil
+  state.sidebar_threads_row = nil
+
   if sess.active then
     if sess.ai_pending then
       table.insert(lines, "⟳ AI reviewing…")
     else
       table.insert(lines, "● Review in progress")
     end
+    state.sidebar_status_row = #lines
   end
 
   -- Drafts + AI stats line
@@ -875,6 +880,7 @@ function M.render_sidebar(buf, state)
     end
     if #parts > 0 then
       table.insert(lines, table.concat(parts, "  "))
+      state.sidebar_drafts_row = #lines
     end
   end
 
@@ -885,6 +891,7 @@ function M.render_sidebar(buf, state)
       tline = tline .. string.format("  ⚠ %d open", stats.unresolved)
     end
     table.insert(lines, tline)
+    state.sidebar_threads_row = #lines
   end
 
   if #lines > status_start_row then
@@ -986,6 +993,15 @@ function M.render_sidebar(buf, state)
     elseif entry.type == "dir" then
       pcall(apply_line_hl, buf, row - 1, "CodeReviewHidden")
     end
+  end
+
+  -- Status line highlights
+  if state.sidebar_status_row then
+    local hl = sess.ai_pending and "CodeReviewSpinner" or "CodeReviewFileAdded"
+    pcall(apply_line_hl, buf, state.sidebar_status_row - 1, hl)
+  end
+  if state.sidebar_threads_row and stats.unresolved > 0 then
+    pcall(apply_line_hl, buf, state.sidebar_threads_row - 1, "CodeReviewCommentUnresolved")
   end
 end
 
