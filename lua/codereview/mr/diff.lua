@@ -231,7 +231,7 @@ function M.place_ai_suggestions(buf, line_data, suggestions, file_diff)
         local body_hl = "CodeReviewAIDraft"
         local severity = suggestion.severity or "info"
         local header_fill = math.max(0, 62 - #(" AI [" .. severity .. "] "))
-        local footer_content = "a:accept  d:dismiss  e:edit"
+        local footer_content = "a:accept  x:dismiss  e:edit"
         local footer_fill = math.max(0, 62 - #footer_content - 1)
 
         local virt_lines = {}
@@ -250,7 +250,7 @@ function M.place_ai_suggestions(buf, line_data, suggestions, file_diff)
           })
         end
 
-        -- └ a:accept  d:dismiss  e:edit ─────────────────────────
+        -- └ a:accept  x:dismiss  e:edit ─────────────────────────
         table.insert(virt_lines, {
           { "  └ ", bdr },
           { footer_content, body_hl },
@@ -298,7 +298,7 @@ function M.place_ai_suggestions_all(buf, all_line_data, file_sections, suggestio
             local body_hl = "CodeReviewAIDraft"
             local severity = suggestion.severity or "info"
             local header_fill = math.max(0, 62 - #(" AI [" .. severity .. "] "))
-            local footer_content = "a:accept  d:dismiss  e:edit"
+            local footer_content = "a:accept  x:dismiss  e:edit"
             local footer_fill = math.max(0, 62 - #footer_content - 1)
 
             local virt_lines = {}
@@ -1486,15 +1486,31 @@ function M.setup_keymaps(layout, state)
       state.scroll_row_disc = result.row_discussions
       state.scroll_row_ai = result.row_ai
     else
-      local file = state.files[state.current_file]
-      if file then
-        local ld, rd, ra = M.render_file_diff(layout.main_buf, file, state.review, state.discussions, state.context, state.ai_suggestions)
-        state.line_data_cache[state.current_file] = ld
-        state.row_disc_cache[state.current_file] = rd
-        state.row_ai_cache[state.current_file] = ra
-      end
+      local file = state.files and state.files[state.current_file]
+      if not file then return end
+      local ld, rd, ra = M.render_file_diff(layout.main_buf, file, state.review, state.discussions, state.context, state.ai_suggestions)
+      state.line_data_cache[state.current_file] = ld
+      state.row_disc_cache[state.current_file] = rd
+      state.row_ai_cache[state.current_file] = ra
     end
     M.render_sidebar(layout.sidebar_buf, state)
+  end
+
+  -- Helper: navigate to next AI suggestion at or after cursor row
+  local function nav_to_next_ai(from_row)
+    local row_ai_new = state.scroll_mode and state.scroll_row_ai or (state.row_ai_cache[state.current_file] or {})
+    local rows = {}
+    for r in pairs(row_ai_new) do table.insert(rows, r) end
+    table.sort(rows)
+    for _, r in ipairs(rows) do
+      if r >= from_row then
+        vim.api.nvim_win_set_cursor(layout.main_win, { r, 0 })
+        return
+      end
+    end
+    if #rows > 0 then
+      vim.api.nvim_win_set_cursor(layout.main_win, { rows[1], 0 })
+    end
   end
 
   -- AI suggestion navigation: ]s / [s
@@ -1541,10 +1557,11 @@ function M.setup_keymaps(layout, state)
     if not suggestion then return end
     suggestion.status = "accepted"
     rerender_ai()
+    nav_to_next_ai(cursor)
   end)
 
-  -- d: dismiss AI suggestion at cursor
-  map(main_buf, "n", "d", function()
+  -- x: dismiss AI suggestion at cursor
+  map(main_buf, "n", "x", function()
     if state.view_mode ~= "diff" then return end
     local cursor = vim.api.nvim_win_get_cursor(layout.main_win)[1]
     local row_ai = state.scroll_mode and state.scroll_row_ai or (state.row_ai_cache[state.current_file] or {})
@@ -1552,6 +1569,7 @@ function M.setup_keymaps(layout, state)
     if not suggestion then return end
     suggestion.status = "dismissed"
     rerender_ai()
+    nav_to_next_ai(cursor)
   end)
 
   -- e: edit AI suggestion comment at cursor
@@ -1607,7 +1625,7 @@ function M.setup_keymaps(layout, state)
     submit_mod.submit_review(state.review, state.ai_suggestions)
   end)
 
-  -- ds: dismiss all AI suggestions
+  -- ds: dismiss all non-accepted/edited AI suggestions
   map(main_buf, "n", "ds", function()
     if state.view_mode ~= "diff" or not state.ai_suggestions then return end
     for _, s in ipairs(state.ai_suggestions) do
@@ -1615,10 +1633,7 @@ function M.setup_keymaps(layout, state)
         s.status = "dismissed"
       end
     end
-    state.ai_suggestions = nil
-    vim.api.nvim_buf_clear_namespace(layout.main_buf, AIDRAFT_NS, 0, -1)
-    pcall(vim.fn.sign_unplace, "CodeReviewAI", { buffer = layout.main_buf })
-    M.render_sidebar(layout.sidebar_buf, state)
+    rerender_ai()
   end)
 
   map(main_buf, "n", "o", function()
@@ -1651,7 +1666,12 @@ function M.setup_keymaps(layout, state)
   end)
 
   map(main_buf, "n", "A", function()
+    if state.ai_review_in_progress then
+      vim.notify("AI review already running", vim.log.levels.WARN)
+      return
+    end
     local review_mod = require("codereview.review")
+    state.ai_review_in_progress = true
     if state.view_mode == "diff" then
       review_mod.start(state.review, state, layout)
     else

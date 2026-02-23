@@ -94,6 +94,7 @@ function M.start(review, diff_state, layout)
 
   ai_sub.run(review_prompt, function(output, ai_err)
     progress.close()
+    if diff_state then diff_state.ai_review_in_progress = false end
 
     if ai_err then
       vim.notify("AI review failed: " .. ai_err, vim.log.levels.ERROR)
