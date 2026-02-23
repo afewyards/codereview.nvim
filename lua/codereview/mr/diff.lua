@@ -2406,6 +2406,26 @@ function M.setup_keymaps(layout, state)
       review_mod.start(state.review, state, layout)
     end,
 
+    edit_note = function()
+      if state.view_mode ~= "diff" then return end
+      local disc = get_cursor_disc()
+      if not disc then return end
+      local sel_idx = state.note_selection[disc.id]
+      if not sel_idx then return end  -- no note selected; let edit_suggestion handle "e"
+      local note = disc.notes[sel_idx]
+      if not note then return end
+      if not state.current_user then return end
+      if note.author ~= state.current_user then
+        vim.notify("Can only edit your own comments", vim.log.levels.WARN)
+        return
+      end
+      local comment = require("codereview.mr.comment")
+      local cursor_row = vim.api.nvim_win_get_cursor(layout.main_win)[1]
+      comment.edit_note(disc, note, state.review, function()
+        rerender_view()
+      end, { win_id = layout.main_win, anchor_line = cursor_row })
+    end,
+
     select_next_note = function()
       if state.view_mode ~= "diff" then return end
       local disc = get_cursor_disc()

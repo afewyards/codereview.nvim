@@ -62,6 +62,25 @@ describe("mr.comment", function()
     end)
   end)
 
+  describe("edit_note", function()
+    it("calls open_input_popup with action_type=edit and prefill=note.body", function()
+      local popup_opts
+      local orig = comment.open_input_popup
+      comment.open_input_popup = function(title, cb, opts)
+        popup_opts = opts
+      end
+      comment.edit_note(
+        { id = "d1", notes = { { id = 1, body = "original text", author = "me" } } },
+        { id = 1, body = "original text", author = "me" },
+        { id = 99 },
+        function() end
+      )
+      comment.open_input_popup = orig
+      assert.equals("edit", popup_opts.action_type)
+      assert.equals("original text", popup_opts.prefill)
+    end)
+  end)
+
   describe("post_with_retry", function()
     it("calls on_success on first success", function()
       local called = false

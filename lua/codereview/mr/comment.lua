@@ -406,6 +406,32 @@ function M.reply(disc, mr, optimistic, opts)
   end, opts)
 end
 
+--- Edit an existing note. Opens input popup with prefill, calls provider edit_note on submit.
+--- @param disc table  discussion containing the note
+--- @param note table  the note to edit
+--- @param mr table    the MR/PR object
+--- @param on_success fun()  called after successful edit (triggers re-render)
+--- @param opts table?  optional popup opts (win_id, anchor_line, etc.)
+function M.edit_note(disc, note, mr, on_success, opts)
+  opts = opts or {}
+  opts.action_type = "edit"
+  opts.prefill = note.body
+  M.open_input_popup("Edit comment", function(text)
+    if text == note.body then return end  -- no change
+    vim.schedule(function()
+      local provider, client, ctx = get_provider()
+      if not provider then return end
+      local _, err = provider.edit_note(client, ctx, mr, disc.id, note.id, text)
+      if err then
+        vim.notify("Edit failed: " .. err, vim.log.levels.ERROR)
+        return
+      end
+      note.body = text
+      if on_success then on_success() end
+    end)
+  end, opts)
+end
+
 function M.resolve_toggle(disc, mr, callback)
   local first = disc.notes and disc.notes[1]
   if not first then return end
