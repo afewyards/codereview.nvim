@@ -51,8 +51,10 @@ function M.open_input_popup(title, callback, opts)
     -- Highlight the target line(s)
     local hl_start = opts.anchor_start or opts.anchor_line
     line_hl_ids = ifloat.highlight_lines(diff_buf, hl_start, opts.anchor_line)
+    local cfg = require("codereview.config").get()
     local win_width = vim.api.nvim_win_get_width(opts.win_id)
-    local width = win_width - 4  -- small margin
+    local max_w = cfg.diff.comment_width + 8  -- match rendered comment width + border/padding
+    local width = math.min(win_width - 4, max_w)
 
     -- Reserve space: when replying to a thread, place the gap on the next
     -- buffer line (above it) so it appears after the comment's virt_lines.
@@ -106,6 +108,7 @@ function M.open_input_popup(title, callback, opts)
     if vim.api.nvim_win_is_valid(win) then
       vim.api.nvim_set_option_value("winblend", 0, { win = win })
       vim.api.nvim_set_option_value("winhighlight", "NormalFloat:Normal", { win = win })
+      vim.api.nvim_set_option_value("wrap", true, { win = win })
     end
   end
   apply_no_dim()
@@ -164,13 +167,31 @@ function M.open_input_popup(title, callback, opts)
       resize_timer = vim.fn.timer_start(15, function()
         resize_timer = nil
         if closed or not vim.api.nvim_buf_is_valid(buf) then return end
-        local line_count = vim.api.nvim_buf_line_count(buf) - header_count
-        local new_height = ifloat.compute_height(line_count, header_count)
+        -- Count display lines (accounting for wrap)
+        local win_w = vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_width(win) or 1
+        local display_lines = 0
+        local lines = vim.api.nvim_buf_get_lines(buf, header_count, -1, false)
+        for _, l in ipairs(lines) do
+          display_lines = display_lines + math.max(1, math.ceil(vim.fn.strdisplaywidth(l) / win_w))
+        end
+        local new_height = ifloat.compute_height(display_lines, header_count)
         if vim.api.nvim_win_is_valid(win) then
           vim.api.nvim_win_set_height(win, new_height)
         end
         if extmark_id and diff_buf and vim.api.nvim_buf_is_valid(diff_buf) then
           ifloat.update_space(diff_buf, extmark_id, reserve_line, new_height + 2, reserve_above)
+          -- Scroll diff so the reserved space stays visible
+          if opts.win_id and vim.api.nvim_win_is_valid(opts.win_id) then
+            local target = reserve_line + new_height + 3  -- bottom of reserved space (1-indexed)
+            local diff_height = vim.api.nvim_win_get_height(opts.win_id)
+            local topline = math.max(1, target - diff_height + 1)
+            local cur_top = vim.fn.getwininfo(opts.win_id)[1].topline
+            if topline > cur_top then
+              vim.api.nvim_win_call(opts.win_id, function()
+                vim.fn.winrestview({ topline = topline })
+              end)
+            end
+          end
         end
       end)
     end,
@@ -211,46 +232,11 @@ function M.open_input_popup(title, callback, opts)
     callback = function() close() end,
   })
 
-  -- Preview state
-  local preview_buf = nil
-  local saved_cursor = nil
-
-  local function toggle_preview()
-    if closed then return end
-
-    if preview_buf and vim.api.nvim_win_get_buf(win) == preview_buf then
-      -- Switch back to edit
-      vim.api.nvim_win_set_buf(win, buf)
-      if saved_cursor then
-        pcall(vim.api.nvim_win_set_cursor, win, saved_cursor)
-      end
-      vim.api.nvim_win_set_config(win, { title = styled_title })
-      preview_buf = nil
-    else
-      -- Switch to preview
-      saved_cursor = vim.api.nvim_win_get_cursor(win)
-      local edit_lines = vim.api.nvim_buf_get_lines(buf, header_count, -1, false)
-      preview_buf = vim.api.nvim_create_buf(false, true)
-      vim.api.nvim_buf_set_lines(preview_buf, 0, -1, false, edit_lines)
-      vim.bo[preview_buf].modifiable = false
-      vim.bo[preview_buf].bufhidden = "wipe"
-      markdown.set_buf_markdown(preview_buf)
-      vim.api.nvim_win_set_buf(win, preview_buf)
-      vim.api.nvim_win_set_config(win, { title = ifloat.title("Preview") })
-      -- Preview keymaps
-      local pmap = { buffer = preview_buf, nowait = true }
-      vim.keymap.set({ "n", "i" }, "<C-p>", toggle_preview, pmap)
-      vim.keymap.set("n", "q", close, pmap)
-      vim.keymap.set("n", "<Esc>", close, pmap)
-    end
-  end
-
   -- Keymaps
   local map_opts = { buffer = buf, nowait = true }
   vim.keymap.set("n", "q", close, map_opts)
   vim.keymap.set("n", "<Esc>", close, map_opts)
   vim.keymap.set({ "n", "i" }, "<C-CR>", submit, map_opts)
-  vim.keymap.set({ "n", "i" }, "<C-p>", toggle_preview, map_opts)
 end
 
 local function get_provider()

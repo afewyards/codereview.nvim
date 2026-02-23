@@ -106,8 +106,6 @@ function M.footer()
     { " ", "CodeReviewFloatFooterText" },
     { "<C-CR>", "CodeReviewFloatFooterKey" },
     { " submit  ", "CodeReviewFloatFooterText" },
-    { "<C-p>", "CodeReviewFloatFooterKey" },
-    { " preview  ", "CodeReviewFloatFooterText" },
     { "q", "CodeReviewFloatFooterKey" },
     { " cancel ", "CodeReviewFloatFooterText" },
   }

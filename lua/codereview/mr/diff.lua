@@ -156,7 +156,7 @@ function M.place_comment_signs(buf, line_data, discussions, file_diff)
               })
 
               -- Comment body (wrapped, full)
-              for _, bl in ipairs(wrap_text(first.body, 64)) do
+              for _, bl in ipairs(wrap_text(first.body, config.get().diff.comment_width)) do
                 table.insert(virt_lines, {
                   { "  │ ", bdr },
                   { bl, body_hl },
@@ -247,8 +247,8 @@ function M.place_ai_suggestions(buf, line_data, suggestions, file_diff)
               { string.rep("─", header_fill), bdr },
             })
 
-            -- Comment body wrapped to width 64
-            for _, bl in ipairs(wrap_text(suggestion.comment, 64)) do
+            -- Comment body wrapped to configured comment_width
+            for _, bl in ipairs(wrap_text(suggestion.comment, config.get().diff.comment_width)) do
               table.insert(virt_lines, {
                 { "  │ ", bdr },
                 { bl, body_hl },
@@ -314,7 +314,7 @@ function M.place_ai_suggestions_all(buf, all_line_data, file_sections, suggestio
                 { string.rep("─", header_fill), bdr },
               })
 
-              for _, bl in ipairs(wrap_text(suggestion.comment, 64)) do
+              for _, bl in ipairs(wrap_text(suggestion.comment, config.get().diff.comment_width)) do
                 table.insert(virt_lines, {
                   { "  │ ", bdr },
                   { bl, body_hl },
@@ -711,7 +711,7 @@ function M.render_all_files(buf, files, review, discussions, context, file_conte
                   { header_meta, bdr }, { status_str, status_hl },
                   { string.rep("─", fill), bdr },
                 })
-                for _, bl in ipairs(wrap_text(first.body, 64)) do
+                for _, bl in ipairs(wrap_text(first.body, config.get().diff.comment_width)) do
                   table.insert(virt_lines, { { "  │ ", bdr }, { bl, body_hl } })
                 end
                 for ni = 2, #notes do
@@ -1962,7 +1962,7 @@ function M.setup_keymaps(layout, state)
         local notes = disc.notes
         if notes and #notes > 0 then
           thread_height = 1 -- header (┌ @author...)
-          thread_height = thread_height + #wrap_text(notes[1].body, 64)
+          thread_height = thread_height + #wrap_text(notes[1].body, config.get().diff.comment_width)
           for i = 2, #notes do
             if not notes[i].system then
               thread_height = thread_height + 1 -- separator (│)
