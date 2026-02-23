@@ -33,6 +33,7 @@ function M.stop()
   _state.active = false
   _state.ai_pending = false
   _state.ai_job_id = nil
+  require("codereview.ui.spinner").close()
 end
 
 --- Record that an AI subprocess has started.
@@ -40,12 +41,14 @@ end
 function M.ai_start(job_id)
   _state.ai_pending = true
   _state.ai_job_id = job_id
+  require("codereview.ui.spinner").open()
 end
 
 --- Record that the AI subprocess has finished (success or error).
 function M.ai_finish()
   _state.ai_pending = false
   _state.ai_job_id = nil
+  require("codereview.ui.spinner").close()
 end
 
 --- Reset to idle state.
