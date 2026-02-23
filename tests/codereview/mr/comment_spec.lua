@@ -1,5 +1,11 @@
 local comment = require("codereview.mr.comment")
 describe("mr.comment", function()
+  describe("open_input_popup opts", function()
+    it("module loads without error", function()
+      assert.is_table(comment)
+    end)
+  end)
+
   describe("build_thread_lines", function()
     it("formats a discussion thread", function()
       local disc = {

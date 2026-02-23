@@ -5,31 +5,106 @@ local M = {}
 --- Open a floating popup for multi-line comment input.
 --- @param title string  Title shown in the border
 --- @param callback fun(text: string)  Called with the joined text on submit
-local function open_input_popup(title, callback)
-  local width = 70
-  local height = 8
-  local row = math.floor((vim.o.lines - height) / 2)
-  local col = math.floor((vim.o.columns - width) / 2)
+--- @param opts? table  { anchor_line?, win_id?, action_type?, context_text?, prefill? }
+local function open_input_popup(title, callback, opts)
+  opts = opts or {}
+  local ifloat = require("codereview.ui.inline_float")
 
+  -- Build context header
+  local header_lines = ifloat.build_context_header(opts)
+  local header_count = #header_lines
+
+  -- Determine if we can use inline mode
+  local use_inline = opts.anchor_line and opts.win_id
+    and vim.api.nvim_win_is_valid(opts.win_id)
+    and vim.api.nvim_win_get_width(opts.win_id) >= 40
+
+  -- Buffer setup
   local buf = vim.api.nvim_create_buf(false, true)
   vim.bo[buf].bufhidden = "wipe"
   vim.bo[buf].filetype = "markdown"
 
-  local win = vim.api.nvim_open_win(buf, true, {
-    relative = "editor",
-    width = width,
-    height = height,
-    row = row,
-    col = col,
-    style = "minimal",
-    border = "rounded",
-    title = " " .. title .. " ",
-    title_pos = "center",
-    footer = " <C-CR> submit  q/Esc cancel ",
-    footer_pos = "center",
-  })
+  -- Set initial content: header + prefill or empty line
+  local init_lines = {}
+  for _, hl in ipairs(header_lines) do table.insert(init_lines, hl) end
+  if opts.prefill and opts.prefill ~= "" then
+    for _, pl in ipairs(vim.split(opts.prefill, "\n")) do
+      table.insert(init_lines, pl)
+    end
+  else
+    table.insert(init_lines, "")
+  end
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, init_lines)
 
-  vim.cmd("startinsert")
+  local content_count = #init_lines - header_count
+  local total_height = ifloat.compute_height(content_count, header_count)
+
+  -- Border highlight
+  local border_hl = ifloat.border_hl(opts.action_type)
+  local footer = " <C-CR> submit  <C-p> preview  q cancel "
+
+  local win, extmark_id
+  local diff_buf
+
+  if use_inline then
+    local anchor_0 = opts.anchor_line - 1  -- convert to 0-indexed
+    diff_buf = vim.api.nvim_win_get_buf(opts.win_id)
+    local win_width = vim.api.nvim_win_get_width(opts.win_id)
+    local width = win_width - 4  -- small margin
+
+    -- Reserve space
+    extmark_id = ifloat.reserve_space(diff_buf, anchor_0, total_height + 2)
+
+    win = vim.api.nvim_open_win(buf, true, {
+      relative = "win",
+      win = opts.win_id,
+      bufpos = { anchor_0, 0 },
+      width = width,
+      height = total_height,
+      row = 1,
+      col = 1,
+      style = "minimal",
+      border = "rounded",
+      border_hl_group = border_hl,
+      title = " " .. title .. " ",
+      title_pos = "center",
+      footer = footer,
+      footer_pos = "center",
+    })
+  else
+    -- Fallback: centered editor-relative float
+    local width = 70
+    local row = math.floor((vim.o.lines - total_height) / 2)
+    local col = math.floor((vim.o.columns - width) / 2)
+
+    win = vim.api.nvim_open_win(buf, true, {
+      relative = "editor",
+      width = width,
+      height = total_height,
+      row = row,
+      col = col,
+      style = "minimal",
+      border = "rounded",
+      border_hl_group = border_hl,
+      title = " " .. title .. " ",
+      title_pos = "center",
+      footer = footer,
+      footer_pos = "center",
+    })
+  end
+
+  -- Apply header highlights
+  ifloat.apply_header_hl(buf, header_count)
+
+  -- Place cursor on first editable line
+  pcall(vim.api.nvim_win_set_cursor, win, { header_count + 1, 0 })
+
+  -- Start in insert for new comments, normal for edits
+  if opts.action_type == "edit" then
+    vim.cmd("stopinsert")
+  else
+    vim.cmd("startinsert")
+  end
 
   local closed = false
   local function close()
@@ -37,22 +112,103 @@ local function open_input_popup(title, callback)
     closed = true
     vim.cmd("stopinsert")
     pcall(vim.api.nvim_win_close, win, true)
+    if extmark_id and diff_buf then
+      ifloat.clear_space(diff_buf, extmark_id)
+    end
   end
 
   local function submit()
-    local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+    -- Read only editable lines (skip header)
+    local lines = vim.api.nvim_buf_get_lines(buf, header_count, -1, false)
     close()
-    local text = vim.fn.join(lines, "\n")
-    text = vim.trim(text)
+    local text = vim.trim(table.concat(lines, "\n"))
     if text ~= "" then
       callback(text)
     end
   end
 
+  -- Auto-resize on text change
+  local resize_timer = nil
+  vim.api.nvim_buf_attach(buf, false, {
+    on_lines = function()
+      if closed then return true end
+      if resize_timer then
+        vim.fn.timer_stop(resize_timer)
+      end
+      resize_timer = vim.fn.timer_start(15, function()
+        resize_timer = nil
+        if closed or not vim.api.nvim_buf_is_valid(buf) then return end
+        local line_count = vim.api.nvim_buf_line_count(buf) - header_count
+        local new_height = ifloat.compute_height(line_count, header_count)
+        if vim.api.nvim_win_is_valid(win) then
+          vim.api.nvim_win_set_height(win, new_height)
+        end
+        if extmark_id and diff_buf and vim.api.nvim_buf_is_valid(diff_buf) then
+          ifloat.update_space(diff_buf, extmark_id, opts.anchor_line - 1, new_height + 2)
+        end
+      end)
+    end,
+  })
+
+  -- Clamp cursor to editable region
+  vim.api.nvim_create_autocmd("CursorMoved", {
+    buffer = buf,
+    callback = function()
+      if closed then return true end
+      local cursor = vim.api.nvim_win_get_cursor(win)
+      if cursor[1] <= header_count then
+        pcall(vim.api.nvim_win_set_cursor, win, { header_count + 1, cursor[2] })
+      end
+    end,
+  })
+
+  -- WinClosed guard
+  vim.api.nvim_create_autocmd("WinClosed", {
+    pattern = tostring(win),
+    once = true,
+    callback = function() close() end,
+  })
+
+  -- Preview state
+  local preview_buf = nil
+  local saved_cursor = nil
+
+  local function toggle_preview()
+    if closed then return end
+
+    if preview_buf and vim.api.nvim_win_get_buf(win) == preview_buf then
+      -- Switch back to edit
+      vim.api.nvim_win_set_buf(win, buf)
+      if saved_cursor then
+        pcall(vim.api.nvim_win_set_cursor, win, saved_cursor)
+      end
+      vim.api.nvim_win_set_config(win, { title = " " .. title .. " " })
+      preview_buf = nil
+    else
+      -- Switch to preview
+      saved_cursor = vim.api.nvim_win_get_cursor(win)
+      local edit_lines = vim.api.nvim_buf_get_lines(buf, header_count, -1, false)
+      preview_buf = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_buf_set_lines(preview_buf, 0, -1, false, edit_lines)
+      vim.bo[preview_buf].modifiable = false
+      vim.bo[preview_buf].bufhidden = "wipe"
+      markdown.set_buf_markdown(preview_buf)
+      vim.api.nvim_win_set_buf(win, preview_buf)
+      vim.api.nvim_win_set_config(win, { title = " Preview " })
+      -- Preview keymaps
+      local pmap = { buffer = preview_buf, nowait = true }
+      vim.keymap.set({ "n", "i" }, "<C-p>", toggle_preview, pmap)
+      vim.keymap.set("n", "q", close, pmap)
+      vim.keymap.set("n", "<Esc>", close, pmap)
+    end
+  end
+
+  -- Keymaps
   local map_opts = { buffer = buf, nowait = true }
   vim.keymap.set("n", "q", close, map_opts)
   vim.keymap.set("n", "<Esc>", close, map_opts)
   vim.keymap.set({ "n", "i" }, "<C-CR>", submit, map_opts)
+  vim.keymap.set({ "n", "i" }, "<C-p>", toggle_preview, map_opts)
 end
 
 local function get_provider()
@@ -168,7 +324,14 @@ function M.show_thread(disc, mr)
   end, map_opts)
 end
 
-function M.reply(disc, mr, on_success)
+function M.reply(disc, mr, on_success, opts)
+  opts = opts or {}
+  if not opts.action_type then opts.action_type = "reply" end
+  if not opts.context_text and disc.notes and disc.notes[1] then
+    local first = disc.notes[1]
+    local snippet = (first.body or ""):sub(1, 60)
+    opts.context_text = "@" .. (first.author or "?") .. ": " .. snippet
+  end
   open_input_popup("Reply", function(text)
     local provider, client, ctx = get_provider()
     if not provider then return end
@@ -179,7 +342,7 @@ function M.reply(disc, mr, on_success)
       vim.notify("Reply posted", vim.log.levels.INFO)
       if on_success then on_success() end
     end
-  end)
+  end, opts)
 end
 
 function M.resolve_toggle(disc, mr, callback)
@@ -198,7 +361,7 @@ function M.resolve_toggle(disc, mr, callback)
   end
 end
 
-function M.create_inline(mr, old_path, new_path, old_line, new_line, on_success)
+function M.create_inline(mr, old_path, new_path, old_line, new_line, on_success, opts)
   open_input_popup("Inline Comment", function(text)
     local provider, client, ctx = get_provider()
     if not provider then return end
@@ -215,10 +378,10 @@ function M.create_inline(mr, old_path, new_path, old_line, new_line, on_success)
       vim.notify("Comment posted", vim.log.levels.INFO)
       if on_success then on_success() end
     end
-  end)
+  end, opts)
 end
 
-function M.create_inline_range(mr, old_path, new_path, start_pos, end_pos, on_success)
+function M.create_inline_range(mr, old_path, new_path, start_pos, end_pos, on_success, opts)
   open_input_popup("Range Comment", function(text)
     local provider, client, ctx = get_provider()
     if not provider then return end
@@ -229,10 +392,10 @@ function M.create_inline_range(mr, old_path, new_path, start_pos, end_pos, on_su
       vim.notify("Range comment posted", vim.log.levels.INFO)
       if on_success then on_success() end
     end
-  end)
+  end, opts)
 end
 
-function M.create_inline_draft(mr, new_path, new_line, on_success)
+function M.create_inline_draft(mr, new_path, new_line, on_success, opts)
   open_input_popup("Draft Comment", function(text)
     local provider, client, ctx = get_provider()
     if not provider then return end
@@ -247,10 +410,10 @@ function M.create_inline_draft(mr, new_path, new_line, on_success)
       vim.notify("Draft comment created", vim.log.levels.INFO)
       if on_success then on_success(text) end
     end
-  end)
+  end, opts)
 end
 
-function M.create_inline_range_draft(mr, new_path, start_line, end_line, on_success)
+function M.create_inline_range_draft(mr, new_path, start_line, end_line, on_success, opts)
   open_input_popup("Draft Comment", function(text)
     local provider, client, ctx = get_provider()
     if not provider then return end
@@ -265,10 +428,11 @@ function M.create_inline_range_draft(mr, new_path, start_line, end_line, on_succ
       vim.notify("Draft comment created", vim.log.levels.INFO)
       if on_success then on_success(text) end
     end
-  end)
+  end, opts)
 end
 
 function M.create_mr_comment(review, provider, ctx, on_success)
+  -- No opts: summary view has no line context, always uses fallback centered float
   open_input_popup("Comment on MR", function(text)
     if not provider or not ctx then return end
     local client_mod = require("codereview.api.client")
