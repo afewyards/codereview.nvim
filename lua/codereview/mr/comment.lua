@@ -192,6 +192,26 @@ function M.open_input_popup(title, callback, opts)
               end)
             end
           end
+          -- When float is constrained by window bottom and extends upward,
+          -- scroll diff so the anchor stays visible above the float.
+          if opts.win_id and vim.api.nvim_win_is_valid(opts.win_id) and vim.api.nvim_win_is_valid(win) then
+            local float_visual = new_height + (opts.thread_height or 0) + 4
+            local win_h = vim.api.nvim_win_get_height(opts.win_id)
+            local max_row = win_h - float_visual
+            if max_row >= 0 then
+              local win_pos = vim.api.nvim_win_get_position(opts.win_id)
+              local anchor_scr = vim.fn.screenpos(opts.win_id, opts.anchor_line, 1)
+              if anchor_scr.row > 0 then
+                local anchor_vrow = anchor_scr.row - 1 - win_pos[1]
+                if anchor_vrow > max_row then
+                  local scroll = anchor_vrow - max_row
+                  vim.api.nvim_win_call(opts.win_id, function()
+                    vim.cmd("normal! " .. scroll .. "\\<C-e>")
+                  end)
+                end
+              end
+            end
+          end
         end
       end)
     end,
