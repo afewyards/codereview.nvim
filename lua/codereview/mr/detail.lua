@@ -99,90 +99,86 @@ function M.build_activity_lines(discussions)
 
   for _, disc in ipairs(discussions) do
     local first_note = disc.notes and disc.notes[1]
-    if not first_note then goto continue end
-
-    if first_note.position then goto continue end
-
-    if first_note.system then
-      table.insert(lines, string.format(
-        "  - @%s %s (%s)",
-        first_note.author,
-        first_note.body:gsub("\n", " "):sub(1, 80),
-        M.format_time(first_note.created_at)
-      ))
-    else
-      local resolved = disc.resolved
-      if resolved == nil then
-        for _, note in ipairs(disc.notes) do
-          if note.resolvable ~= nil then
-            resolved = note.resolved
-            break
+    if first_note and not first_note.position then
+      if first_note.system then
+        table.insert(lines, string.format(
+          "  - @%s %s (%s)",
+          first_note.author,
+          first_note.body:gsub("\n", " "):sub(1, 80),
+          M.format_time(first_note.created_at)
+        ))
+      else
+        local resolved = disc.resolved
+        if resolved == nil then
+          for _, note in ipairs(disc.notes) do
+            if note.resolvable ~= nil then
+              resolved = note.resolved
+              break
+            end
           end
         end
-      end
 
-      local status_str = ""
-      if first_note.resolvable ~= nil or disc.resolved ~= nil then
-        status_str = resolved and " Resolved " or " Unresolved "
-      end
+        local status_str = ""
+        if first_note.resolvable ~= nil or disc.resolved ~= nil then
+          status_str = resolved and " Resolved " or " Unresolved "
+        end
 
-      local time_str = format_time_short(first_note.created_at)
-      local header_meta = time_str ~= "" and (" · " .. time_str) or ""
-      local header_text = "@" .. first_note.author
-      local fill = math.max(0, 62 - #header_text - #header_meta - #status_str)
+        local time_str = format_time_short(first_note.created_at)
+        local header_meta = time_str ~= "" and (" · " .. time_str) or ""
+        local header_text = "@" .. first_note.author
+        local fill = math.max(0, 62 - #header_text - #header_meta - #status_str)
 
-      -- Row offset is 0-indexed from start of lines table
-      local thread_start_row = #lines
+        -- Row offset is 0-indexed from start of lines table
+        local thread_start_row = #lines
 
-      -- Header: ┌ @author · MM/DD HH:MM  Resolved/Unresolved ──────
-      table.insert(lines, string.format(
-        "┌ %s%s%s%s",
-        header_text,
-        header_meta,
-        status_str,
-        string.rep("─", fill)
-      ))
-      row_map[thread_start_row] = { type = "thread_start", discussion = disc }
+        -- Header: ┌ @author · MM/DD HH:MM  Resolved/Unresolved ──────
+        table.insert(lines, string.format(
+          "┌ %s%s%s%s",
+          header_text,
+          header_meta,
+          status_str,
+          string.rep("─", fill)
+        ))
+        row_map[thread_start_row] = { type = "thread_start", discussion = disc }
 
-      -- Body lines (raw markdown, no prefix so treesitter can render)
-      for _, bl in ipairs(vim.split(first_note.body or "", "\n")) do
-        local row = #lines
-        table.insert(lines, bl)
-        row_map[row] = { type = "thread", discussion = disc }
-      end
+        -- Body lines (raw markdown, no prefix so treesitter can render)
+        for _, bl in ipairs(vim.split(first_note.body or "", "\n")) do
+          local row = #lines
+          table.insert(lines, bl)
+          row_map[row] = { type = "thread", discussion = disc }
+        end
 
-      -- Replies
-      for i = 2, #disc.notes do
-        local reply = disc.notes[i]
-        if not reply.system then
-          local rt = format_time_short(reply.created_at)
-          local rmeta = rt ~= "" and (" · " .. rt) or ""
-          local sep_row = #lines
-          table.insert(lines, "")
-          row_map[sep_row] = { type = "thread", discussion = disc }
+        -- Replies
+        for i = 2, #disc.notes do
+          local reply = disc.notes[i]
+          if not reply.system then
+            local rt = format_time_short(reply.created_at)
+            local rmeta = rt ~= "" and (" · " .. rt) or ""
+            local sep_row = #lines
+            table.insert(lines, "")
+            row_map[sep_row] = { type = "thread", discussion = disc }
 
-          local reply_header_row = #lines
-          table.insert(lines, string.format("↪ @%s%s", reply.author, rmeta))
-          row_map[reply_header_row] = { type = "thread", discussion = disc }
+            local reply_header_row = #lines
+            table.insert(lines, string.format("↪ @%s%s", reply.author, rmeta))
+            row_map[reply_header_row] = { type = "thread", discussion = disc }
 
-          for _, rl in ipairs(vim.split(reply.body or "", "\n")) do
-            local rrow = #lines
-            table.insert(lines, rl)
-            row_map[rrow] = { type = "thread", discussion = disc }
+            for _, rl in ipairs(vim.split(reply.body or "", "\n")) do
+              local rrow = #lines
+              table.insert(lines, rl)
+              row_map[rrow] = { type = "thread", discussion = disc }
+            end
           end
         end
+
+        -- Footer: └ r:reply  gt:un/resolve ──────────────────────
+        local footer_fill = math.max(0, 44 - #footer_text)
+        local footer_row = #lines
+        table.insert(lines, string.format("└ %s%s", footer_text, string.rep("─", footer_fill)))
+        row_map[footer_row] = { type = "thread", discussion = disc }
+
+        table.insert(lines, "")
       end
-
-      -- Footer: └ r:reply  gt:un/resolve ──────────────────────
-      local footer_fill = math.max(0, 44 - #footer_text)
-      local footer_row = #lines
-      table.insert(lines, string.format("└ %s%s", footer_text, string.rep("─", footer_fill)))
-      row_map[footer_row] = { type = "thread", discussion = disc }
-
-      table.insert(lines, "")
     end
-
-    ::continue::
   end
 
   return result

@@ -240,4 +240,10 @@ describe("GitHub integration flow", function()
       assert.is_false(found_approvals, "no approvals line should appear for empty approved_by")
     end)
   end)
+
+  after_each(function()
+    -- Clean up module cache to prevent test pollution
+    package.loaded["codereview.providers"] = nil
+    package.preload["codereview.providers"] = nil
+  end)
 end)

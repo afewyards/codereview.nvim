@@ -1,3 +1,5 @@
+package.loaded["codereview.providers"] = nil
+package.preload["codereview.providers"] = nil
 local providers = require("codereview.providers")
 
 describe("providers", function()

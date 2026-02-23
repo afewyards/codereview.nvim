@@ -299,4 +299,10 @@ describe("GitLab integration flow", function()
       assert.is_true(found_reply, "reply author should be rendered")
     end)
   end)
+
+  after_each(function()
+    -- Clean up module cache to prevent test pollution
+    package.loaded["codereview.providers"] = nil
+    package.preload["codereview.providers"] = nil
+  end)
 end)

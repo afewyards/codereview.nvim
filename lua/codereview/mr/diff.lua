@@ -218,58 +218,57 @@ function M.place_ai_suggestions(buf, line_data, suggestions, file_diff)
   local row_ai_map = {}
 
   for _, suggestion in ipairs(suggestions or {}) do
-    if suggestion.status == "dismissed" then goto continue end
-    local path = file_diff.new_path or file_diff.old_path
-    if suggestion.file ~= path then goto continue end
+    if suggestion.status ~= "dismissed" then
+      local path = file_diff.new_path or file_diff.old_path
+      if suggestion.file == path then
+        -- Find row in line_data where new_line matches suggestion.line
+        for row, data in ipairs(line_data) do
+          if data.item and data.item.new_line == suggestion.line then
+            pcall(vim.fn.sign_place, 0, "CodeReviewAI", "CodeReviewAISign", buf, { lnum = row })
 
-    -- Find row in line_data where new_line matches suggestion.line
-    for row, data in ipairs(line_data) do
-      if data.item and data.item.new_line == suggestion.line then
-        pcall(vim.fn.sign_place, 0, "CodeReviewAI", "CodeReviewAISign", buf, { lnum = row })
+            local drafted = suggestion.status == "accepted" or suggestion.status == "edited"
+            local bdr = drafted and "CodeReviewCommentBorder" or "CodeReviewAIDraftBorder"
+            local body_hl = drafted and "CodeReviewComment" or "CodeReviewAIDraft"
+            local severity = suggestion.severity or "info"
+            local header_label = drafted and (" AI [" .. severity .. "] ✓ drafted ") or (" AI [" .. severity .. "] ")
+            local header_fill = math.max(0, 62 - #header_label)
+            local footer_content = drafted and "x:dismiss" or "a:accept  x:dismiss  e:edit"
+            local footer_fill = math.max(0, 62 - #footer_content - 1)
 
-        local drafted = suggestion.status == "accepted" or suggestion.status == "edited"
-        local bdr = drafted and "CodeReviewCommentBorder" or "CodeReviewAIDraftBorder"
-        local body_hl = drafted and "CodeReviewComment" or "CodeReviewAIDraft"
-        local severity = suggestion.severity or "info"
-        local header_label = drafted and (" AI [" .. severity .. "] ✓ drafted ") or (" AI [" .. severity .. "] ")
-        local header_fill = math.max(0, 62 - #header_label)
-        local footer_content = drafted and "x:dismiss" or "a:accept  x:dismiss  e:edit"
-        local footer_fill = math.max(0, 62 - #footer_content - 1)
+            local virt_lines = {}
 
-        local virt_lines = {}
+            -- ┌ AI [severity] ──────────────────────────────────────────
+            table.insert(virt_lines, {
+              { "  ┌" .. header_label, bdr },
+              { string.rep("─", header_fill), bdr },
+            })
 
-        -- ┌ AI [severity] ──────────────────────────────────────────
-        table.insert(virt_lines, {
-          { "  ┌" .. header_label, bdr },
-          { string.rep("─", header_fill), bdr },
-        })
+            -- Comment body wrapped to width 64
+            for _, bl in ipairs(wrap_text(suggestion.comment, 64)) do
+              table.insert(virt_lines, {
+                { "  │ ", bdr },
+                { bl, body_hl },
+              })
+            end
 
-        -- Comment body wrapped to width 64
-        for _, bl in ipairs(wrap_text(suggestion.comment, 64)) do
-          table.insert(virt_lines, {
-            { "  │ ", bdr },
-            { bl, body_hl },
-          })
+            -- └ a:accept  x:dismiss  e:edit ─────────────────────────
+            table.insert(virt_lines, {
+              { "  └ ", bdr },
+              { footer_content, body_hl },
+              { " " .. string.rep("─", footer_fill), bdr },
+            })
+
+            pcall(vim.api.nvim_buf_set_extmark, buf, AIDRAFT_NS, row - 1, 0, {
+              virt_lines = virt_lines,
+              virt_lines_above = false,
+            })
+
+            row_ai_map[row] = suggestion
+            break
+          end
         end
-
-        -- └ a:accept  x:dismiss  e:edit ─────────────────────────
-        table.insert(virt_lines, {
-          { "  └ ", bdr },
-          { footer_content, body_hl },
-          { " " .. string.rep("─", footer_fill), bdr },
-        })
-
-        pcall(vim.api.nvim_buf_set_extmark, buf, AIDRAFT_NS, row - 1, 0, {
-          virt_lines = virt_lines,
-          virt_lines_above = false,
-        })
-
-        row_ai_map[row] = suggestion
-        break
       end
     end
-
-    ::continue::
   end
 
   return row_ai_map
@@ -283,62 +282,60 @@ function M.place_ai_suggestions_all(buf, all_line_data, file_sections, suggestio
   local scroll_row_ai = {}
 
   for _, suggestion in ipairs(suggestions or {}) do
-    if suggestion.status == "dismissed" then goto continue end
+    if suggestion.status ~= "dismissed" then
+      -- Find the matching section for this suggestion's file
+      for _, section in ipairs(file_sections) do
+        local fpath = section.file.new_path or section.file.old_path
+        if suggestion.file == fpath then
+          -- Find the row within this section
+          for i = section.start_line, section.end_line do
+            local data = all_line_data[i]
+            if data and data.item and data.item.new_line == suggestion.line
+              and data.file_idx == section.file_idx then
+              pcall(vim.fn.sign_place, 0, "CodeReviewAI", "CodeReviewAISign", buf, { lnum = i })
 
-    -- Find the matching section for this suggestion's file
-    for _, section in ipairs(file_sections) do
-      local fpath = section.file.new_path or section.file.old_path
-      if suggestion.file == fpath then
-        -- Find the row within this section
-        for i = section.start_line, section.end_line do
-          local data = all_line_data[i]
-          if data and data.item and data.item.new_line == suggestion.line
-            and data.file_idx == section.file_idx then
-            pcall(vim.fn.sign_place, 0, "CodeReviewAI", "CodeReviewAISign", buf, { lnum = i })
+              local drafted = suggestion.status == "accepted" or suggestion.status == "edited"
+              local bdr = drafted and "CodeReviewCommentBorder" or "CodeReviewAIDraftBorder"
+              local body_hl = drafted and "CodeReviewComment" or "CodeReviewAIDraft"
+              local severity = suggestion.severity or "info"
+              local header_label = drafted and (" AI [" .. severity .. "] ✓ drafted ") or (" AI [" .. severity .. "] ")
+              local header_fill = math.max(0, 62 - #header_label)
+              local footer_content = drafted and "x:dismiss" or "a:accept  x:dismiss  e:edit"
+              local footer_fill = math.max(0, 62 - #footer_content - 1)
 
-            local drafted = suggestion.status == "accepted" or suggestion.status == "edited"
-            local bdr = drafted and "CodeReviewCommentBorder" or "CodeReviewAIDraftBorder"
-            local body_hl = drafted and "CodeReviewComment" or "CodeReviewAIDraft"
-            local severity = suggestion.severity or "info"
-            local header_label = drafted and (" AI [" .. severity .. "] ✓ drafted ") or (" AI [" .. severity .. "] ")
-            local header_fill = math.max(0, 62 - #header_label)
-            local footer_content = drafted and "x:dismiss" or "a:accept  x:dismiss  e:edit"
-            local footer_fill = math.max(0, 62 - #footer_content - 1)
+              local virt_lines = {}
 
-            local virt_lines = {}
-
-            table.insert(virt_lines, {
-              { "  ┌" .. header_label, bdr },
-              { string.rep("─", header_fill), bdr },
-            })
-
-            for _, bl in ipairs(wrap_text(suggestion.comment, 64)) do
               table.insert(virt_lines, {
-                { "  │ ", bdr },
-                { bl, body_hl },
+                { "  ┌" .. header_label, bdr },
+                { string.rep("─", header_fill), bdr },
               })
+
+              for _, bl in ipairs(wrap_text(suggestion.comment, 64)) do
+                table.insert(virt_lines, {
+                  { "  │ ", bdr },
+                  { bl, body_hl },
+                })
+              end
+
+              table.insert(virt_lines, {
+                { "  └ ", bdr },
+                { footer_content, body_hl },
+                { " " .. string.rep("─", footer_fill), bdr },
+              })
+
+              pcall(vim.api.nvim_buf_set_extmark, buf, AIDRAFT_NS, i - 1, 0, {
+                virt_lines = virt_lines,
+                virt_lines_above = false,
+              })
+
+              scroll_row_ai[i] = suggestion
+              break
             end
-
-            table.insert(virt_lines, {
-              { "  └ ", bdr },
-              { footer_content, body_hl },
-              { " " .. string.rep("─", footer_fill), bdr },
-            })
-
-            pcall(vim.api.nvim_buf_set_extmark, buf, AIDRAFT_NS, i - 1, 0, {
-              virt_lines = virt_lines,
-              virt_lines_above = false,
-            })
-
-            scroll_row_ai[i] = suggestion
-            break
           end
+          break
         end
-        break
       end
     end
-
-    ::continue::
   end
 
   return scroll_row_ai
