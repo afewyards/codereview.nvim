@@ -1,0 +1,39 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: googleapis/release-please-action@v4
+        id: release
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  # Uncomment when ready to publish to LuaRocks:
+  #
+  # luarocks:
+  #   needs: release-please
+  #   runs-on: ubuntu-latest
+  #   if: ${{ needs.release-please.outputs.release_created }}
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #
+  #     - uses: leafo/gh-actions-lua@v10
+  #       with:
+  #         luaVersion: "5.1"
+  #
+  #     - uses: leafo/gh-actions-luarocks@v4
+  #
+  #     - name: Upload to LuaRocks
+  #       env:
+  #         LUAROCKS_API_KEY: ${{ secrets.LUAROCKS_API_KEY }}
+  #       run: luarocks upload codereview.nvim-${{ needs.release-please.outputs.tag_name }}.rockspec --api-key=$LUAROCKS_API_KEY
