@@ -312,7 +312,7 @@ function M.edit_note(client, ctx, review, discussion_id, note_id, body)
   local headers, err = get_headers()
   if not headers then return nil, err end
   local owner, repo = parse_owner_repo(ctx)
-  local path_url = string.format("/repos/%s/%s/pulls/%d/comments/%s", owner, repo, review.id, note_id)
+  local path_url = string.format("/repos/%s/%s/pulls/comments/%s", owner, repo, note_id)
   return client.patch(ctx.base_url, path_url, { body = { body = body }, headers = headers })
 end
 
@@ -321,7 +321,7 @@ function M.delete_note(client, ctx, review, discussion_id, note_id)
   local headers, err = get_headers()
   if not headers then return nil, err end
   local owner, repo = parse_owner_repo(ctx)
-  local path_url = string.format("/repos/%s/%s/pulls/%d/comments/%s", owner, repo, review.id, note_id)
+  local path_url = string.format("/repos/%s/%s/pulls/comments/%s", owner, repo, note_id)
   return client.delete(ctx.base_url, path_url, { headers = headers })
 end
 

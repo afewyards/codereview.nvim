@@ -438,8 +438,8 @@ end
 --- @param mr table    the MR/PR object
 --- @param on_success fun(result?: table)  called after successful delete
 function M.delete_note(disc, note, mr, on_success)
-  vim.ui.select({ "Yes", "No" }, { prompt = "Delete this comment?" }, function(choice)
-    if choice ~= "Yes" then return end
+  vim.ui.input({ prompt = "Delete this comment? (Y/n): ", default = "y" }, function(input)
+    if not input or input:lower():match("^n") then return end
     vim.schedule(function()
       local provider, client, ctx = get_provider()
       if not provider then return end

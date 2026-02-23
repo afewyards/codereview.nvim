@@ -2773,11 +2773,8 @@ function M.open(review, discussions)
   M.render_sidebar(layout.sidebar_buf, state)
 
   -- Fetch current user for note authorship checks (edit/delete guards)
-  vim.schedule(function()
-    local client_mod = require("codereview.api.client")
-    local user, _ = provider.get_current_user(client_mod, ctx)
-    if user then state.current_user = user end
-  end)
+  local user = provider.get_current_user(client_mod, ctx)
+  if user then state.current_user = user end
 
   if #files > 0 then
     if state.scroll_mode then

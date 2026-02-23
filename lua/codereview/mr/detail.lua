@@ -298,7 +298,14 @@ function M.open(entry)
     scroll_row_ai = {},
     local_drafts = {},
     summary_row_map = {},
+    note_selection = {},
+    current_user = nil,
   }
+
+  -- Fetch current user for note authorship checks (edit/delete guards)
+  local client_mod = require("codereview.api.client")
+  local user = provider.get_current_user(client_mod, ctx)
+  if user then state.current_user = user end
 
   diff.render_sidebar(layout.sidebar_buf, state)
   diff.render_summary(layout.main_buf, state)
