@@ -142,12 +142,12 @@ describe("GitLab integration flow", function()
         },
       }
 
-      local lines = detail.build_activity_lines(discussions)
+      local result = detail.build_activity_lines(discussions)
 
-      assert.is_true(#lines > 0, "activity lines should not be empty")
+      assert.is_true(#result.lines > 0, "activity lines should not be empty")
 
       local found_author = false
-      for _, line in ipairs(lines) do
+      for _, line in ipairs(result.lines) do
         if line:find("@alice") then found_author = true end
       end
       assert.is_true(found_author, "activity should render @alice")
@@ -171,10 +171,10 @@ describe("GitLab integration flow", function()
         },
       }
 
-      local lines = detail.build_activity_lines(discussions)
+      local result = detail.build_activity_lines(discussions)
 
       local found_system = false
-      for _, line in ipairs(lines) do
+      for _, line in ipairs(result.lines) do
         if line:find("^  %- @") then found_system = true end
       end
       assert.is_true(found_system, "system notes should render with dash prefix")

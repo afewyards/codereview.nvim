@@ -1534,6 +1534,11 @@ function M.setup_keymaps(layout, state)
       table.insert(discs, d)
     end
     state.discussions = discs
+    if state.view_mode == "summary" then
+      M.render_summary(layout.main_buf, state)
+      M.render_sidebar(layout.sidebar_buf, state)
+      return
+    end
     rerender_view()
   end
 

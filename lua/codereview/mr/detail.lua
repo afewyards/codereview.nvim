@@ -264,6 +264,7 @@ function M.open(entry)
     row_ai_cache = {},
     scroll_row_ai = {},
     local_drafts = {},
+    summary_row_map = {},
   }
 
   diff.render_sidebar(layout.sidebar_buf, state)
