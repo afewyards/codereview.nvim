@@ -1582,6 +1582,75 @@ function M.setup_keymaps(layout, state)
     end
   end
 
+  local function add_optimistic_comment(old_path, new_path, old_line, new_line, start_line)
+    return function(text)
+      local disc = {
+        notes = {{
+          author = "You",
+          body = text,
+          created_at = os.date("!%Y-%m-%dT%H:%M:%SZ"),
+          position = {
+            old_path = old_path,
+            new_path = new_path,
+            old_line = old_line,
+            new_line = new_line,
+            start_line = start_line,
+          },
+        }},
+        is_optimistic = true,
+      }
+      table.insert(state.discussions, disc)
+      rerender_view()
+      return disc
+    end
+  end
+
+  local function add_optimistic_reply(disc)
+    return function(text)
+      local note = {
+        author = "You",
+        body = text,
+        created_at = os.date("!%Y-%m-%dT%H:%M:%SZ"),
+        is_optimistic = true,
+      }
+      table.insert(disc.notes, note)
+      rerender_view()
+      return note
+    end
+  end
+
+  local function remove_optimistic(disc)
+    for i, d in ipairs(state.discussions) do
+      if d == disc then
+        table.remove(state.discussions, i)
+        break
+      end
+    end
+    rerender_view()
+  end
+
+  local function remove_optimistic_reply(disc, note)
+    for i, n in ipairs(disc.notes) do
+      if n == note then
+        table.remove(disc.notes, i)
+        break
+      end
+    end
+    rerender_view()
+  end
+
+  local function mark_optimistic_failed(disc)
+    disc.is_optimistic = false
+    disc.is_failed = true
+    rerender_view()
+  end
+
+  local function mark_reply_failed(note)
+    note.is_optimistic = false
+    note.is_failed = true
+    rerender_view()
+  end
+
   -- Re-render current view after AI suggestion state change
   local function rerender_ai()
     if state.scroll_mode then
