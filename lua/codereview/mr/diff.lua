@@ -852,8 +852,17 @@ end
 --- @return string[] lines
 --- @return table[] highlights  Array of {row:integer, line_hl:string}
 local function build_footer(state, sess)
+  local km = require("codereview.keymaps")
   local lines = {}
   local hls = {}
+
+  -- Returns the display string for an action key, or nil if disabled.
+  -- Converts Vim notation: <C-f> → ⌃F
+  local function k(action)
+    local key = km.get(action)
+    if not key or key == false then return nil end
+    return (key:gsub("<C%-(%a)>", function(c) return "⌃" .. c:upper() end))
+  end
 
   local function header(label)
     local text = string.format("───── %s %s", label, string.rep("─", 24 - #label))
@@ -865,40 +874,67 @@ local function build_footer(state, sess)
     table.insert(lines, text)
   end
 
+  -- Build a two-item display line; omits item if key is nil
+  local function pair_row(k1, label1, sep, k2, label2)
+    if k1 and k2 then
+      row(k1 .. " " .. label1 .. sep .. k2 .. " " .. label2)
+    elseif k1 then
+      row(k1 .. " " .. label1)
+    elseif k2 then
+      row(k2 .. " " .. label2)
+    end
+  end
+
   table.insert(lines, "")
   table.insert(lines, string.rep("─", 30))
 
   if state.view_mode == "summary" then
-    row("a approve   o open")
-    row("m merge     R refresh")
-    row("Q quit")
+    -- approve shares default key "a" with accept_suggestion; prefer approve key
+    local approve_key = k("approve") or k("accept_suggestion")
+    pair_row(approve_key, "approve", "   ", k("open_in_browser"), "open")
+    pair_row(k("merge"), "merge", "     ", k("refresh"), "refresh")
+    if k("quit") then row(k("quit") .. " quit") end
     return lines, hls
   end
 
   -- Diff mode
 
   header("Navigate")
-  row("]f [f  files")
-  if sess.active then
-    row("]c [c  comments  ]s [s AI")
-  else
-    row("]c [c  comments")
+  local nf, pf = k("next_file"), k("prev_file")
+  if nf and pf then row(nf .. " " .. pf .. "  files")
+  elseif nf then row(nf .. "  next file")
+  elseif pf then row(pf .. "  prev file")
+  end
+
+  local nc, pc = k("next_comment"), k("prev_comment")
+  local ns, ps = k("next_suggestion"), k("prev_suggestion")
+  local comment_part = (nc and pc) and (nc .. " " .. pc .. "  comments")
+    or (nc and nc .. "  next comment") or (pc and pc .. "  prev comment") or nil
+  local ai_part = (sess.active and ns and ps) and (ns .. " " .. ps .. " AI")
+    or (sess.active and ns and ns .. " AI") or (sess.active and ps and ps .. " AI") or nil
+  if comment_part and ai_part then row(comment_part .. "  " .. ai_part)
+  elseif comment_part then row(comment_part)
+  elseif ai_part then row(ai_part)
   end
 
   header("Comment")
-  row("cc     new       r reply")
-  row("gt     resolve")
+  local cc_key, r_key = k("create_comment"), k("reply")
+  if cc_key and r_key then row(cc_key .. "     new       " .. r_key .. " reply")
+  elseif cc_key then row(cc_key .. "  new comment")
+  elseif r_key then row(r_key .. " reply")
+  end
+  if k("toggle_resolve") then row(k("toggle_resolve") .. "     resolve") end
 
   if sess.active then
     header("Review")
-    row("a accept   x dismiss")
-    row("e edit     ds dismiss all")
-    row("S submit   A cancel AI")
+    pair_row(k("accept_suggestion"), "accept", "   ", k("dismiss_suggestion"), "dismiss")
+    pair_row(k("edit_suggestion"), "edit", "     ", k("dismiss_all_suggestions"), "dismiss all")
+    pair_row(k("submit"), "submit", "   ", k("ai_review"), "cancel AI")
   end
 
   header("View")
-  row("⌃F     full      ⌃A scroll")
-  row("R      refresh   Q  quit")
+  pair_row(k("toggle_full_file"), "full", "      ", k("toggle_scroll_mode"), "scroll")
+  pair_row(k("refresh"), "refresh", "   ", k("quit"), "quit")
 
   return lines, hls
 end
