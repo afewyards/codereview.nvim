@@ -70,15 +70,29 @@ end
 function M.apply(buf, callbacks)
   if not resolved then M.setup() end
   local opts = { noremap = true, silent = true, nowait = true }
-  local actions = {}
-  for action in pairs(callbacks) do table.insert(actions, action) end
-  table.sort(actions)
-  for _, action in ipairs(actions) do
-    local fn = callbacks[action]
+
+  -- Group by mode+key to detect collisions
+  local groups = {}
+  for action, fn in pairs(callbacks) do
     local entry = resolved[action]
     if entry and entry.key and entry.key ~= false then
-      vim.keymap.set(entry.mode, entry.key, fn, vim.tbl_extend("force", opts, { buffer = buf, desc = entry.desc }))
+      local k = entry.mode .. "\0" .. entry.key
+      if not groups[k] then groups[k] = { entry = entry, fns = {} } end
+      table.insert(groups[k].fns, fn)
     end
+  end
+
+  for _, g in pairs(groups) do
+    local handler
+    if #g.fns == 1 then
+      handler = g.fns[1]
+    else
+      handler = function()
+        for _, fn in ipairs(g.fns) do fn() end
+      end
+    end
+    vim.keymap.set(g.entry.mode, g.entry.key, handler,
+      vim.tbl_extend("force", opts, { buffer = buf, desc = g.entry.desc }))
   end
 end
 

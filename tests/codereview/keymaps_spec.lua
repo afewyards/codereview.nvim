@@ -80,4 +80,55 @@ describe("keymaps", function()
       config.reset()
     end)
   end)
+
+  describe("apply", function()
+    local orig_keymap
+    local orig_tbl_extend
+
+    before_each(function()
+      orig_keymap = vim.keymap
+      orig_tbl_extend = vim.tbl_extend
+      vim.tbl_extend = function(_, a, b)
+        local t = {}
+        for k, v in pairs(a) do t[k] = v end
+        for k, v in pairs(b) do t[k] = v end
+        return t
+      end
+    end)
+
+    after_each(function()
+      vim.keymap = orig_keymap
+      vim.tbl_extend = orig_tbl_extend
+    end)
+
+    it("combines callbacks that share the same key+mode", function()
+      keymaps.setup()
+      local called = {}
+      local registered_fn
+      vim.keymap = { set = function(_, _, fn) registered_fn = fn end }
+
+      keymaps.apply(0, {
+        accept_suggestion = function() table.insert(called, "accept") end,
+        approve = function() table.insert(called, "approve") end,
+      })
+
+      assert.is_not_nil(registered_fn)
+      registered_fn()
+      table.sort(called)
+      assert.same({ "accept", "approve" }, called)
+    end)
+
+    it("registers a single callback directly without a wrapper", function()
+      keymaps.setup()
+      local orig_fn = function() end
+      local registered_fns = {}
+      vim.keymap = { set = function(_, key, fn) registered_fns[key] = fn end }
+
+      keymaps.apply(0, {
+        quit = orig_fn,
+      })
+
+      assert.equals(orig_fn, registered_fns["Q"])
+    end)
+  end)
 end)
