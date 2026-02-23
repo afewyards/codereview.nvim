@@ -94,8 +94,21 @@ local function open_input_popup(title, callback, opts)
     })
   end
 
-  vim.api.nvim_set_option_value("winblend", 0, { win = win })
-  vim.api.nvim_set_option_value("winhighlight", "NormalFloat:Normal", { win = win })
+  local function apply_no_dim()
+    if vim.api.nvim_win_is_valid(win) then
+      vim.api.nvim_set_option_value("winblend", 0, { win = win })
+      vim.api.nvim_set_option_value("winhighlight", "NormalFloat:Normal", { win = win })
+    end
+  end
+  apply_no_dim()
+
+  vim.api.nvim_create_autocmd("WinEnter", {
+    buffer = buf,
+    callback = function()
+      if closed then return true end
+      apply_no_dim()
+    end,
+  })
 
   -- Place cursor on first line
   pcall(vim.api.nvim_win_set_cursor, win, { 1, 0 })
