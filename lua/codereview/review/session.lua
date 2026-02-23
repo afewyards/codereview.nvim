@@ -31,6 +31,8 @@ end
 --- Exit review mode.
 function M.stop()
   _state.active = false
+  _state.ai_pending = false
+  _state.ai_job_id = nil
 end
 
 --- Record that an AI subprocess has started.
