@@ -352,7 +352,7 @@ function M.show_thread(disc, mr)
   end, map_opts)
 end
 
-function M.reply(disc, mr, on_success, opts)
+function M.reply(disc, mr, optimistic, opts)
   opts = opts or {}
   if not opts.action_type then opts.action_type = "reply" end
   if not opts.context_text and disc.notes and disc.notes[1] then
@@ -361,15 +361,26 @@ function M.reply(disc, mr, on_success, opts)
     opts.context_text = "@" .. (first.author or "?") .. ": " .. snippet
   end
   M.open_input_popup("Reply", function(text)
-    local provider, client, ctx = get_provider()
-    if not provider then return end
-    local _, err = provider.reply_to_discussion(client, ctx, mr, disc.id, text)
-    if err then
-      vim.notify("Failed to post reply: " .. err, vim.log.levels.ERROR)
-    else
-      vim.notify("Reply posted", vim.log.levels.INFO)
-      if on_success then on_success() end
+    local note
+    if optimistic and optimistic.add_reply then
+      note = optimistic.add_reply(text)
     end
+    local provider, client, ctx = get_provider()
+    if not provider then
+      if note and optimistic.remove_reply then optimistic.remove_reply(disc, note) end
+      return
+    end
+    M.post_with_retry(
+      function() return provider.reply_to_discussion(client, ctx, mr, disc.id, text) end,
+      function()
+        vim.notify("Reply posted", vim.log.levels.INFO)
+        if optimistic and optimistic.refresh then optimistic.refresh() end
+      end,
+      function(err)
+        vim.notify("Failed to post reply: " .. err, vim.log.levels.ERROR)
+        if note and optimistic.mark_reply_failed then optimistic.mark_reply_failed(note) end
+      end
+    )
   end, opts)
 end
 
@@ -389,37 +400,59 @@ function M.resolve_toggle(disc, mr, callback)
   end
 end
 
-function M.create_inline(mr, old_path, new_path, old_line, new_line, on_success, opts)
+function M.create_inline(mr, old_path, new_path, old_line, new_line, optimistic, opts)
   M.open_input_popup("Inline Comment", function(text)
+    local disc
+    if optimistic and optimistic.add then
+      disc = optimistic.add(text)
+    end
     local provider, client, ctx = get_provider()
-    if not provider then return end
+    if not provider then
+      if disc and optimistic.remove then optimistic.remove(disc) end
+      return
+    end
     local position = {
       old_path = old_path,
       new_path = new_path,
       old_line = old_line,
       new_line = new_line,
     }
-    local _, err = provider.post_comment(client, ctx, mr, text, position)
-    if err then
-      vim.notify("Failed to post comment: " .. err, vim.log.levels.ERROR)
-    else
-      vim.notify("Comment posted", vim.log.levels.INFO)
-      if on_success then on_success() end
-    end
+    M.post_with_retry(
+      function() return provider.post_comment(client, ctx, mr, text, position) end,
+      function()
+        vim.notify("Comment posted", vim.log.levels.INFO)
+        if optimistic and optimistic.refresh then optimistic.refresh() end
+      end,
+      function(err)
+        vim.notify("Failed to post comment: " .. err, vim.log.levels.ERROR)
+        if disc and optimistic.mark_failed then optimistic.mark_failed(disc) end
+      end
+    )
   end, opts)
 end
 
-function M.create_inline_range(mr, old_path, new_path, start_pos, end_pos, on_success, opts)
+function M.create_inline_range(mr, old_path, new_path, start_pos, end_pos, optimistic, opts)
   M.open_input_popup("Range Comment", function(text)
-    local provider, client, ctx = get_provider()
-    if not provider then return end
-    local _, err = provider.post_range_comment(client, ctx, mr, text, old_path, new_path, start_pos, end_pos)
-    if err then
-      vim.notify("Failed to post range comment: " .. err, vim.log.levels.ERROR)
-    else
-      vim.notify("Range comment posted", vim.log.levels.INFO)
-      if on_success then on_success() end
+    local disc
+    if optimistic and optimistic.add then
+      disc = optimistic.add(text)
     end
+    local provider, client, ctx = get_provider()
+    if not provider then
+      if disc and optimistic.remove then optimistic.remove(disc) end
+      return
+    end
+    M.post_with_retry(
+      function() return provider.post_range_comment(client, ctx, mr, text, old_path, new_path, start_pos, end_pos) end,
+      function()
+        vim.notify("Range comment posted", vim.log.levels.INFO)
+        if optimistic and optimistic.refresh then optimistic.refresh() end
+      end,
+      function(err)
+        vim.notify("Failed to post range comment: " .. err, vim.log.levels.ERROR)
+        if disc and optimistic.mark_failed then optimistic.mark_failed(disc) end
+      end
+    )
   end, opts)
 end
 
