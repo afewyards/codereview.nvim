@@ -98,7 +98,6 @@ function M.build_activity_lines(discussions)
   local km = require("codereview.keymaps")
   local reply_key = km.get("reply") or "r"
   local resolve_key = km.get("toggle_resolve") or "gt"
-  local footer_text = string.format("%s:reply  %s:un/resolve", reply_key, resolve_key)
 
   for _, disc in ipairs(discussions) do
     local first_note = disc.notes and disc.notes[1]
@@ -198,6 +197,9 @@ function M.build_activity_lines(discussions)
         end
 
         -- Footer: └ r:reply  gt:un/resolve ──────────────────────
+        local footer_text = disc.is_draft
+          and string.format("%s:un/resolve", resolve_key)
+          or string.format("%s:reply  %s:un/resolve", reply_key, resolve_key)
         local footer_fill = math.max(0, 44 - #footer_text)
         local footer_row = #lines
         table.insert(lines, string.format("└ %s%s", footer_text, string.rep("─", footer_fill)))

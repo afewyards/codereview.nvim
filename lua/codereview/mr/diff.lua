@@ -184,11 +184,15 @@ function M.place_comment_signs(buf, line_data, discussions, file_diff)
                 end
               end
 
-              -- └ Enter: reply/resolve ──────────────────────
+              -- └ footer keyhints ──────────────────────
+              local footer_content = discussion.is_draft
+                and "gt:un/resolve"
+                or "r:reply  gt:un/resolve"
+              local footer_fill = math.max(0, 62 - #footer_content - 1)
               table.insert(virt_lines, {
                 { "  └ ", bdr },
-                { "r:reply  gt:un/resolve", body_hl },
-                { " " .. string.rep("─", 44), bdr },
+                { footer_content, body_hl },
+                { " " .. string.rep("─", footer_fill), bdr },
               })
 
               pcall(vim.api.nvim_buf_set_extmark, buf, DIFF_NS, row - 1, 0, {
@@ -724,9 +728,13 @@ function M.render_all_files(buf, files, review, discussions, context, file_conte
                     end
                   end
                 end
+                local footer_content = disc.is_draft
+                  and "gt:un/resolve"
+                  or "r:reply  gt:un/resolve"
+                local footer_fill = math.max(0, 62 - #footer_content - 1)
                 table.insert(virt_lines, {
-                  { "  └ ", bdr }, { "r:reply  gt:un/resolve", body_hl },
-                  { " " .. string.rep("─", 44), bdr },
+                  { "  └ ", bdr }, { footer_content, body_hl },
+                  { " " .. string.rep("─", footer_fill), bdr },
                 })
                 pcall(vim.api.nvim_buf_set_extmark, buf, DIFF_NS, i - 1, 0, {
                   virt_lines = virt_lines, virt_lines_above = false,
@@ -1917,7 +1925,7 @@ function M.setup_keymaps(layout, state)
     reply = function()
       if state.view_mode == "summary" then
         local disc = get_summary_disc()
-        if disc then
+        if disc and not disc.is_draft then
           local comment = require("codereview.mr.comment")
           comment.reply(disc, state.review, refresh_discussions,
             { anchor_line = vim.api.nvim_win_get_cursor(layout.main_win)[1], win_id = layout.main_win })
@@ -1926,7 +1934,7 @@ function M.setup_keymaps(layout, state)
       end
       if state.view_mode ~= "diff" then return end
       local disc = get_cursor_disc()
-      if disc then
+      if disc and not disc.is_draft then
         local comment = require("codereview.mr.comment")
         local cursor_row = vim.api.nvim_win_get_cursor(layout.main_win)[1]
         -- Find last row belonging to this discussion so float opens below the comment block
