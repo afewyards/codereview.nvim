@@ -6,7 +6,7 @@ local M = {}
 --- @param title string  Title shown in the border
 --- @param callback fun(text: string)  Called with the joined text on submit
 --- @param opts? table  { anchor_line?, win_id?, action_type?, context_text?, prefill? }
-local function open_input_popup(title, callback, opts)
+function M.open_input_popup(title, callback, opts)
   opts = opts or {}
   local ifloat = require("codereview.ui.inline_float")
 
@@ -140,6 +140,7 @@ local function open_input_popup(title, callback, opts)
     if diff_buf and #line_hl_ids > 0 then
       ifloat.clear_line_hl(diff_buf, line_hl_ids)
     end
+    if opts.on_close then opts.on_close() end
   end
 
   local function submit()
@@ -373,7 +374,7 @@ function M.reply(disc, mr, on_success, opts)
     local snippet = (first.body or ""):sub(1, 60)
     opts.context_text = "@" .. (first.author or "?") .. ": " .. snippet
   end
-  open_input_popup("Reply", function(text)
+  M.open_input_popup("Reply", function(text)
     local provider, client, ctx = get_provider()
     if not provider then return end
     local _, err = provider.reply_to_discussion(client, ctx, mr, disc.id, text)
@@ -403,7 +404,7 @@ function M.resolve_toggle(disc, mr, callback)
 end
 
 function M.create_inline(mr, old_path, new_path, old_line, new_line, on_success, opts)
-  open_input_popup("Inline Comment", function(text)
+  M.open_input_popup("Inline Comment", function(text)
     local provider, client, ctx = get_provider()
     if not provider then return end
     local position = {
@@ -423,7 +424,7 @@ function M.create_inline(mr, old_path, new_path, old_line, new_line, on_success,
 end
 
 function M.create_inline_range(mr, old_path, new_path, start_pos, end_pos, on_success, opts)
-  open_input_popup("Range Comment", function(text)
+  M.open_input_popup("Range Comment", function(text)
     local provider, client, ctx = get_provider()
     if not provider then return end
     local _, err = provider.post_range_comment(client, ctx, mr, text, old_path, new_path, start_pos, end_pos)
@@ -437,7 +438,7 @@ function M.create_inline_range(mr, old_path, new_path, start_pos, end_pos, on_su
 end
 
 function M.create_inline_draft(mr, new_path, new_line, on_success, opts)
-  open_input_popup("Draft Comment", function(text)
+  M.open_input_popup("Draft Comment", function(text)
     local provider, client, ctx = get_provider()
     if not provider then return end
     local _, err = provider.create_draft_comment(client, ctx, mr, {
@@ -455,7 +456,7 @@ function M.create_inline_draft(mr, new_path, new_line, on_success, opts)
 end
 
 function M.create_inline_range_draft(mr, new_path, start_line, end_line, on_success, opts)
-  open_input_popup("Draft Comment", function(text)
+  M.open_input_popup("Draft Comment", function(text)
     local provider, client, ctx = get_provider()
     if not provider then return end
     local _, err = provider.create_draft_comment(client, ctx, mr, {
@@ -474,7 +475,7 @@ end
 
 function M.create_mr_comment(review, provider, ctx, on_success)
   -- No opts: summary view has no line context, always uses fallback centered float
-  open_input_popup("Comment on MR", function(text)
+  M.open_input_popup("Comment on MR", function(text)
     if not provider or not ctx then return end
     local client_mod = require("codereview.api.client")
     local _, err = provider.post_comment(client_mod, ctx, review, text, nil)

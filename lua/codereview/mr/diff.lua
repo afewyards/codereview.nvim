@@ -2093,36 +2093,12 @@ function M.setup_keymaps(layout, state)
       local suggestion = row_ai[cursor]
       if not suggestion then return end
 
-      -- Open a scratch float with the current comment text for editing
-      local width = 70
-      local height = 10
-      local float_buf = vim.api.nvim_create_buf(false, true)
-      vim.bo[float_buf].buftype = "nofile"
-      local initial_lines = vim.split(suggestion.comment or "", "\n")
-      vim.api.nvim_buf_set_lines(float_buf, 0, -1, false, initial_lines)
-      local ui = vim.api.nvim_list_uis()[1]
-      local float_win = vim.api.nvim_open_win(float_buf, true, {
-        relative = "editor",
-        row = math.floor((ui.height - height) / 2),
-        col = math.floor((ui.width - width) / 2),
-        width = width,
-        height = height,
-        style = "minimal",
-        border = "rounded",
-        title = " Edit AI Suggestion (Enter: save, q: cancel) ",
-        title_pos = "center",
-      })
+      -- Hide the suggestion's virt_lines while editing
+      vim.api.nvim_buf_clear_namespace(layout.main_buf, AIDRAFT_NS, cursor - 1, cursor)
 
-      local function close_float()
-        pcall(vim.api.nvim_win_close, float_win, true)
-        pcall(vim.api.nvim_buf_delete, float_buf, { force = true })
-      end
-
-      -- Float keymaps are ephemeral — use direct vim.keymap.set (not registry)
-      vim.keymap.set("n", "<CR>", function()
-        local new_lines = vim.api.nvim_buf_get_lines(float_buf, 0, -1, false)
-        suggestion.comment = table.concat(new_lines, "\n")
-        close_float()
+      local comment = require("codereview.mr.comment")
+      comment.open_input_popup("Edit AI Suggestion", function(text)
+        suggestion.comment = text
 
         -- Post edited suggestion as draft comment
         local client_mod = require("codereview.api.client")
@@ -2143,11 +2119,13 @@ function M.setup_keymaps(layout, state)
         suggestion.drafted = true
         rerender_ai()
         nav_to_next_ai(cursor)
-      end, { buffer = float_buf, noremap = true, silent = true })
-
-      vim.keymap.set("n", "q", function()
-        close_float()
-      end, { buffer = float_buf, noremap = true, silent = true })
+      end, {
+        action_type = "edit",
+        prefill = suggestion.comment,
+        anchor_line = cursor,
+        win_id = layout.main_win,
+        on_close = function() rerender_ai() end,
+      })
     end,
 
     dismiss_all_suggestions = function()
