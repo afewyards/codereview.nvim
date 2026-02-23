@@ -146,6 +146,7 @@ function M.delete_suggestion(state)
 end
 
 function M.edit(state)
+  local ifloat = require("codereview.ui.inline_float")
   local current = state.suggestions[state.current_idx]
   local buf = vim.api.nvim_create_buf(false, true)
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.split(current.comment, "\n"))
@@ -161,6 +162,7 @@ function M.edit(state)
     row = 1,
     style = "minimal",
     border = "rounded",
+    border_hl_group = ifloat.border_hl("edit"),
     title = " Edit Comment ",
     title_pos = "center",
   })
