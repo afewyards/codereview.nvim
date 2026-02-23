@@ -17,6 +17,8 @@
 
 ## Review pull requests and merge requests without leaving Neovim
 
+https://github.com/afewyards/codereview.nvim/raw/main/demo.mp4
+
 > **Note: This project is in active development.** Core features are operational, but some areas are still being refined. Please report issues or unexpected behavior via [GitHub Issues](https://github.com/afewyards/codereview.nvim/issues).
 
 ### Key Features
