@@ -31,6 +31,40 @@ local function get_headers()
   return M.build_auth_header(token)
 end
 
+--- Derive GraphQL endpoint from REST base_url.
+--- github.com: "https://api.github.com" → "https://api.github.com/graphql"
+--- GHE: "https://gh.corp.com/api/v3" → "https://gh.corp.com/api/graphql"
+local function graphql_url(base_url)
+  local url = base_url or "https://api.github.com"
+  url = url:gsub("/v%d+$", "")
+  return url .. "/graphql"
+end
+
+local function graphql(base_url, headers, query, variables)
+  local curl = require("plenary.curl")
+  local payload = { query = query }
+  if variables then payload.variables = variables end
+  local resp = curl.request({
+    url = graphql_url(base_url),
+    method = "post",
+    headers = headers,
+    body = vim.json.encode(payload),
+  })
+  if not resp or resp.status ~= 200 then
+    local msg = "GraphQL request failed: " .. (resp and resp.body or "no response")
+    log.error(msg)
+    return nil, msg
+  end
+  local ok, data = pcall(vim.json.decode, resp.body)
+  if not ok then return nil, "Failed to parse GraphQL response" end
+  if data.errors then
+    local msg = "GraphQL errors: " .. vim.json.encode(data.errors)
+    log.error(msg)
+    return nil, msg
+  end
+  return data.data
+end
+
 -- Pagination -----------------------------------------------------------------
 
 --- Extracts the next URL from a GitHub Link header.
@@ -190,7 +224,6 @@ end
 
 --- Fetch thread resolved status via GraphQL, returns { [root_comment_db_id] = bool }.
 local function fetch_thread_resolved_map(headers, owner, repo, pr_number)
-  local curl = require("plenary.curl")
   local query = string.format([[
     query {
       repository(owner: "%s", name: "%s") {
@@ -208,22 +241,14 @@ local function fetch_thread_resolved_map(headers, owner, repo, pr_number)
     }
   ]], owner, repo, pr_number)
 
-  local resp = curl.request({
-    url = "https://api.github.com/graphql",
-    method = "post",
-    headers = headers,
-    body = vim.json.encode({ query = query }),
-  })
-  if not resp or resp.status ~= 200 then return {} end
-  local ok, data = pcall(vim.json.decode, resp.body)
-  if not ok then return {} end
+  local data = graphql(nil, headers, query)
+  if not data then return {} end
 
   local threads = data
-    and data.data
-    and data.data.repository
-    and data.data.repository.pullRequest
-    and data.data.repository.pullRequest.reviewThreads
-    and data.data.repository.pullRequest.reviewThreads.nodes
+    and data.repository
+    and data.repository.pullRequest
+    and data.repository.pullRequest.reviewThreads
+    and data.repository.pullRequest.reviewThreads.nodes
   if not threads then return {} end
 
   local map = {}
@@ -327,7 +352,6 @@ function M.resolve_discussion(client, ctx, review, discussion_id, resolved)
   local headers, err = get_headers()
   if not headers then return nil, err end
   local owner, repo = parse_owner_repo(ctx)
-  local curl = require("plenary.curl")
 
   -- Step 1: find the thread node_id for this comment
   local lookup_query = string.format([[
@@ -348,35 +372,17 @@ function M.resolve_discussion(client, ctx, review, discussion_id, resolved)
     }
   ]], owner, repo, review.id)
 
-  local gql_url = "https://api.github.com/graphql"
   log.debug("GraphQL: fetching review threads for comment " .. discussion_id)
-  local resp = curl.request({
-    url = gql_url,
-    method = "post",
-    headers = headers,
-    body = vim.json.encode({ query = lookup_query }),
-  })
-  if not resp or resp.status ~= 200 then
-    local msg = "GraphQL lookup failed: " .. (resp and resp.body or "no response")
-    log.error(msg)
-    return nil, msg
+  local ldata, lerr = graphql(nil, headers, lookup_query)
+  if not ldata then
+    return nil, lerr or "GraphQL lookup failed"
   end
 
-  local ok, data = pcall(vim.json.decode, resp.body)
-  if not ok then return nil, "Failed to parse GraphQL response" end
-
-  if data.errors then
-    local msg = "GraphQL errors: " .. vim.json.encode(data.errors)
-    log.error(msg)
-    return nil, msg
-  end
-
-  local threads = data
-    and data.data
-    and data.data.repository
-    and data.data.repository.pullRequest
-    and data.data.repository.pullRequest.reviewThreads
-    and data.data.repository.pullRequest.reviewThreads.nodes
+  local threads = ldata
+    and ldata.repository
+    and ldata.repository.pullRequest
+    and ldata.repository.pullRequest.reviewThreads
+    and ldata.repository.pullRequest.reviewThreads.nodes
   if not threads then
     log.error("GraphQL: no review threads in response")
     return nil, "No review threads found"
@@ -411,23 +417,9 @@ function M.resolve_discussion(client, ctx, review, discussion_id, resolved)
     ]], thread_node_id)
   end
 
-  local mresp = curl.request({
-    url = gql_url,
-    method = "post",
-    headers = headers,
-    body = vim.json.encode({ query = mutation }),
-  })
-  if not mresp or mresp.status ~= 200 then
-    local msg = "GraphQL mutation failed: " .. (mresp and mresp.body or "no response")
-    log.error(msg)
-    return nil, msg
-  end
-
-  local mok, mdata = pcall(vim.json.decode, mresp.body)
-  if mok and mdata.errors then
-    local msg = "GraphQL mutation errors: " .. vim.json.encode(mdata.errors)
-    log.error(msg)
-    return nil, msg
+  local _, merr = graphql(nil, headers, mutation)
+  if merr then
+    return nil, merr
   end
 
   log.info("GraphQL: thread " .. thread_node_id .. " " .. action .. "d")
