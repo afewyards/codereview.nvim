@@ -176,7 +176,18 @@ _G.vim = {
       return #(_buf_store[buf] or {})
     end,
     nvim_buf_get_extmarks = function(buf, ns, start, end_, opts)
-      if not _extmark_store[buf] or not _extmark_store[buf][ns] then return {} end
+      if not _extmark_store[buf] then return {} end
+      if ns == -1 then
+        -- All namespaces
+        local result = {}
+        for _, marks in pairs(_extmark_store[buf]) do
+          for _, m in ipairs(marks) do
+            table.insert(result, m)
+          end
+        end
+        return result
+      end
+      if not _extmark_store[buf][ns] then return {} end
       return _extmark_store[buf][ns]
     end,
   },
@@ -264,6 +275,14 @@ _G.vim = {
       end
     end
     return result
+  end,
+  list_extend = function(dst, src, start, finish)
+    start = start or 1
+    finish = finish or (src and #src or 0)
+    for i = start, finish do
+      table.insert(dst, src[i])
+    end
+    return dst
   end,
   trim = function(s)
     return (s:gsub("^%s*(.-)%s*$", "%1"))

@@ -464,6 +464,64 @@ describe("mr.diff", function()
     end)
   end)
 
+  describe("place_comment_signs optimistic states", function()
+    it("uses pending highlight for is_optimistic discussion", function()
+      local buf = vim.api.nvim_create_buf(false, true)
+      local line_data = {
+        { item = { new_line = 5, old_line = 5 }, type = "add" },
+      }
+      vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "line1" })
+      local discussions = {{
+        notes = {{ author = "You", body = "test", created_at = "2026-02-23T10:00:00Z",
+          position = { new_path = "a.lua", new_line = 5 } }},
+        is_optimistic = true,
+      }}
+      local file_diff = { new_path = "a.lua", old_path = "a.lua" }
+      diff.place_comment_signs(buf, line_data, discussions, file_diff)
+      local marks = vim.api.nvim_buf_get_extmarks(buf, -1, 0, -1, { details = true })
+      local found_pending = false
+      for _, m in ipairs(marks) do
+        if m[4] and m[4].virt_lines then
+          for _, vl in ipairs(m[4].virt_lines) do
+            for _, chunk in ipairs(vl) do
+              if chunk[2] == "CodeReviewCommentPending" then found_pending = true end
+            end
+          end
+        end
+      end
+      assert.truthy(found_pending, "Expected CodeReviewCommentPending highlight")
+      vim.api.nvim_buf_delete(buf, { force = true })
+    end)
+
+    it("uses failed highlight for is_failed discussion", function()
+      local buf = vim.api.nvim_create_buf(false, true)
+      local line_data = {
+        { item = { new_line = 5, old_line = 5 }, type = "add" },
+      }
+      vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "line1" })
+      local discussions = {{
+        notes = {{ author = "You", body = "test", created_at = "2026-02-23T10:00:00Z",
+          position = { new_path = "a.lua", new_line = 5 } }},
+        is_failed = true,
+      }}
+      local file_diff = { new_path = "a.lua", old_path = "a.lua" }
+      diff.place_comment_signs(buf, line_data, discussions, file_diff)
+      local marks = vim.api.nvim_buf_get_extmarks(buf, -1, 0, -1, { details = true })
+      local found_failed = false
+      for _, m in ipairs(marks) do
+        if m[4] and m[4].virt_lines then
+          for _, vl in ipairs(m[4].virt_lines) do
+            for _, chunk in ipairs(vl) do
+              if chunk[2] == "CodeReviewCommentFailed" then found_failed = true end
+            end
+          end
+        end
+      end
+      assert.truthy(found_failed, "Expected CodeReviewCommentFailed highlight")
+      vim.api.nvim_buf_delete(buf, { force = true })
+    end)
+  end)
+
   describe("load_diffs_into_state", function()
     it("sets state.files when not yet loaded", function()
       local state = {

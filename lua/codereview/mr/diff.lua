@@ -160,11 +160,17 @@ function M.place_comment_signs(buf, line_data, discussions, file_diff)
             if notes and #notes > 0 then
               local first = notes[1]
               local resolved = is_resolved(discussion)
-              local bdr = "CodeReviewCommentBorder"
-              local aut = "CodeReviewCommentAuthor"
-              local body_hl = resolved and "CodeReviewComment" or "CodeReviewCommentUnresolved"
-              local status_hl = resolved and "CodeReviewCommentResolved" or "CodeReviewCommentUnresolved"
-              local status_str = resolved and " Resolved " or " Unresolved "
+              local is_pending = discussion.is_optimistic
+              local is_err = discussion.is_failed
+              local bdr = is_err and "CodeReviewCommentFailed" or is_pending and "CodeReviewCommentPending" or "CodeReviewCommentBorder"
+              local aut = is_err and "CodeReviewCommentFailed" or is_pending and "CodeReviewCommentPending" or "CodeReviewCommentAuthor"
+              local body_hl = is_err and "CodeReviewCommentFailed"
+                or is_pending and "CodeReviewCommentPending"
+                or resolved and "CodeReviewComment" or "CodeReviewCommentUnresolved"
+              local status_hl = is_err and "CodeReviewCommentFailed"
+                or is_pending and "CodeReviewCommentPending"
+                or resolved and "CodeReviewCommentResolved" or "CodeReviewCommentUnresolved"
+              local status_str = is_err and " Failed " or is_pending and " Posting… " or resolved and " Resolved " or " Unresolved "
               local time_str = format_time_short(first.created_at)
               local header_meta = time_str ~= "" and (" · " .. time_str) or ""
               local header_text = "@" .. first.author
@@ -205,9 +211,16 @@ function M.place_comment_signs(buf, line_data, discussions, file_diff)
               end
 
               -- └ footer keyhints ──────────────────────
-              local footer_content = discussion.is_draft
-                and "gt:un/resolve"
-                or "r:reply  gt:un/resolve"
+              local footer_content
+              if is_err then
+                footer_content = "R:retry  d:discard"
+              elseif is_pending then
+                footer_content = "posting…"
+              elseif discussion.is_draft then
+                footer_content = "gt:un/resolve"
+              else
+                footer_content = "r:reply  gt:un/resolve"
+              end
               local footer_fill = math.max(0, 62 - #footer_content - 1)
               table.insert(virt_lines, {
                 { "  └ ", bdr },
@@ -709,11 +722,17 @@ function M.render_all_files(buf, files, review, discussions, context, file_conte
               if notes and #notes > 0 then
                 local first = notes[1]
                 local resolved = is_resolved(disc)
-                local bdr = "CodeReviewCommentBorder"
-                local aut = "CodeReviewCommentAuthor"
-                local body_hl = resolved and "CodeReviewComment" or "CodeReviewCommentUnresolved"
-                local status_hl = resolved and "CodeReviewCommentResolved" or "CodeReviewCommentUnresolved"
-                local status_str = resolved and " Resolved " or " Unresolved "
+                local is_pending = disc.is_optimistic
+                local is_err = disc.is_failed
+                local bdr = is_err and "CodeReviewCommentFailed" or is_pending and "CodeReviewCommentPending" or "CodeReviewCommentBorder"
+                local aut = is_err and "CodeReviewCommentFailed" or is_pending and "CodeReviewCommentPending" or "CodeReviewCommentAuthor"
+                local body_hl = is_err and "CodeReviewCommentFailed"
+                  or is_pending and "CodeReviewCommentPending"
+                  or resolved and "CodeReviewComment" or "CodeReviewCommentUnresolved"
+                local status_hl = is_err and "CodeReviewCommentFailed"
+                  or is_pending and "CodeReviewCommentPending"
+                  or resolved and "CodeReviewCommentResolved" or "CodeReviewCommentUnresolved"
+                local status_str = is_err and " Failed " or is_pending and " Posting… " or resolved and " Resolved " or " Unresolved "
                 local time_str = format_time_short(first.created_at)
                 local header_meta = time_str ~= "" and (" · " .. time_str) or ""
                 local header_text = "@" .. first.author
@@ -742,9 +761,16 @@ function M.render_all_files(buf, files, review, discussions, context, file_conte
                     end
                   end
                 end
-                local footer_content = disc.is_draft
-                  and "gt:un/resolve"
-                  or "r:reply  gt:un/resolve"
+                local footer_content
+                if is_err then
+                  footer_content = "R:retry  d:discard"
+                elseif is_pending then
+                  footer_content = "posting…"
+                elseif disc.is_draft then
+                  footer_content = "gt:un/resolve"
+                else
+                  footer_content = "r:reply  gt:un/resolve"
+                end
                 local footer_fill = math.max(0, 62 - #footer_content - 1)
                 table.insert(virt_lines, {
                   { "  └ ", bdr }, { footer_content, body_hl },
