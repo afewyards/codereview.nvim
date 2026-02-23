@@ -365,22 +365,24 @@ function M.reply(disc, mr, optimistic, opts)
     if optimistic and optimistic.add_reply then
       note = optimistic.add_reply(text)
     end
-    local provider, client, ctx = get_provider()
-    if not provider then
-      if note and optimistic.remove_reply then optimistic.remove_reply(disc, note) end
-      return
-    end
-    M.post_with_retry(
-      function() return provider.reply_to_discussion(client, ctx, mr, disc.id, text) end,
-      function()
-        vim.notify("Reply posted", vim.log.levels.INFO)
-        if optimistic and optimistic.refresh then optimistic.refresh() end
-      end,
-      function(err)
-        vim.notify("Failed to post reply: " .. err, vim.log.levels.ERROR)
-        if note and optimistic.mark_reply_failed then optimistic.mark_reply_failed(note) end
+    vim.schedule(function()
+      local provider, client, ctx = get_provider()
+      if not provider then
+        if note and optimistic.remove_reply then optimistic.remove_reply(disc, note) end
+        return
       end
-    )
+      M.post_with_retry(
+        function() return provider.reply_to_discussion(client, ctx, mr, disc.id, text) end,
+        function()
+          vim.notify("Reply posted", vim.log.levels.INFO)
+          if optimistic and optimistic.refresh then optimistic.refresh() end
+        end,
+        function(err)
+          vim.notify("Failed to post reply: " .. err, vim.log.levels.ERROR)
+          if note and optimistic.mark_reply_failed then optimistic.mark_reply_failed(note) end
+        end
+      )
+    end)
   end, opts)
 end
 
@@ -406,28 +408,31 @@ function M.create_inline(mr, old_path, new_path, old_line, new_line, optimistic,
     if optimistic and optimistic.add then
       disc = optimistic.add(text)
     end
-    local provider, client, ctx = get_provider()
-    if not provider then
-      if disc and optimistic.remove then optimistic.remove(disc) end
-      return
-    end
-    local position = {
-      old_path = old_path,
-      new_path = new_path,
-      old_line = old_line,
-      new_line = new_line,
-    }
-    M.post_with_retry(
-      function() return provider.post_comment(client, ctx, mr, text, position) end,
-      function()
-        vim.notify("Comment posted", vim.log.levels.INFO)
-        if optimistic and optimistic.refresh then optimistic.refresh() end
-      end,
-      function(err)
-        vim.notify("Failed to post comment: " .. err, vim.log.levels.ERROR)
-        if disc and optimistic.mark_failed then optimistic.mark_failed(disc) end
+    -- Yield to event loop so Neovim redraws the optimistic comment before blocking on API
+    vim.schedule(function()
+      local provider, client, ctx = get_provider()
+      if not provider then
+        if disc and optimistic.remove then optimistic.remove(disc) end
+        return
       end
-    )
+      local position = {
+        old_path = old_path,
+        new_path = new_path,
+        old_line = old_line,
+        new_line = new_line,
+      }
+      M.post_with_retry(
+        function() return provider.post_comment(client, ctx, mr, text, position) end,
+        function()
+          vim.notify("Comment posted", vim.log.levels.INFO)
+          if optimistic and optimistic.refresh then optimistic.refresh() end
+        end,
+        function(err)
+          vim.notify("Failed to post comment: " .. err, vim.log.levels.ERROR)
+          if disc and optimistic.mark_failed then optimistic.mark_failed(disc) end
+        end
+      )
+    end)
   end, opts)
 end
 
@@ -437,22 +442,24 @@ function M.create_inline_range(mr, old_path, new_path, start_pos, end_pos, optim
     if optimistic and optimistic.add then
       disc = optimistic.add(text)
     end
-    local provider, client, ctx = get_provider()
-    if not provider then
-      if disc and optimistic.remove then optimistic.remove(disc) end
-      return
-    end
-    M.post_with_retry(
-      function() return provider.post_range_comment(client, ctx, mr, text, old_path, new_path, start_pos, end_pos) end,
-      function()
-        vim.notify("Range comment posted", vim.log.levels.INFO)
-        if optimistic and optimistic.refresh then optimistic.refresh() end
-      end,
-      function(err)
-        vim.notify("Failed to post range comment: " .. err, vim.log.levels.ERROR)
-        if disc and optimistic.mark_failed then optimistic.mark_failed(disc) end
+    vim.schedule(function()
+      local provider, client, ctx = get_provider()
+      if not provider then
+        if disc and optimistic.remove then optimistic.remove(disc) end
+        return
       end
-    )
+      M.post_with_retry(
+        function() return provider.post_range_comment(client, ctx, mr, text, old_path, new_path, start_pos, end_pos) end,
+        function()
+          vim.notify("Range comment posted", vim.log.levels.INFO)
+          if optimistic and optimistic.refresh then optimistic.refresh() end
+        end,
+        function(err)
+          vim.notify("Failed to post range comment: " .. err, vim.log.levels.ERROR)
+          if disc and optimistic.mark_failed then optimistic.mark_failed(disc) end
+        end
+      )
+    end)
   end, opts)
 end
 
