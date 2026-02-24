@@ -79,7 +79,7 @@ local function normalize_note(raw)
       start_sha = p.start_sha,
     }
     -- Preserve range start from line_range (GitLab range comments)
-    if p.line_range and p.line_range.start then
+    if type(p.line_range) == "table" and p.line_range.start then
       local s = p.line_range.start
       position.start_new_line = s.new_line
       position.start_old_line = s.old_line
