@@ -483,6 +483,9 @@ end
 -- Accumulator for pending review comments (GitHub batches on publish)
 M._pending_comments = {}
 
+-- ID of an existing PENDING review on the server (set when resuming drafts)
+M._pending_review_id = nil
+
 --- Stage a draft comment for the next review submission.
 --- GitHub doesn't have individual draft notes — comments are batched into a single review.
 --- @param params table { body, path, line }
@@ -495,16 +498,91 @@ function M.create_draft_comment(client, ctx, review, params) -- luacheck: ignore
   })
 end
 
+--- Fetch draft comments from an existing PENDING review.
+--- Sets _pending_review_id only if a pending review with comments is found.
+function M.get_pending_review_drafts(client, ctx, review)
+  local headers, err = get_headers()
+  if not headers then return nil, err end
+  local owner, repo = parse_owner_repo(ctx)
+
+  -- Find PENDING review (use per_page=100 to reduce pagination risk)
+  local reviews_path = string.format("/repos/%s/%s/pulls/%d/reviews", owner, repo, review.id)
+  local resp, rev_err = client.get(ctx.base_url, reviews_path, { headers = headers, query = { per_page = 100 } })
+  if not resp then return nil, rev_err end
+
+  local pending_id = nil
+  for _, r in ipairs(resp.data or {}) do
+    if r.state == "PENDING" then
+      pending_id = r.id
+      break
+    end
+  end
+
+  if not pending_id then return {} end
+
+  -- Fetch comments from the pending review
+  local comments_path = string.format("/repos/%s/%s/pulls/%d/reviews/%d/comments", owner, repo, review.id, pending_id)
+  local cresp, cerr = client.get(ctx.base_url, comments_path, { headers = headers, query = { per_page = 100 } })
+  if not cresp then return nil, cerr end
+
+  local drafts = {}
+  for _, c in ipairs(cresp.data or {}) do
+    table.insert(drafts, {
+      notes = {{
+        author = "You (draft)",
+        body = c.body or "",
+        created_at = c.created_at or "",
+        position = {
+          new_path = c.path,
+          new_line = c.line,
+          side = c.side or "RIGHT",
+        },
+      }},
+      is_draft = true,
+      server_draft_id = c.id,
+    })
+  end
+
+  -- Only set _pending_review_id if there are actual comments
+  -- (avoids submitting an empty review on publish)
+  if #drafts > 0 then
+    M._pending_review_id = pending_id
+  end
+
+  return drafts
+end
+
+--- Delete the pending review (discard all draft comments).
+function M.discard_pending_review(client, ctx, review)
+  if not M._pending_review_id then return nil, "No pending review to discard" end
+  local headers, err = get_headers()
+  if not headers then return nil, err end
+  local owner, repo = parse_owner_repo(ctx)
+  local path = string.format("/repos/%s/%s/pulls/%d/reviews/%d", owner, repo, review.id, M._pending_review_id)
+  local result, del_err = client.delete(ctx.base_url, path, { headers = headers })
+  M._pending_review_id = nil
+  return result, del_err
+end
+
 --- Publish all accumulated draft comments as a single PR review.
+--- If a server-side pending review exists (_pending_review_id), submit it first.
 function M.publish_review(client, ctx, review)
   local headers, err = get_headers()
   if not headers then return nil, err end
+  local owner, repo = parse_owner_repo(ctx)
 
-  if #M._pending_comments == 0 then
-    return nil, "No pending comments to publish"
+  -- Submit existing pending review if resuming one
+  if M._pending_review_id then
+    local submit_path = string.format("/repos/%s/%s/pulls/%d/reviews/%d/events", owner, repo, review.id, M._pending_review_id)
+    client.post(ctx.base_url, submit_path, { body = { event = "COMMENT" }, headers = headers })
+    M._pending_review_id = nil
   end
 
-  local owner, repo = parse_owner_repo(ctx)
+  -- Publish new in-session comments (if any)
+  if #M._pending_comments == 0 then
+    return { data = true }, nil
+  end
+
   local path_url = string.format("/repos/%s/%s/pulls/%d/reviews", owner, repo, review.id)
   local payload = {
     commit_id = review.sha,
