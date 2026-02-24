@@ -30,15 +30,14 @@ package.loaded["codereview.log"] = {
 package.loaded["codereview.ui.spinner"] = {
   open = function() end,
   close = function() end,
+  set_label = function() end,
 }
 
--- Stub subprocess to capture prompt and opts
-local captured_prompt = nil
-local captured_opts = nil
+-- Stub subprocess to capture all calls
+local captured_calls = {}
 package.loaded["codereview.ai.subprocess"] = {
   run = function(prompt, callback, opts)
-    captured_prompt = prompt
-    captured_opts = opts
+    table.insert(captured_calls, { prompt = prompt, opts = opts })
     callback('```json\n[]\n```')
     return 1
   end,
@@ -57,9 +56,12 @@ package.loaded["codereview.review.session"] = {
   start = function() end,
   ai_start = function() end,
   ai_finish = function() end,
+  ai_file_done = function() end,
   stop = function() end,
   reset = function() end,
-  get = function() return { active = false, ai_pending = false } end,
+  get = function()
+    return { active = false, ai_pending = false, ai_job_ids = {}, ai_total = 0, ai_completed = 0 }
+  end,
 }
 
 -- Stub diff module
@@ -74,11 +76,10 @@ local review_mod = require("codereview.review")
 
 describe("review.init routing", function()
   before_each(function()
-    captured_prompt = nil
-    captured_opts = nil
+    captured_calls = {}
   end)
 
-  it("uses orchestrator prompt for multi-file MRs", function()
+  it("uses summary prompt then per-file prompts for multi-file MRs", function()
     local review = { title = "Multi", description = "desc" }
     local diff_state = {
       files = {
@@ -95,8 +96,15 @@ describe("review.init routing", function()
       row_ai_cache = {},
     }
     review_mod.start(review, diff_state, { main_buf = 0, sidebar_buf = 0, main_win = 0 })
-    assert.truthy(captured_prompt:find("orchestrat"), "prompt should contain orchestrator instructions")
-    assert.truthy(captured_opts and captured_opts.skip_agent, "should skip agent for orchestrator")
+    -- Phase 1: summary call with skip_agent
+    assert.truthy(#captured_calls >= 1, "should have at least one subprocess call")
+    local first = captured_calls[1]
+    assert.truthy(first.opts and first.opts.skip_agent, "summary call should skip agent")
+    assert.truthy(first.prompt:find("summariz"), "first prompt should be summary prompt")
+    -- Phase 2: per-file calls (one per file)
+    assert.truthy(#captured_calls >= 3, "should have summary + 2 file calls")
+    assert.truthy(captured_calls[2].prompt:find("a.lua") or captured_calls[3].prompt:find("a.lua"),
+      "per-file prompts should reference file paths")
   end)
 
   it("uses direct review prompt for single-file MRs", function()
@@ -115,8 +123,10 @@ describe("review.init routing", function()
       row_ai_cache = {},
     }
     review_mod.start(review, diff_state, { main_buf = 0, sidebar_buf = 0, main_win = 0 })
-    assert.falsy(captured_prompt:find("orchestrat"), "single-file should NOT use orchestrator")
-    assert.truthy(captured_prompt:find("JSON"), "single-file should use direct review prompt")
-    assert.falsy(captured_opts and captured_opts.skip_agent, "should NOT skip agent for direct review")
+    assert.equals(1, #captured_calls, "single-file should make exactly one subprocess call")
+    local first = captured_calls[1]
+    assert.falsy(first.opts and first.opts.skip_agent, "should NOT skip agent for direct review")
+    assert.truthy(first.prompt:find("JSON"), "single-file should use direct review prompt")
+    assert.falsy(first.prompt:find("orchestrat"), "single-file should NOT use orchestrator prompt")
   end)
 end)

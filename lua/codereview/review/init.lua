@@ -3,18 +3,52 @@ local ai_sub = require("codereview.ai.subprocess")
 local prompt_mod = require("codereview.ai.prompt")
 local M = {}
 
-function M.start(review, diff_state, layout)
+--- Render suggestions for a single file into the diff view.
+local function render_file_suggestions(diff_state, layout, suggestions)
+  vim.schedule(function()
+    -- Merge new suggestions into existing list
+    diff_state.ai_suggestions = diff_state.ai_suggestions or {}
+    for _, s in ipairs(suggestions) do
+      table.insert(diff_state.ai_suggestions, s)
+    end
+
+    local diff_mod = require("codereview.mr.diff")
+
+    -- Re-render current view to show new suggestions
+    if diff_state.scroll_mode then
+      local result = diff_mod.render_all_files(
+        layout.main_buf, diff_state.files, diff_state.review,
+        diff_state.discussions, diff_state.context,
+        diff_state.file_contexts, diff_state.ai_suggestions,
+        diff_state.row_selection, diff_state.current_user
+      )
+      diff_state.file_sections = result.file_sections
+      diff_state.scroll_line_data = result.line_data
+      diff_state.scroll_row_disc = result.row_discussions
+      diff_state.scroll_row_ai = result.row_ai
+    else
+      local file = diff_state.files and diff_state.files[diff_state.current_file]
+      if file then
+        local ld, rd, ra = diff_mod.render_file_diff(
+          layout.main_buf, file, diff_state.review,
+          diff_state.discussions, diff_state.context,
+          diff_state.ai_suggestions,
+          diff_state.row_selection, diff_state.current_user
+        )
+        diff_state.line_data_cache[diff_state.current_file] = ld
+        diff_state.row_disc_cache[diff_state.current_file] = rd
+        diff_state.row_ai_cache[diff_state.current_file] = ra
+      end
+    end
+    diff_mod.render_sidebar(layout.sidebar_buf, diff_state)
+    vim.api.nvim_set_current_win(layout.main_win)
+  end)
+end
+
+--- Single-file review (unchanged behavior).
+local function start_single(review, diff_state, layout)
   local diffs = diff_state.files
-  local discussions = diff_state.discussions
-
-  local review_prompt
-  local use_orchestrator = #diffs > 1
-  if use_orchestrator then
-    review_prompt = prompt_mod.build_orchestrator_prompt(review, diffs)
-  else
-    review_prompt = prompt_mod.build_review_prompt(review, diffs)
-  end
-
+  local review_prompt = prompt_mod.build_review_prompt(review, diffs)
   local session = require("codereview.review.session")
   session.start()
 
@@ -34,49 +68,118 @@ function M.start(review, diff_state, layout)
 
     vim.notify(string.format("AI review: %d suggestions found", #suggestions), vim.log.levels.INFO)
 
+    diff_state.ai_suggestions = {}
+
     vim.schedule(function()
-      diff_state.ai_suggestions = suggestions
-
-      local diff_mod = require("codereview.mr.diff")
-
-      -- Switch to diff view if currently in summary mode
       if diff_state.view_mode ~= "diff" then
         diff_state.view_mode = "diff"
         diff_state.current_file = diff_state.current_file or 1
       end
-
-      if diff_state.scroll_mode then
-        local result = diff_mod.render_all_files(
-          layout.main_buf, diff_state.files, diff_state.review,
-          diff_state.discussions, diff_state.context,
-          diff_state.file_contexts, suggestions,
-          diff_state.row_selection, diff_state.current_user
-        )
-        diff_state.file_sections = result.file_sections
-        diff_state.scroll_line_data = result.line_data
-        diff_state.scroll_row_disc = result.row_discussions
-        diff_state.scroll_row_ai = result.row_ai
-      else
-        local file = diff_state.files and diff_state.files[diff_state.current_file]
-        if file then
-          local ld, rd, ra = diff_mod.render_file_diff(
-            layout.main_buf, file, diff_state.review,
-            diff_state.discussions, diff_state.context, suggestions,
-            diff_state.row_selection, diff_state.current_user
-          )
-          diff_state.line_data_cache[diff_state.current_file] = ld
-          diff_state.row_disc_cache[diff_state.current_file] = rd
-          diff_state.row_ai_cache[diff_state.current_file] = ra
-        end
-      end
-      diff_mod.render_sidebar(layout.sidebar_buf, diff_state)
-      vim.api.nvim_set_current_win(layout.main_win)
     end)
-  end, { skip_agent = use_orchestrator })
+
+    render_file_suggestions(diff_state, layout, suggestions)
+  end)
 
   if job_id and job_id > 0 then
     session.ai_start(job_id)
     vim.notify("AI review started…", vim.log.levels.INFO)
+  end
+end
+
+--- Multi-file review: Phase 1 (summary) then Phase 2 (parallel per-file).
+local function start_multi(review, diff_state, layout)
+  local diffs = diff_state.files
+  local session = require("codereview.review.session")
+  local spinner = require("codereview.ui.spinner")
+  session.start()
+
+  diff_state.ai_suggestions = {}
+
+  -- Switch to diff view
+  if diff_state.view_mode ~= "diff" then
+    diff_state.view_mode = "diff"
+    diff_state.current_file = diff_state.current_file or 1
+  end
+
+  -- Phase 1: summary pre-pass
+  local summary_prompt = prompt_mod.build_summary_prompt(review, diffs)
+  local summary_job = ai_sub.run(summary_prompt, function(output, ai_err)
+    if ai_err then
+      session.ai_finish()
+      vim.notify("AI summary failed: " .. ai_err, vim.log.levels.ERROR)
+      return
+    end
+
+    local summaries = prompt_mod.parse_summary_output(output)
+
+    -- Phase 2: parallel per-file reviews
+    local total = #diffs
+    local job_ids = {}
+
+    for _, file in ipairs(diffs) do
+      local file_prompt = prompt_mod.build_file_review_prompt(review, file, summaries)
+      local path = file.new_path or file.old_path
+
+      local file_job = ai_sub.run(file_prompt, function(file_output, file_err)
+        if file_err then
+          vim.notify("AI review failed for " .. path .. ": " .. file_err, vim.log.levels.WARN)
+        else
+          local suggestions = prompt_mod.parse_review_output(file_output)
+          if #suggestions > 0 then
+            render_file_suggestions(diff_state, layout, suggestions)
+          end
+        end
+
+        -- Update progress
+        local s = session.get()
+        spinner.set_label(string.format(" AI reviewing… %d/%d files ", s.ai_completed + 1, s.ai_total))
+
+        vim.schedule(function()
+          local diff_mod = require("codereview.mr.diff")
+          diff_mod.render_sidebar(layout.sidebar_buf, diff_state)
+        end)
+
+        session.ai_file_done()
+
+        -- All done?
+        if not session.get().ai_pending then
+          local count = #(diff_state.ai_suggestions or {})
+          if count == 0 then
+            vim.schedule(function()
+              vim.notify("AI review: no issues found!", vim.log.levels.INFO)
+            end)
+          else
+            vim.schedule(function()
+              vim.notify(string.format("AI review: %d suggestions found", count), vim.log.levels.INFO)
+            end)
+          end
+        end
+      end)
+
+      if file_job and file_job > 0 then
+        table.insert(job_ids, file_job)
+      end
+    end
+
+    -- Store all job IDs for cancellation; update session with real counts
+    session.ai_start(job_ids, total)
+    spinner.set_label(string.format(" AI reviewing… 0/%d files ", total))
+  end, { skip_agent = true }) -- no --agent for summary call
+
+  if summary_job and summary_job > 0 then
+    -- Use summary job as initial tracking; will be replaced in Phase 2
+    session.ai_start(summary_job)
+    spinner.set_label(" AI summarizing… ")
+    vim.notify("AI review started (summarizing files)…", vim.log.levels.INFO)
+  end
+end
+
+function M.start(review, diff_state, layout)
+  local diffs = diff_state.files
+  if #diffs <= 1 then
+    start_single(review, diff_state, layout)
+  else
+    start_multi(review, diff_state, layout)
   end
 end
 

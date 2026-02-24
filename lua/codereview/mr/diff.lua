@@ -1222,7 +1222,11 @@ function M.render_sidebar(buf, state)
 
   if sess.active then
     if sess.ai_pending then
-      table.insert(lines, "⟳ AI reviewing…")
+      if sess.ai_total > 0 and sess.ai_completed > 0 then
+        table.insert(lines, string.format("⟳ AI reviewing… %d/%d", sess.ai_completed, sess.ai_total))
+      else
+        table.insert(lines, "⟳ AI reviewing…")
+      end
     else
       table.insert(lines, "● Review in progress")
     end
@@ -2050,7 +2054,9 @@ function M.setup_keymaps(layout, state)
     local session = require("codereview.review.session")
     local sess = session.get()
     if sess.ai_pending then
-      if sess.ai_job_id then vim.fn.jobstop(sess.ai_job_id) end
+      for _, jid in ipairs(sess.ai_job_ids or {}) do
+        pcall(vim.fn.jobstop, jid)
+      end
       session.ai_finish()
       vim.notify("AI review cancelled", vim.log.levels.WARN)
     end
@@ -2552,7 +2558,9 @@ function M.setup_keymaps(layout, state)
       local session = require("codereview.review.session")
       local s = session.get()
       if s.ai_pending then
-        if s.ai_job_id then vim.fn.jobstop(s.ai_job_id) end
+        for _, jid in ipairs(s.ai_job_ids or {}) do
+          pcall(vim.fn.jobstop, jid)
+        end
         session.ai_finish()
         vim.notify("AI review cancelled", vim.log.levels.INFO)
         return
