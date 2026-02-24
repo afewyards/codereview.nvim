@@ -1051,13 +1051,6 @@ local function build_footer(state, sess)
   table.insert(lines, string.rep("─", 30))
 
   if state.view_mode == "summary" then
-    header("Navigate")
-    local nc, pc = k("next_comment"), k("prev_comment")
-    if nc and pc then row(nc .. " " .. pc .. "  threads")
-    elseif nc then row(nc .. "  next thread")
-    elseif pc then row(pc .. "  prev thread")
-    end
-
     header("Comment")
     local r_key = k("reply")
     if r_key then row(r_key .. " reply") end
@@ -1078,17 +1071,6 @@ local function build_footer(state, sess)
   if nf and pf then row(nf .. " " .. pf .. "  files")
   elseif nf then row(nf .. "  next file")
   elseif pf then row(pf .. "  prev file")
-  end
-
-  local nc, pc = k("next_comment"), k("prev_comment")
-  local ns, ps = k("next_suggestion"), k("prev_suggestion")
-  local comment_part = (nc and pc) and (nc .. " " .. pc .. "  comments")
-    or (nc and nc .. "  next comment") or (pc and pc .. "  prev comment") or nil
-  local ai_part = (sess.active and ns and ps) and (ns .. " " .. ps .. " AI")
-    or (sess.active and ns and ns .. " AI") or (sess.active and ps and ps .. " AI") or nil
-  if comment_part and ai_part then row(comment_part .. "  " .. ai_part)
-  elseif comment_part then row(comment_part)
-  elseif ai_part then row(ai_part)
   end
 
   header("Comment")
@@ -1415,15 +1397,6 @@ local function nav_file(layout, state, delta)
   vim.api.nvim_win_set_cursor(layout.main_win, { 1, 0 })
 end
 
-local function get_comment_rows(state, file_idx)
-  local rd = state.row_disc_cache[file_idx]
-  if not rd then return {} end
-  local rows = {}
-  for r, _ in pairs(rd) do table.insert(rows, r) end
-  table.sort(rows)
-  return rows
-end
-
 --- Merged sorted list of rows with any annotation (comments or AI).
 --- @param row_disc table map of row->discussions
 --- @param row_ai table map of row->AI suggestions
@@ -1436,14 +1409,6 @@ function M.get_annotated_rows(row_disc, row_ai)
   for r in pairs(seen) do table.insert(rows, r) end
   table.sort(rows)
   return rows
-end
-
-local function file_has_comments(state, file_idx)
-  local files = state.files or {}
-  for _, disc in ipairs(state.discussions or {}) do
-    if discussion_matches_file(disc, files[file_idx]) then return true end
-  end
-  return false
 end
 
 --- Check if a file has any annotations (discussions or AI suggestions) without relying on cache.
@@ -1574,57 +1539,6 @@ function M.jump_to_comment(layout, state, entry)
             return
           end
         end
-      end
-    end
-  end
-end
-
-local function nav_comment(layout, state, delta)
-  local files = state.files or {}
-  local cursor = vim.api.nvim_win_get_cursor(layout.main_win)
-  local current_row = cursor[1]
-  local comment_rows = get_comment_rows(state, state.current_file)
-
-  if delta > 0 then
-    -- Next comment in current file
-    for _, r in ipairs(comment_rows) do
-      if r > current_row then
-        vim.api.nvim_win_set_cursor(layout.main_win, { r, 0 })
-        M.ensure_virt_lines_visible(layout.main_win, layout.main_buf, r)
-        return
-      end
-    end
-    -- Move to next file with comments
-    for i = state.current_file + 1, #files do
-      if file_has_comments(state, i) then
-        switch_to_file(layout, state, i)
-        local rows = get_comment_rows(state, i)
-        if #rows > 0 then
-          vim.api.nvim_win_set_cursor(layout.main_win, { rows[1], 0 })
-          M.ensure_virt_lines_visible(layout.main_win, layout.main_buf, rows[1])
-        end
-        return
-      end
-    end
-  else
-    -- Prev comment in current file
-    for i = #comment_rows, 1, -1 do
-      if comment_rows[i] < current_row then
-        vim.api.nvim_win_set_cursor(layout.main_win, { comment_rows[i], 0 })
-        M.ensure_virt_lines_visible(layout.main_win, layout.main_buf, comment_rows[i])
-        return
-      end
-    end
-    -- Move to prev file with comments
-    for i = state.current_file - 1, 1, -1 do
-      if file_has_comments(state, i) then
-        switch_to_file(layout, state, i)
-        local rows = get_comment_rows(state, i)
-        if #rows > 0 then
-          vim.api.nvim_win_set_cursor(layout.main_win, { rows[#rows], 0 })
-          M.ensure_virt_lines_visible(layout.main_win, layout.main_buf, rows[#rows])
-        end
-        return
       end
     end
   end
@@ -2081,99 +1995,6 @@ function M.setup_keymaps(layout, state)
         end
       else
         nav_file(layout, state, -1)
-      end
-    end,
-
-    next_comment = function()
-      if state.view_mode == "summary" then
-        local cursor = vim.api.nvim_win_get_cursor(layout.main_win)[1]
-        local total = vim.api.nvim_buf_line_count(layout.main_buf)
-        for r = cursor + 1, total do
-          local entry = state.summary_row_map and state.summary_row_map[r]
-          if entry and entry.type == "thread_start" then
-            vim.api.nvim_win_set_cursor(layout.main_win, { r, 0 })
-            return
-          end
-        end
-        return
-      end
-      if state.view_mode ~= "diff" then return end
-      if state.scroll_mode then
-        local cursor = vim.api.nvim_win_get_cursor(layout.main_win)[1]
-        local rows = {}
-        for r in pairs(state.scroll_row_disc or {}) do table.insert(rows, r) end
-        table.sort(rows)
-        for _, r in ipairs(rows) do
-          if r > cursor then
-            vim.api.nvim_win_set_cursor(layout.main_win, { r, 0 })
-            M.ensure_virt_lines_visible(layout.main_win, layout.main_buf, r)
-            return
-          end
-        end
-      else
-        nav_comment(layout, state, 1)
-      end
-    end,
-
-    prev_comment = function()
-      if state.view_mode == "summary" then
-        local cursor = vim.api.nvim_win_get_cursor(layout.main_win)[1]
-        for r = cursor - 1, 1, -1 do
-          local entry = state.summary_row_map and state.summary_row_map[r]
-          if entry and entry.type == "thread_start" then
-            vim.api.nvim_win_set_cursor(layout.main_win, { r, 0 })
-            return
-          end
-        end
-        return
-      end
-      if state.view_mode ~= "diff" then return end
-      if state.scroll_mode then
-        local cursor = vim.api.nvim_win_get_cursor(layout.main_win)[1]
-        local rows = {}
-        for r in pairs(state.scroll_row_disc or {}) do table.insert(rows, r) end
-        table.sort(rows)
-        for i = #rows, 1, -1 do
-          if rows[i] < cursor then
-            vim.api.nvim_win_set_cursor(layout.main_win, { rows[i], 0 })
-            M.ensure_virt_lines_visible(layout.main_win, layout.main_buf, rows[i])
-            return
-          end
-        end
-      else
-        nav_comment(layout, state, -1)
-      end
-    end,
-
-    next_suggestion = function()
-      if state.view_mode ~= "diff" then return end
-      local cursor = vim.api.nvim_win_get_cursor(layout.main_win)[1]
-      local row_ai = state.scroll_mode and state.scroll_row_ai or (state.row_ai_cache[state.current_file] or {})
-      local rows = {}
-      for r in pairs(row_ai) do table.insert(rows, r) end
-      table.sort(rows)
-      for _, r in ipairs(rows) do
-        if r > cursor then
-          vim.api.nvim_win_set_cursor(layout.main_win, { r, 0 })
-          M.ensure_virt_lines_visible(layout.main_win, layout.main_buf, r)
-          return
-        end
-      end
-    end,
-
-    prev_suggestion = function()
-      if state.view_mode ~= "diff" then return end
-      local cursor = vim.api.nvim_win_get_cursor(layout.main_win)[1]
-      local row_ai = state.scroll_mode and state.scroll_row_ai or (state.row_ai_cache[state.current_file] or {})
-      local rows = {}
-      for r in pairs(row_ai) do table.insert(rows, r) end
-      table.sort(rows)
-      for i = #rows, 1, -1 do
-        if rows[i] < cursor then
-          vim.api.nvim_win_set_cursor(layout.main_win, { rows[i], 0 })
-          M.ensure_virt_lines_visible(layout.main_win, layout.main_buf, rows[i])
-          return
-        end
       end
     end,
 

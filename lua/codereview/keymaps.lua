@@ -3,11 +3,7 @@ local M = {}
 local defaults = {
   next_file            = { key = "]f",    mode = "n", desc = "Next file" },
   prev_file            = { key = "[f",    mode = "n", desc = "Previous file" },
-  next_comment         = { key = "]c",    mode = "n", desc = "Next comment" },
-  prev_comment         = { key = "[c",    mode = "n", desc = "Previous comment" },
-  next_suggestion      = { key = "]s",    mode = "n", desc = "Next AI suggestion" },
-  prev_suggestion      = { key = "[s",    mode = "n", desc = "Previous AI suggestion" },
-  create_comment       = { key = "cc",    mode = "n", desc = "New comment" },
+create_comment       = { key = "cc",    mode = "n", desc = "New comment" },
   create_range_comment = { key = "cc",    mode = "v", desc = "Range comment" },
   reply                = { key = "r",     mode = "n", desc = "Reply to thread" },
   toggle_resolve       = { key = "gt",    mode = "n", desc = "Toggle resolve" },
