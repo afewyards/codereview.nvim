@@ -379,6 +379,30 @@ function M.parse_blocks(text, base_hl, opts)
       end
     end
 
+    -- Unordered list: ^(%s*)([-*+]) (.+)
+    if state == "normal" then
+      local list_indent, list_marker, list_content = line:match("^(%s*)([-*+]) (.+)")
+      if list_content then
+        local indent_level = math.floor(#list_indent / 2)
+        local bullets = { "•", "◦", "▪" }
+        local bullet = bullets[math.min(indent_level + 1, #bullets)]
+        local prefix = string.rep("  ", indent_level) .. bullet .. " "
+        local segs = M.parse_inline(list_content, base_hl)
+        local rendered_text, inline_hls = M.segments_to_extmarks(segs, row, base_hl)
+        table.insert(result.lines, prefix .. rendered_text)
+        -- Bullet highlight: byte offsets for the bullet character
+        local bullet_start = #string.rep("  ", indent_level)
+        local bullet_end = bullet_start + #bullet
+        table.insert(result.highlights, { row, bullet_start, bullet_end, "CodeReviewMdListBullet" })
+        -- Shift inline highlights by prefix length
+        local offset = #prefix
+        for _, hl in ipairs(inline_hls) do
+          table.insert(result.highlights, { hl[1], hl[2] + offset, hl[3] + offset, hl[4] })
+        end
+        goto continue
+      end
+    end
+
     -- Ordered list: ^(%s*)(%d+)%. (.+)
     if state == "normal" then
       local ol_indent, ol_num, ol_content = line:match("^(%s*)(%d+)%. (.+)")

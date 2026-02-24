@@ -440,6 +440,48 @@ describe("parse_blocks code blocks", function()
   end)
 end)
 
+describe("parse_blocks unordered lists", function()
+  it("renders bullet list items", function()
+    local r = markdown.parse_blocks("- item one\n- item two", "CodeReviewComment", {})
+    assert.equals(2, #r.lines)
+    assert.equals("• item one", r.lines[1])
+    assert.equals("• item two", r.lines[2])
+  end)
+
+  it("applies bullet highlight", function()
+    local r = markdown.parse_blocks("- test", "CodeReviewComment", {})
+    local found = false
+    for _, h in ipairs(r.highlights) do
+      if h[4] == "CodeReviewMdListBullet" then found = true end
+    end
+    assert.is_true(found)
+  end)
+
+  it("handles * and + markers", function()
+    local r = markdown.parse_blocks("* star\n+ plus", "CodeReviewComment", {})
+    assert.truthy(r.lines[1]:find("•"))
+    assert.truthy(r.lines[2]:find("•"))
+  end)
+
+  it("parses inline markdown in list items", function()
+    local r = markdown.parse_blocks("- **bold** item", "CodeReviewComment", {})
+    assert.equals("• bold item", r.lines[1])
+    local has_bold = false
+    for _, h in ipairs(r.highlights) do
+      if h[4] == "CodeReviewCommentBold" then has_bold = true end
+    end
+    assert.is_true(has_bold)
+  end)
+
+  it("renders nested list items", function()
+    local r = markdown.parse_blocks("- top\n  - nested\n    - deep", "CodeReviewComment", {})
+    assert.equals(3, #r.lines)
+    assert.equals("• top", r.lines[1])
+    assert.equals("  ◦ nested", r.lines[2])
+    assert.equals("    ▪ deep", r.lines[3])
+  end)
+end)
+
 describe("ui.markdown", function()
   it("renders plain text lines", function()
     local lines = markdown.to_lines("Hello world\nSecond line")
