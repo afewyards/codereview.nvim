@@ -311,7 +311,7 @@ function M.open(entry)
     scroll_row_ai = {},
     local_drafts = {},
     summary_row_map = {},
-    note_selection = {},
+    row_selection = {},
     current_user = nil,
   }
 

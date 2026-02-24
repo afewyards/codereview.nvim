@@ -18,22 +18,6 @@ function M.get_state(buf)
   return active_states[buf]
 end
 
---- Cycle note selection within a discussion thread.
---- @param current number|nil  currently selected note index (1-based), or nil if none
---- @param note_count number   total number of notes in the thread
---- @param direction number    +1 for forward, -1 for backward
---- @return number|nil         next selected index, or nil to deselect
-function M.cycle_note_selection(current, note_count, direction)
-  if not current then
-    return direction > 0 and 1 or note_count
-  end
-  local next_idx = current + direction
-  if next_idx < 1 or next_idx > note_count then
-    return nil
-  end
-  return next_idx
-end
-
 --- Build ordered list of selectable items at a row.
 --- @param ai_suggestions table[] array of AI suggestions at this row
 --- @param discussions table[] array of discussions at this row
@@ -185,7 +169,7 @@ local function is_resolved(discussion)
   return note and note.resolved
 end
 
-function M.place_comment_signs(buf, line_data, discussions, file_diff, note_selection, current_user)
+function M.place_comment_signs(buf, line_data, discussions, file_diff, row_selection, current_user)
   -- Remove old signs for this buffer
   pcall(vim.fn.sign_unplace, "CodeReview", { buffer = buf })
 
@@ -238,7 +222,8 @@ function M.place_comment_signs(buf, line_data, discussions, file_diff, note_sele
               local header_text = "@" .. first.author
               local fill = math.max(0, 62 - #header_text - #header_meta - #status_str)
 
-              local sel_idx = note_selection and note_selection[discussion.id]
+              local sel = row_selection and row_selection[row]
+              local sel_idx = sel and sel.type == "comment" and sel.disc_id == discussion.id and sel.note_idx or nil
 
               local virt_lines = {}
 
@@ -503,7 +488,7 @@ end
 
 -- ─── Diff rendering ───────────────────────────────────────────────────────────
 
-function M.render_file_diff(buf, file_diff, review, discussions, context, ai_suggestions, note_selection, current_user, row_selection)
+function M.render_file_diff(buf, file_diff, review, discussions, context, ai_suggestions, row_selection, current_user)
   local parser = require("codereview.mr.diff_parser")
   if not context then
     context = config.get().diff.context
@@ -630,7 +615,7 @@ function M.render_file_diff(buf, file_diff, review, discussions, context, ai_sug
 
   local row_discussions = {}
   if discussions then
-    row_discussions = M.place_comment_signs(buf, line_data, discussions, file_diff, note_selection, current_user) or {}
+    row_discussions = M.place_comment_signs(buf, line_data, discussions, file_diff, row_selection, current_user) or {}
   end
 
   local row_ai = {}
@@ -643,7 +628,7 @@ end
 
 -- ─── All-files scroll view ────────────────────────────────────────────────────
 
-function M.render_all_files(buf, files, review, discussions, context, file_contexts, ai_suggestions, note_selection, current_user, row_selection)
+function M.render_all_files(buf, files, review, discussions, context, file_contexts, ai_suggestions, row_selection, current_user)
   local parser = require("codereview.mr.diff_parser")
   context = context or config.get().diff.context
   file_contexts = file_contexts or {}
@@ -867,7 +852,8 @@ function M.render_all_files(buf, files, review, discussions, context, file_conte
                 local header_text = "@" .. first.author
                 local fill = math.max(0, 62 - #header_text - #header_meta - #status_str)
 
-                local sel_idx = note_selection and note_selection[disc.id]
+                local sel = row_selection and row_selection[i]
+                local sel_idx = sel and sel.type == "comment" and sel.disc_id == disc.id and sel.note_idx or nil
 
                 local virt_lines = {}
                 local n1_bdr = (sel_idx == 1) and "CodeReviewSelectedNote" or bdr
@@ -1464,10 +1450,9 @@ local function nav_file(layout, state, delta)
   local next_idx = state.current_file + delta
   if next_idx < 1 or next_idx > #files then return end
   state.current_file = next_idx
-  state.note_selection = {}
   state.row_selection = {}
   M.render_sidebar(layout.sidebar_buf, state)
-  local line_data, row_disc, row_ai = M.render_file_diff(layout.main_buf, files[next_idx], state.review, state.discussions, state.context, state.ai_suggestions, state.note_selection, state.current_user, state.row_selection)
+  local line_data, row_disc, row_ai = M.render_file_diff(layout.main_buf, files[next_idx], state.review, state.discussions, state.context, state.ai_suggestions, state.row_selection, state.current_user)
   state.line_data_cache[next_idx] = line_data
   state.row_disc_cache[next_idx] = row_disc
   state.row_ai_cache[next_idx] = row_ai
@@ -1493,11 +1478,10 @@ end
 
 local function switch_to_file(layout, state, idx)
   state.current_file = idx
-  state.note_selection = {}
   state.row_selection = {}
   M.render_sidebar(layout.sidebar_buf, state)
   local ld, rd, ra = M.render_file_diff(
-    layout.main_buf, state.files[idx], state.review, state.discussions, state.context, state.ai_suggestions, state.note_selection, state.current_user, state.row_selection)
+    layout.main_buf, state.files[idx], state.review, state.discussions, state.context, state.ai_suggestions, state.row_selection, state.current_user)
   state.line_data_cache[idx] = ld
   state.row_disc_cache[idx] = rd
   state.row_ai_cache[idx] = ra
@@ -1686,7 +1670,7 @@ local function adjust_context(layout, state, delta)
   state.context = math.max(1, state.context + delta)
   if state.scroll_mode then
     local anchor = M.find_anchor(state.scroll_line_data, cursor_row)
-    local result = M.render_all_files(layout.main_buf, state.files, state.review, state.discussions, state.context, state.file_contexts, state.ai_suggestions, state.note_selection, state.current_user, state.row_selection)
+    local result = M.render_all_files(layout.main_buf, state.files, state.review, state.discussions, state.context, state.file_contexts, state.ai_suggestions, state.row_selection, state.current_user)
     state.file_sections = result.file_sections
     state.scroll_line_data = result.line_data
     state.scroll_row_disc = result.row_discussions
@@ -1699,7 +1683,7 @@ local function adjust_context(layout, state, delta)
     local file = state.files and state.files[state.current_file]
     if not file then return end
     local ld, row_disc, row_ai = M.render_file_diff(
-      layout.main_buf, file, state.review, state.discussions, state.context, state.ai_suggestions, state.note_selection, state.current_user, state.row_selection)
+      layout.main_buf, file, state.review, state.discussions, state.context, state.ai_suggestions, state.row_selection, state.current_user)
     state.line_data_cache[state.current_file] = ld
     state.row_disc_cache[state.current_file] = row_disc
     state.row_ai_cache[state.current_file] = row_ai
@@ -1798,7 +1782,7 @@ local function toggle_scroll_mode(layout, state)
 
     local file = state.files[state.current_file]
     if file then
-      local ld, rd, ra = M.render_file_diff(layout.main_buf, file, state.review, state.discussions, state.context, state.ai_suggestions, state.note_selection, state.current_user, state.row_selection)
+      local ld, rd, ra = M.render_file_diff(layout.main_buf, file, state.review, state.discussions, state.context, state.ai_suggestions, state.row_selection, state.current_user)
       state.line_data_cache[state.current_file] = ld
       state.row_disc_cache[state.current_file] = rd
       state.row_ai_cache[state.current_file] = ra
@@ -1811,7 +1795,7 @@ local function toggle_scroll_mode(layout, state)
     local anchor = M.find_anchor(per_file_ld or {}, cursor_row, state.current_file)
     state.scroll_mode = true
 
-    local result = M.render_all_files(layout.main_buf, state.files, state.review, state.discussions, state.context, state.file_contexts, state.ai_suggestions, state.note_selection, state.current_user, state.row_selection)
+    local result = M.render_all_files(layout.main_buf, state.files, state.review, state.discussions, state.context, state.file_contexts, state.ai_suggestions, state.row_selection, state.current_user)
     state.file_sections = result.file_sections
     state.scroll_line_data = result.line_data
     state.scroll_row_disc = result.row_discussions
@@ -1849,7 +1833,7 @@ function M.setup_keymaps(layout, state)
     local view = vim.fn.winsaveview()
 
     if state.scroll_mode then
-      local result = M.render_all_files(layout.main_buf, state.files, state.review, state.discussions, state.context, state.file_contexts, state.ai_suggestions, state.note_selection, state.current_user, state.row_selection)
+      local result = M.render_all_files(layout.main_buf, state.files, state.review, state.discussions, state.context, state.file_contexts, state.ai_suggestions, state.row_selection, state.current_user)
       state.file_sections = result.file_sections
       state.scroll_line_data = result.line_data
       state.scroll_row_disc = result.row_discussions
@@ -1857,7 +1841,7 @@ function M.setup_keymaps(layout, state)
     else
       local file = state.files and state.files[state.current_file]
       if file then
-        local ld, rd, ra = M.render_file_diff(layout.main_buf, file, state.review, state.discussions, state.context, state.ai_suggestions, state.note_selection, state.current_user, state.row_selection)
+        local ld, rd, ra = M.render_file_diff(layout.main_buf, file, state.review, state.discussions, state.context, state.ai_suggestions, state.row_selection, state.current_user)
         state.line_data_cache[state.current_file] = ld
         state.row_disc_cache[state.current_file] = rd
         state.row_ai_cache[state.current_file] = ra
@@ -1989,7 +1973,7 @@ function M.setup_keymaps(layout, state)
   -- Re-render current view after AI suggestion state change
   local function rerender_ai()
     if state.scroll_mode then
-      local result = M.render_all_files(layout.main_buf, state.files, state.review, state.discussions, state.context, state.file_contexts, state.ai_suggestions, state.note_selection, state.current_user, state.row_selection)
+      local result = M.render_all_files(layout.main_buf, state.files, state.review, state.discussions, state.context, state.file_contexts, state.ai_suggestions, state.row_selection, state.current_user)
       state.file_sections = result.file_sections
       state.scroll_line_data = result.line_data
       state.scroll_row_disc = result.row_discussions
@@ -1997,7 +1981,7 @@ function M.setup_keymaps(layout, state)
     else
       local file = state.files and state.files[state.current_file]
       if not file then return end
-      local ld, rd, ra = M.render_file_diff(layout.main_buf, file, state.review, state.discussions, state.context, state.ai_suggestions, state.note_selection, state.current_user, state.row_selection)
+      local ld, rd, ra = M.render_file_diff(layout.main_buf, file, state.review, state.discussions, state.context, state.ai_suggestions, state.row_selection, state.current_user)
       state.line_data_cache[state.current_file] = ld
       state.row_disc_cache[state.current_file] = rd
       state.row_ai_cache[state.current_file] = ra
@@ -2465,7 +2449,7 @@ function M.setup_keymaps(layout, state)
         else
           state.file_contexts[file_idx] = 99999
         end
-        local result = M.render_all_files(layout.main_buf, state.files, state.review, state.discussions, state.context, state.file_contexts, state.ai_suggestions, state.note_selection, state.current_user, state.row_selection)
+        local result = M.render_all_files(layout.main_buf, state.files, state.review, state.discussions, state.context, state.file_contexts, state.ai_suggestions, state.row_selection, state.current_user)
         state.file_sections = result.file_sections
         state.scroll_line_data = result.line_data
         state.scroll_row_disc = result.row_discussions
@@ -2482,7 +2466,7 @@ function M.setup_keymaps(layout, state)
         end
         local file = state.files and state.files[state.current_file]
         if not file then return end
-        local ld, rd, ra = M.render_file_diff(layout.main_buf, file, state.review, state.discussions, state.context, state.ai_suggestions, state.note_selection, state.current_user, state.row_selection)
+        local ld, rd, ra = M.render_file_diff(layout.main_buf, file, state.review, state.discussions, state.context, state.ai_suggestions, state.row_selection, state.current_user)
         state.line_data_cache[state.current_file] = ld
         state.row_disc_cache[state.current_file] = rd
         state.row_ai_cache[state.current_file] = ra
@@ -2665,7 +2649,9 @@ function M.setup_keymaps(layout, state)
       if state.view_mode ~= "diff" then return end
       local disc = get_cursor_disc()
       if not disc then return end
-      local sel_idx = state.note_selection[disc.id]
+      local cursor_row = vim.api.nvim_win_get_cursor(layout.main_win)[1]
+      local sel = state.row_selection[cursor_row]
+      local sel_idx = sel and sel.type == "comment" and sel.disc_id == disc.id and sel.note_idx or nil
       if not sel_idx then return end  -- no note selected; let edit_suggestion handle "e"
       local note = disc.notes[sel_idx]
       if not note then return end
@@ -2675,7 +2661,6 @@ function M.setup_keymaps(layout, state)
         return
       end
       local comment = require("codereview.mr.comment")
-      local cursor_row = vim.api.nvim_win_get_cursor(layout.main_win)[1]
       comment.edit_note(disc, note, state.review, function()
         rerender_view()
       end, { win_id = layout.main_win, anchor_line = cursor_row })
@@ -2685,7 +2670,9 @@ function M.setup_keymaps(layout, state)
       if state.view_mode ~= "diff" then return end
       local disc = get_cursor_disc()
       if not disc then return end
-      local sel_idx = state.note_selection[disc.id]
+      local cursor_row = vim.api.nvim_win_get_cursor(layout.main_win)[1]
+      local sel = state.row_selection[cursor_row]
+      local sel_idx = sel and sel.type == "comment" and sel.disc_id == disc.id and sel.note_idx or nil
       if not sel_idx then return end  -- no note selected; let dismiss_suggestion handle "x"
       local note = disc.notes[sel_idx]
       if not note then return end
@@ -2696,7 +2683,7 @@ function M.setup_keymaps(layout, state)
       end
       local comment = require("codereview.mr.comment")
       comment.delete_note(disc, note, state.review, function(result)
-        state.note_selection[disc.id] = nil  -- clear selection
+        state.row_selection[cursor_row] = nil  -- clear selection
         if result and result.removed_disc then
           for i, d in ipairs(state.discussions) do
             if d.id == disc.id then
@@ -2721,12 +2708,6 @@ function M.setup_keymaps(layout, state)
       local current = state.row_selection[cursor_row]
       local next_sel = M.cycle_row_selection(items, current, 1)
       state.row_selection = { [cursor_row] = next_sel }
-      -- Sync note_selection for comment rendering
-      if next_sel and next_sel.type == "comment" then
-        state.note_selection = { [next_sel.disc_id] = next_sel.note_idx }
-      else
-        state.note_selection = {}
-      end
       rerender_view()
     end,
 
@@ -2742,12 +2723,6 @@ function M.setup_keymaps(layout, state)
       local current = state.row_selection[cursor_row]
       local next_sel = M.cycle_row_selection(items, current, -1)
       state.row_selection = { [cursor_row] = next_sel }
-      -- Sync note_selection for comment rendering
-      if next_sel and next_sel.type == "comment" then
-        state.note_selection = { [next_sel.disc_id] = next_sel.note_idx }
-      else
-        state.note_selection = {}
-      end
       rerender_view()
     end,
 
@@ -2888,7 +2863,7 @@ function M.setup_keymaps(layout, state)
 
       if state.scroll_mode then
         -- Always re-render all files (buffer may have summary content)
-        local result = M.render_all_files(layout.main_buf, state.files, state.review, state.discussions, state.context, state.file_contexts, state.ai_suggestions, state.note_selection, state.current_user, state.row_selection)
+        local result = M.render_all_files(layout.main_buf, state.files, state.review, state.discussions, state.context, state.file_contexts, state.ai_suggestions, state.row_selection, state.current_user)
         state.file_sections = result.file_sections
         state.scroll_line_data = result.line_data
         state.scroll_row_disc = result.row_discussions
@@ -2903,7 +2878,7 @@ function M.setup_keymaps(layout, state)
       else
         M.render_sidebar(layout.sidebar_buf, state)
         local line_data, row_disc, row_ai = M.render_file_diff(
-          layout.main_buf, state.files[entry.idx], state.review, state.discussions, state.context, state.ai_suggestions, state.note_selection, state.current_user, state.row_selection)
+          layout.main_buf, state.files[entry.idx], state.review, state.discussions, state.context, state.ai_suggestions, state.row_selection, state.current_user)
         state.line_data_cache[entry.idx] = line_data
         state.row_disc_cache[entry.idx] = row_disc
         state.row_ai_cache[entry.idx] = row_ai
@@ -2966,44 +2941,16 @@ function M.setup_keymaps(layout, state)
         if not prev_sel then
           -- Auto-select first item on entering a row with items
           state.row_selection = { [cursor_row] = items[1] }
-          -- Sync note_selection for comment rendering
-          local first = items[1]
-          if first.type == "comment" then
-            state.note_selection = { [first.disc_id] = first.note_idx }
-          else
-            state.note_selection = {}
-          end
           rerender_view()
         elseif next(state.row_selection, next(state.row_selection)) or not state.row_selection[cursor_row] then
           -- Clear selections on other rows
           state.row_selection = { [cursor_row] = state.row_selection[cursor_row] }
-          local cur = state.row_selection[cursor_row]
-          if cur and cur.type == "comment" then
-            state.note_selection = { [cur.disc_id] = cur.note_idx }
-          else
-            state.note_selection = {}
-          end
           rerender_view()
-        else
-          -- Keep note_selection in sync (for comment rendering until Task 5)
-          local disc = get_cursor_disc()
-          if disc then
-            local sel = state.row_selection[cursor_row]
-            if sel and sel.type == "comment" and sel.disc_id == disc.id then
-              state.note_selection = { [disc.id] = sel.note_idx }
-            else
-              state.note_selection = { [disc.id] = 1 }
-            end
-          else
-            state.note_selection = {}
-          end
         end
       else
         local had = next(state.row_selection) ~= nil
         state.row_selection = {}
-        local had_note = next(state.note_selection) ~= nil
-        state.note_selection = {}
-        if had or had_note then rerender_view() end
+        if had then rerender_view() end
       end
 
       -- Sync sidebar file highlight in scroll mode
@@ -3035,7 +2982,6 @@ function M.load_diffs_into_state(state, files)
   state.row_ai_cache = state.row_ai_cache or {}
   state.scroll_row_ai = state.scroll_row_ai or {}
   state.local_drafts = state.local_drafts or {}
-  state.note_selection = state.note_selection or {}
   state.row_selection = state.row_selection or {}
   state.current_file = 1
 end
@@ -3085,7 +3031,6 @@ function M.open(review, discussions)
     row_ai_cache = {},
     scroll_row_ai = {},
     local_drafts = {},
-    note_selection = {},
     row_selection = {},
     current_user = nil,
   }
@@ -3098,13 +3043,13 @@ function M.open(review, discussions)
 
   if #files > 0 then
     if state.scroll_mode then
-      local render_result = M.render_all_files(layout.main_buf, files, review, state.discussions, state.context, state.file_contexts, state.ai_suggestions, state.note_selection, state.current_user, state.row_selection)
+      local render_result = M.render_all_files(layout.main_buf, files, review, state.discussions, state.context, state.file_contexts, state.ai_suggestions, state.row_selection, state.current_user)
       state.file_sections = render_result.file_sections
       state.scroll_line_data = render_result.line_data
       state.scroll_row_disc = render_result.row_discussions
       state.scroll_row_ai = render_result.row_ai
     else
-      local line_data, row_disc, row_ai = M.render_file_diff(layout.main_buf, files[1], review, state.discussions, state.context, state.ai_suggestions, state.note_selection, state.current_user, state.row_selection)
+      local line_data, row_disc, row_ai = M.render_file_diff(layout.main_buf, files[1], review, state.discussions, state.context, state.ai_suggestions, state.row_selection, state.current_user)
       state.line_data_cache[1] = line_data
       state.row_disc_cache[1] = row_disc
       state.row_ai_cache[1] = row_ai

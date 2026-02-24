@@ -28,41 +28,6 @@ describe("note selection + edit + delete", function()
     }
   end)
 
-  describe("cycle_note_selection", function()
-    it("cycles forward: nil → 1 → 2 → nil for 2-note thread", function()
-      assert.equals(1, diff.cycle_note_selection(nil, 2, 1))
-      assert.equals(2, diff.cycle_note_selection(1, 2, 1))
-      assert.is_nil(diff.cycle_note_selection(2, 2, 1))
-    end)
-
-    it("cycles backward: nil → 2 → 1 → nil for 2-note thread", function()
-      assert.equals(2, diff.cycle_note_selection(nil, 2, -1))
-      assert.equals(1, diff.cycle_note_selection(2, 2, -1))
-      assert.is_nil(diff.cycle_note_selection(1, 2, -1))
-    end)
-
-    it("handles single-note thread: nil → 1 → nil", function()
-      assert.equals(1, diff.cycle_note_selection(nil, 1, 1))
-      assert.is_nil(diff.cycle_note_selection(1, 1, 1))
-    end)
-
-    it("simulates selecting each note in a thread", function()
-      local note_count = #disc.notes
-      local sel = nil
-
-      sel = diff.cycle_note_selection(sel, note_count, 1)
-      assert.equals(1, sel)
-      assert.equals("original", disc.notes[sel].body)
-
-      sel = diff.cycle_note_selection(sel, note_count, 1)
-      assert.equals(2, sel)
-      assert.equals("reply text", disc.notes[sel].body)
-
-      sel = diff.cycle_note_selection(sel, note_count, 1)
-      assert.is_nil(sel)
-    end)
-  end)
-
   describe("edit note", function()
     it("updates note body in-place", function()
       disc.notes[1].body = "edited text"
