@@ -95,7 +95,7 @@ Token resolution order (first match wins):
 
 1. Environment variable — `GITHUB_TOKEN` or `GITLAB_TOKEN`
 2. Project config — `token` key in `.codereview.nvim`
-3. Plugin setup — `token` option in `setup()`
+3. Plugin setup — `github_token` or `gitlab_token` in `setup()`
 
 ## Plugin Configuration
 
@@ -105,7 +105,8 @@ require("codereview").setup({
   base_url = nil,       -- API base URL override
   project  = nil,       -- "owner/repo" override
   platform = nil,       -- "github" | "gitlab" | nil (auto-detect)
-  token    = nil,       -- auth token (falls back to env vars)
+  github_token = nil,   -- GitHub personal access token
+  gitlab_token = nil,   -- GitLab personal access token
 
   -- Picker: "telescope", "fzf", or "snacks" (auto-detected)
   picker = nil,
