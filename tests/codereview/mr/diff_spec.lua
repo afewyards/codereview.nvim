@@ -558,6 +558,85 @@ describe("mr.diff", function()
     end)
   end)
 
+  describe("build_row_items", function()
+    it("returns empty for no items", function()
+      assert.same({}, diff.build_row_items({}, {}))
+    end)
+
+    it("returns AI items first", function()
+      local ai = { { severity = "info" }, { severity = "error" } }
+      local result = diff.build_row_items(ai, {})
+      assert.same({
+        { type = "ai", index = 1 },
+        { type = "ai", index = 2 },
+      }, result)
+    end)
+
+    it("returns comment items after AI", function()
+      local ai = { { severity = "info" } }
+      local discs = {
+        { id = "d1", notes = { { id = "n1" }, { id = "n2" } } },
+        { id = "d2", notes = { { id = "n3" } } },
+      }
+      local result = diff.build_row_items(ai, discs)
+      assert.same({
+        { type = "ai", index = 1 },
+        { type = "comment", disc_id = "d1", note_idx = 1 },
+        { type = "comment", disc_id = "d1", note_idx = 2 },
+        { type = "comment", disc_id = "d2", note_idx = 1 },
+      }, result)
+    end)
+
+    it("skips system notes", function()
+      local discs = {
+        { id = "d1", notes = { { id = "n1" }, { id = "n2", system = true }, { id = "n3" } } },
+      }
+      local result = diff.build_row_items({}, discs)
+      assert.same({
+        { type = "comment", disc_id = "d1", note_idx = 1 },
+        { type = "comment", disc_id = "d1", note_idx = 3 },
+      }, result)
+    end)
+  end)
+
+  describe("cycle_row_selection", function()
+    local items = {
+      { type = "ai", index = 1 },
+      { type = "ai", index = 2 },
+      { type = "comment", disc_id = "d1", note_idx = 1 },
+    }
+
+    it("nil -> first item forward", function()
+      assert.same({ type = "ai", index = 1 }, diff.cycle_row_selection(items, nil, 1))
+    end)
+
+    it("cycles forward through items", function()
+      assert.same(items[2], diff.cycle_row_selection(items, items[1], 1))
+      assert.same(items[3], diff.cycle_row_selection(items, items[2], 1))
+    end)
+
+    it("returns nil past last item", function()
+      assert.is_nil(diff.cycle_row_selection(items, items[3], 1))
+    end)
+
+    it("nil -> last item backward", function()
+      assert.same(items[3], diff.cycle_row_selection(items, nil, -1))
+    end)
+
+    it("cycles backward", function()
+      assert.same(items[2], diff.cycle_row_selection(items, items[3], -1))
+      assert.same(items[1], diff.cycle_row_selection(items, items[2], -1))
+    end)
+
+    it("returns nil past first item backward", function()
+      assert.is_nil(diff.cycle_row_selection(items, items[1], -1))
+    end)
+
+    it("returns nil for empty items", function()
+      assert.is_nil(diff.cycle_row_selection({}, nil, 1))
+    end)
+  end)
+
   describe("load_diffs_into_state", function()
     it("sets state.files when not yet loaded", function()
       local state = {

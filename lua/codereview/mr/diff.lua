@@ -34,6 +34,52 @@ function M.cycle_note_selection(current, note_count, direction)
   return next_idx
 end
 
+--- Build ordered list of selectable items at a row.
+--- @param ai_suggestions table[] array of AI suggestions at this row
+--- @param discussions table[] array of discussions at this row
+--- @return table[] items ordered: AI first, then comment notes
+function M.build_row_items(ai_suggestions, discussions)
+  local items = {}
+  for i = 1, #ai_suggestions do
+    table.insert(items, { type = "ai", index = i })
+  end
+  for _, disc in ipairs(discussions) do
+    for ni, note in ipairs(disc.notes or {}) do
+      if not note.system then
+        table.insert(items, { type = "comment", disc_id = disc.id, note_idx = ni })
+      end
+    end
+  end
+  return items
+end
+
+--- Cycle through row items.
+--- @param items table[] from build_row_items
+--- @param current table|nil current selection
+--- @param direction number +1 forward, -1 backward
+--- @return table|nil next selection
+function M.cycle_row_selection(items, current, direction)
+  if #items == 0 then return nil end
+  if not current then
+    return direction > 0 and items[1] or items[#items]
+  end
+  -- Find current position
+  local pos
+  for i, item in ipairs(items) do
+    if item.type == current.type then
+      if item.type == "ai" and item.index == current.index then
+        pos = i; break
+      elseif item.type == "comment" and item.disc_id == current.disc_id and item.note_idx == current.note_idx then
+        pos = i; break
+      end
+    end
+  end
+  if not pos then return direction > 0 and items[1] or items[#items] end
+  local next_pos = pos + direction
+  if next_pos < 1 or next_pos > #items then return nil end
+  return items[next_pos]
+end
+
 -- ─── Formatting helpers ───────────────────────────────────────────────────────
 
 function M.format_line_number(old_nr, new_nr)
@@ -332,7 +378,8 @@ function M.place_ai_suggestions(buf, line_data, suggestions, file_diff)
               virt_lines_above = false,
             })
 
-            row_ai_map[row] = suggestion
+            if not row_ai_map[row] then row_ai_map[row] = {} end
+            table.insert(row_ai_map[row], suggestion)
             break
           end
         end
@@ -394,7 +441,8 @@ function M.place_ai_suggestions_all(buf, all_line_data, file_sections, suggestio
                 virt_lines_above = false,
               })
 
-              scroll_row_ai[i] = suggestion
+              if not scroll_row_ai[i] then scroll_row_ai[i] = {} end
+              table.insert(scroll_row_ai[i], suggestion)
               break
             end
           end
@@ -2407,7 +2455,7 @@ function M.setup_keymaps(layout, state)
       if state.view_mode ~= "diff" then return end
       local cursor = vim.api.nvim_win_get_cursor(layout.main_win)[1]
       local row_ai = state.scroll_mode and state.scroll_row_ai or (state.row_ai_cache[state.current_file] or {})
-      local suggestion = row_ai[cursor]
+      local suggestion = row_ai[cursor] and row_ai[cursor][1]
       if not suggestion then return end
 
       -- Post as draft comment via API
@@ -2439,7 +2487,7 @@ function M.setup_keymaps(layout, state)
       if state.view_mode ~= "diff" then return end
       local cursor = vim.api.nvim_win_get_cursor(layout.main_win)[1]
       local row_ai = state.scroll_mode and state.scroll_row_ai or (state.row_ai_cache[state.current_file] or {})
-      local suggestion = row_ai[cursor]
+      local suggestion = row_ai[cursor] and row_ai[cursor][1]
       if not suggestion then return end
       suggestion.status = "dismissed"
       rerender_ai()
@@ -2450,7 +2498,7 @@ function M.setup_keymaps(layout, state)
       if state.view_mode ~= "diff" then return end
       local cursor = vim.api.nvim_win_get_cursor(layout.main_win)[1]
       local row_ai = state.scroll_mode and state.scroll_row_ai or (state.row_ai_cache[state.current_file] or {})
-      local suggestion = row_ai[cursor]
+      local suggestion = row_ai[cursor] and row_ai[cursor][1]
       if not suggestion then return end
 
       -- Hide the suggestion's virt_lines while editing
