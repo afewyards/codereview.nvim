@@ -21,11 +21,12 @@ https://github.com/user-attachments/assets/e805a264-edf7-47ab-ab4d-5a2361826131
 
 > **Note: This project is in active development.** Core features are operational, but some areas are still being refined. Please report issues or unexpected behavior via [GitHub Issues](https://github.com/afewyards/codereview.nvim/issues).
 
-### Key Features
+## Features
 
 - **GitHub + GitLab** — auto-detects provider from git remote
 - **Dual-pane diff viewer** — sidebar file tree + unified diff with inline comments
-- **Threaded discussions** — view, reply, resolve/unresolve comment threads
+- **Threaded discussions** — view, reply, edit, delete, and resolve/unresolve comment threads
+- **Note selection** — cycle through notes in a thread with `<Tab>`/`<S-Tab>`, then edit or delete inline
 - **AI-powered review** — Claude-based code review with accept/dismiss/edit suggestions
 - **Review sessions** — accumulate draft comments, submit in batch
 - **MR actions** — approve, merge, open in browser, create new MR/PR
@@ -65,7 +66,38 @@ use {
 
 Opens a picker with open PRs/MRs. Select one to enter the review view with a file sidebar and diff viewer.
 
-## Configuration
+## Project Configuration
+
+Create a `.codereview.nvim` file in your project root to set per-project defaults:
+
+```ini
+# codereview.nvim project config
+platform = github
+project = afewyards/codereview.nvim
+base_url = https://api.github.com
+token = ghp_xxxxxxxxxxxx
+```
+
+Lines starting with `#` are comments. Keys and values are trimmed of whitespace.
+
+| Key | Description |
+|-----|-------------|
+| `platform` | `github` or `gitlab` (auto-detected from git remote if omitted) |
+| `project` | `owner/repo` (auto-detected from git remote if omitted) |
+| `base_url` | API URL override (e.g., self-hosted GitLab instance) |
+| `token` | Auth token for this project |
+
+> **Security:** Add `.codereview.nvim` to your `.gitignore` if it contains a token.
+
+## Authentication
+
+Token resolution order (first match wins):
+
+1. Environment variable — `GITHUB_TOKEN` or `GITLAB_TOKEN`
+2. Project config — `token` key in `.codereview.nvim`
+3. Plugin setup — `token` option in `setup()`
+
+## Plugin Configuration
 
 ```lua
 require("codereview").setup({
@@ -99,15 +131,6 @@ require("codereview").setup({
 })
 ```
 
-### Authentication
-
-Set your token via environment variable:
-
-- **GitLab:** `GITLAB_TOKEN`
-- **GitHub:** `GITHUB_TOKEN`
-
-Or pass `token` directly in `setup()`.
-
 ## Default Keymaps
 
 ### Navigation
@@ -126,6 +149,14 @@ Or pass `token` directly in `setup()`.
 | `cc` | Range comment (visual mode) |
 | `r` | Reply to thread |
 | `gt` | Toggle resolve / unresolve |
+
+### Comments & Notes
+
+| Key | Action |
+|-----|--------|
+| `<Tab>` / `<S-Tab>` | Select next / previous note |
+| `e` | Edit selected note |
+| `x` | Delete selected note |
 
 ### AI Suggestions
 
