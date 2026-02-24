@@ -74,6 +74,9 @@ local function normalize_note(raw)
       old_path = p.old_path,
       new_line = p.new_line,
       old_line = p.old_line,
+      base_sha = p.base_sha,
+      head_sha = p.head_sha,
+      start_sha = p.start_sha,
     }
     -- Preserve range start from line_range (GitLab range comments)
     if p.line_range and p.line_range.start then
@@ -81,6 +84,12 @@ local function normalize_note(raw)
       position.start_new_line = s.new_line
       position.start_old_line = s.old_line
     end
+  end
+
+  local change_position = nil
+  if raw.change_position then
+    local cp = raw.change_position
+    change_position = { new_path = cp.new_path, old_path = cp.old_path, new_line = cp.new_line, old_line = cp.old_line }
   end
 
   return {
@@ -93,6 +102,7 @@ local function normalize_note(raw)
     resolved = raw.resolved or false,
     resolved_by = type(raw.resolved_by) == "table" and raw.resolved_by.username or nil,
     position = position,
+    change_position = change_position,
   }
 end
 

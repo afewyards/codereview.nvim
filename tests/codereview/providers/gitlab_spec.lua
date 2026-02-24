@@ -45,6 +45,62 @@ describe("providers.gitlab", function()
       assert.equal("bob", d.notes[1].resolved_by)
       assert.equal("foo.lua", d.notes[1].position.path)
     end)
+
+    it("preserves position SHAs from raw.position", function()
+      local disc = {
+        id = "disc-2",
+        notes = { {
+          id = 101, author = { username = "alice" },
+          body = "comment", created_at = "2026-01-01T00:00:00Z",
+          system = false, resolvable = true, resolved = false,
+          position = {
+            new_path = "bar.lua", old_path = "bar.lua", new_line = 5, old_line = nil,
+            base_sha = "abc123", head_sha = "def456", start_sha = "ghi789",
+          },
+        } },
+      }
+      local d = gitlab.normalize_discussion(disc)
+      local pos = d.notes[1].position
+      assert.equal("abc123", pos.base_sha)
+      assert.equal("def456", pos.head_sha)
+      assert.equal("ghi789", pos.start_sha)
+    end)
+
+    it("preserves change_position when present", function()
+      local disc = {
+        id = "disc-3",
+        notes = { {
+          id = 102, author = { username = "alice" },
+          body = "outdated", created_at = "2026-01-01T00:00:00Z",
+          system = false, resolvable = true, resolved = false,
+          position = { new_path = "baz.lua", old_path = "baz.lua", new_line = 8, old_line = nil,
+            base_sha = "aaa", head_sha = "bbb", start_sha = "ccc" },
+          change_position = { new_path = "baz.lua", old_path = "baz_old.lua", new_line = 8, old_line = 7 },
+        } },
+      }
+      local d = gitlab.normalize_discussion(disc)
+      local cp = d.notes[1].change_position
+      assert.is_not_nil(cp)
+      assert.equal("baz.lua", cp.new_path)
+      assert.equal("baz_old.lua", cp.old_path)
+      assert.equal(8, cp.new_line)
+      assert.equal(7, cp.old_line)
+    end)
+
+    it("sets change_position to nil when absent", function()
+      local disc = {
+        id = "disc-4",
+        notes = { {
+          id = 103, author = { username = "alice" },
+          body = "current", created_at = "2026-01-01T00:00:00Z",
+          system = false, resolvable = true, resolved = false,
+          position = { new_path = "qux.lua", old_path = "qux.lua", new_line = 3, old_line = nil,
+            base_sha = "aaa", head_sha = "bbb", start_sha = "ccc" },
+        } },
+      }
+      local d = gitlab.normalize_discussion(disc)
+      assert.is_nil(d.notes[1].change_position)
+    end)
   end)
 
   describe("build_auth_header", function()
