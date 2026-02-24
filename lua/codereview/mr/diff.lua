@@ -1442,6 +1442,32 @@ local function nav_comment(layout, state, delta)
   end
 end
 
+function M.ensure_virt_lines_visible(win, buf, row)
+  if not vim.api.nvim_win_is_valid(win) then return end
+  local virt_count = 0
+  for _, ns in ipairs({ DIFF_NS, AIDRAFT_NS }) do
+    local marks = vim.api.nvim_buf_get_extmarks(buf, ns, { row - 1, 0 }, { row - 1, -1 }, { details = true })
+    for _, mark in ipairs(marks) do
+      local details = mark[4]
+      if details and details.virt_lines then
+        virt_count = virt_count + #details.virt_lines
+      end
+    end
+  end
+  if virt_count == 0 then return end
+
+  local win_height = vim.api.nvim_win_get_height(win)
+  local topline = vim.fn.winsaveview().topline
+  local screen_row = row - topline + 1
+  local needed = screen_row + virt_count
+
+  if needed > win_height then
+    local new_topline = topline + (needed - win_height)
+    if new_topline > row then new_topline = row end
+    vim.fn.winrestview({ topline = new_topline })
+  end
+end
+
 -- ─── Context adjustment ─────────────────────────────────────────────────────
 
 local function adjust_context(layout, state, delta)
