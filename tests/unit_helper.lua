@@ -98,6 +98,12 @@ _G.vim = {
     timer_start = function() return 1 end,
     timer_stop = function() end,
     getreg = function() return "" end,
+    confirm = function() return 1 end,
+    strdisplaywidth = function(s) return #s end,
+    screenpos = function() return { row = 5, col = 1 } end,
+    getwininfo = function() return {{ topline = 1 }} end,
+    winrestview = function() end,
+    winsaveview = function() return { lnum = 1, topline = 1 } end,
   },
   api = {
     nvim_command = function() end,
@@ -177,6 +183,9 @@ _G.vim = {
     nvim_buf_line_count = function(buf)
       return #(_buf_store[buf] or {})
     end,
+    nvim_buf_attach = function(buf, send_buffer, callbacks) return true end,
+    nvim_win_get_height = function() return 10 end,
+    nvim_win_get_buf = function() return 1 end,
     nvim_buf_get_extmarks = function(buf, ns, start, end_, opts)
       if not _extmark_store[buf] then return {} end
       if ns == -1 then
@@ -255,6 +264,9 @@ _G.vim = {
     end
     return result
   end,
+  keymap = {
+    set = function() end,
+  },
   filetype = {
     match = function() return nil end,
   },
