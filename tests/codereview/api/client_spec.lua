@@ -115,4 +115,27 @@ describe("api.client", function()
       assert.truthy(err:find("Connection refused"))
     end)
   end)
+
+  describe("get_url error handling", function()
+    local orig_request
+
+    before_each(function()
+      orig_request = _G._plenary_curl_stub.request
+    end)
+
+    after_each(function()
+      _G._plenary_curl_stub.request = orig_request
+    end)
+
+    it("returns nil and error when curl throws during get_url", function()
+      _G._plenary_curl_stub.request = function()
+        error("Could not resolve host")
+      end
+      local result, err = client.get_url("https://api.example.com/items", {
+        headers = { ["Authorization"] = "Bearer test" },
+      })
+      assert.is_nil(result)
+      assert.truthy(err:find("Could not resolve host"))
+    end)
+  end)
 end)
