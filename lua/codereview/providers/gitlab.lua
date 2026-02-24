@@ -157,11 +157,11 @@ end
 function M.get_diffs(client, ctx, review)
   local headers, err = get_headers()
   if not headers then return nil, err end
-  local result, err2 = client.get(ctx.base_url, mr_base(ctx, review.id) .. "/diffs", { headers = headers })
-  if not result then return nil, err2 end
+  local raw_diffs = client.paginate_all(ctx.base_url, mr_base(ctx, review.id) .. "/diffs", { headers = headers })
+  if not raw_diffs then return nil, "Failed to fetch diffs" end
 
   local diffs = {}
-  for _, f in ipairs(result.data or {}) do
+  for _, f in ipairs(raw_diffs) do
     table.insert(diffs, M.normalize_file_diff(f))
   end
   return diffs

@@ -179,11 +179,14 @@ function M.get_diffs(client, ctx, review)
   if not headers then return nil, err end
   local owner, repo = parse_owner_repo(ctx)
   local path_url = string.format("/repos/%s/%s/pulls/%d/files", owner, repo, review.id)
-  local result, err2 = client.get(ctx.base_url, path_url, { headers = headers })
-  if not result then return nil, err2 end
+  local all_files = client.paginate_all_url(
+    ctx.base_url .. path_url,
+    { headers = headers }
+  )
+  if not all_files then return nil, "Failed to fetch diffs" end
 
   local diffs = {}
-  for _, f in ipairs(result.data or {}) do
+  for _, f in ipairs(all_files) do
     table.insert(diffs, {
       new_path = f.filename,
       old_path = f.previous_filename or f.filename,
