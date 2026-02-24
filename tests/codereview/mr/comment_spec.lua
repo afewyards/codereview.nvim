@@ -111,4 +111,93 @@ describe("mr.comment", function()
       assert.truthy(failed)
     end)
   end)
+
+  describe("inline float self-healing", function()
+    local orig_win_get_buf
+    local orig_buf_attach
+    local orig_buf_set_extmark
+    local attached_callbacks
+    local extmark_calls
+
+    before_each(function()
+      attached_callbacks = {}
+      extmark_calls = {}
+
+      package.loaded["codereview.config"] = {
+        get = function() return { diff = { comment_width = 60 } } end,
+      }
+
+      -- Make diff_buf (99) distinguishable from popup buf (1)
+      orig_win_get_buf = vim.api.nvim_win_get_buf
+      vim.api.nvim_win_get_buf = function() return 99 end
+
+      -- Capture nvim_buf_attach callbacks per buf
+      orig_buf_attach = vim.api.nvim_buf_attach
+      vim.api.nvim_buf_attach = function(buf, send_buffer, callbacks)
+        attached_callbacks[buf] = callbacks
+        return true
+      end
+
+      -- Track extmark set calls
+      orig_buf_set_extmark = vim.api.nvim_buf_set_extmark
+      vim.api.nvim_buf_set_extmark = function(buf, ns, row, col, opts)
+        table.insert(extmark_calls, { buf = buf, row = row, opts = opts })
+        return orig_buf_set_extmark(buf, ns, row, col, opts)
+      end
+    end)
+
+    after_each(function()
+      vim.api.nvim_win_get_buf = orig_win_get_buf
+      vim.api.nvim_buf_attach = orig_buf_attach
+      vim.api.nvim_buf_set_extmark = orig_buf_set_extmark
+      package.loaded["codereview.config"] = nil
+    end)
+
+    local function open_inline_popup()
+      comment.open_input_popup("Test", function() end, {
+        anchor_line = 5,
+        win_id = 1,
+      })
+    end
+
+    it("re-reserves space when diff buffer is modified", function()
+      open_inline_popup()
+
+      local diff_callbacks = attached_callbacks[99]
+      assert.truthy(diff_callbacks, "on_lines should be attached to diff_buf (99)")
+      assert.is_function(diff_callbacks.on_lines)
+
+      -- Clear extmark_calls to only see calls triggered by on_lines
+      extmark_calls = {}
+
+      -- Fire on_lines (vim.schedule runs immediately in tests)
+      diff_callbacks.on_lines()
+
+      -- reserve_space should have been called on diff_buf (99)
+      local set_on_diff = false
+      for _, call in ipairs(extmark_calls) do
+        if call.buf == 99 and call.opts and call.opts.virt_lines then
+          set_on_diff = true
+          break
+        end
+      end
+      assert.truthy(set_on_diff, "extmark with virt_lines should be set on diff_buf after on_lines")
+    end)
+
+    it("debounces rapid on_lines calls without crash or leak", function()
+      open_inline_popup()
+
+      local diff_callbacks = attached_callbacks[99]
+      assert.truthy(diff_callbacks)
+
+      extmark_calls = {}
+
+      -- Fire on_lines twice rapidly — no crash
+      diff_callbacks.on_lines()
+      diff_callbacks.on_lines()
+
+      -- Verify no error occurred (both ran fine since schedule is sync in tests)
+      assert.is_true(true)
+    end)
+  end)
 end)

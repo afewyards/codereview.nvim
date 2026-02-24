@@ -43,6 +43,7 @@ function M.open_input_popup(title, callback, opts)
   local diff_buf
   local line_hl_ids = {}
   local reserve_line, reserve_above
+  local closed = false
 
   if use_inline then
     local anchor_0 = opts.anchor_line - 1  -- convert to 0-indexed
@@ -65,6 +66,29 @@ function M.open_input_popup(title, callback, opts)
       reserve_above = true
     end
     extmark_id = ifloat.reserve_space(diff_buf, reserve_line, total_height + 2, reserve_above)
+
+    -- Self-heal: re-reserve space when diff buffer is rewritten (e.g. AI suggestions)
+    local heal_pending = false
+    vim.api.nvim_buf_attach(diff_buf, false, {
+      on_lines = function()
+        if closed then return true end
+        if heal_pending then return end
+        heal_pending = true
+        vim.schedule(function()
+          heal_pending = false
+          if closed then return end
+          if not vim.api.nvim_buf_is_valid(diff_buf) then return end
+          local cur_h = vim.api.nvim_win_is_valid(win)
+            and vim.api.nvim_win_get_height(win) or total_height
+          extmark_id = ifloat.reserve_space(diff_buf, reserve_line, cur_h + 2, reserve_above)
+          if #line_hl_ids > 0 then
+            ifloat.clear_line_hl(diff_buf, line_hl_ids)
+            line_hl_ids = ifloat.highlight_lines(
+              diff_buf, opts.anchor_start or opts.anchor_line, opts.anchor_line)
+          end
+        end)
+      end,
+    })
 
     win = vim.api.nvim_open_win(buf, true, {
       relative = "win",
@@ -131,7 +155,6 @@ function M.open_input_popup(title, callback, opts)
     vim.cmd("startinsert")
   end
 
-  local closed = false
   local function close()
     if closed then return end
     closed = true
