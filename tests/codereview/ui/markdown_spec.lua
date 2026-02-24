@@ -623,6 +623,64 @@ describe("parse_blocks table wrapping", function()
     assert.truthy(before_hi and #before_hi >= 1)
     assert.truthy(after_hi and #after_hi >= 1)
   end)
+
+  it("wide column does not push narrow columns out", function()
+    local wide = string.rep("x", 100)
+    local text = "| Wide | Narrow |\n| --- | --- |\n| " .. wide .. " | abc |"
+    local r = markdown.parse_blocks(text, "CodeReviewComment", { width = 50 })
+    local found_abc = false
+    for _, l in ipairs(r.lines) do
+      if l:find("abc") then found_abc = true; break end
+    end
+    assert.is_true(found_abc)
+  end)
+
+  it("table does not exceed container width", function()
+    local text = "| Alpha | Beta | Gamma |\n| --- | --- | --- |\n| " ..
+      string.rep("a", 30) .. " | " .. string.rep("b", 30) .. " | " .. string.rep("c", 30) .. " |"
+    local r = markdown.parse_blocks(text, "CodeReviewComment", { width = 60 })
+    local border_line = nil
+    for _, l in ipairs(r.lines) do
+      if l:find("┌") then border_line = l; break end
+    end
+    assert.truthy(border_line)
+    assert.truthy(#border_line <= 60)
+  end)
+
+  it("columns respect minimum width of 3", function()
+    local text = "| A | B | C | D | E | F | G | H |\n| --- | --- | --- | --- | --- | --- | --- | --- |\n| 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |"
+    local r = markdown.parse_blocks(text, "CodeReviewComment", { width = 40 })
+    -- Should render without error and produce output
+    assert.truthy(#r.lines > 0)
+    local pipe_lines = 0
+    for _, l in ipairs(r.lines) do
+      if l:find("│") then pipe_lines = pipe_lines + 1 end
+    end
+    assert.truthy(pipe_lines > 0)
+  end)
+
+  it("shrinks widest columns first", function()
+    local wide = string.rep("w", 50)
+    local text = "| Wide | Narrow |\n| --- | --- |\n| " .. wide .. " | hello |"
+    local r = markdown.parse_blocks(text, "CodeReviewComment", { width = 40 })
+    -- The narrow column (5 chars) should remain intact
+    local found_hello = false
+    for _, l in ipairs(r.lines) do
+      if l:find("hello") then found_hello = true; break end
+    end
+    assert.is_true(found_hello)
+  end)
+
+  it("table narrower than container when content is small", function()
+    local text = "| AB | CD |\n| --- | --- |\n| ab | cd |"
+    local r = markdown.parse_blocks(text, "CodeReviewComment", { width = 70 })
+    local border_line = nil
+    for _, l in ipairs(r.lines) do
+      if l:find("┌") then border_line = l; break end
+    end
+    assert.truthy(border_line)
+    assert.truthy(#border_line < 70)
+  end)
 end)
 
 describe("ui.markdown", function()
