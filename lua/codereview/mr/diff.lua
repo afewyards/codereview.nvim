@@ -139,7 +139,7 @@ local function discussion_line(discussion, review)
   return end_line, start_line
 end
 
-function M.place_comment_signs(buf, line_data, discussions, file_diff, row_selection, current_user, review)
+function M.place_comment_signs(buf, line_data, discussions, file_diff, row_selection, current_user, review, editing_note)
   -- Remove old signs for this buffer
   pcall(vim.fn.sign_unplace, "CodeReview", { buffer = buf })
 
@@ -180,6 +180,8 @@ function M.place_comment_signs(buf, line_data, discussions, file_diff, row_selec
                 sel_idx = sel_idx,
                 current_user = current_user,
                 outdated = outdated,
+                editing_note = editing_note,
+                spacer_height = editing_note and editing_note.spacer_height or 0,
               })
               pcall(vim.api.nvim_buf_set_extmark, buf, DIFF_NS, row - 1, 0, {
                 virt_lines = result.virt_lines,
@@ -342,7 +344,7 @@ end
 
 -- ─── Diff rendering ───────────────────────────────────────────────────────────
 
-function M.render_file_diff(buf, file_diff, review, discussions, context, ai_suggestions, row_selection, current_user)
+function M.render_file_diff(buf, file_diff, review, discussions, context, ai_suggestions, row_selection, current_user, editing_note)
   local parser = require("codereview.mr.diff_parser")
   if not context then
     context = config.get().diff.context
@@ -469,7 +471,7 @@ function M.render_file_diff(buf, file_diff, review, discussions, context, ai_sug
 
   local row_discussions = {}
   if discussions then
-    row_discussions = M.place_comment_signs(buf, line_data, discussions, file_diff, row_selection, current_user, review) or {}
+    row_discussions = M.place_comment_signs(buf, line_data, discussions, file_diff, row_selection, current_user, review, editing_note) or {}
   end
 
   local row_ai = {}
@@ -482,7 +484,7 @@ end
 
 -- ─── All-files scroll view ────────────────────────────────────────────────────
 
-function M.render_all_files(buf, files, review, discussions, context, file_contexts, ai_suggestions, row_selection, current_user)
+function M.render_all_files(buf, files, review, discussions, context, file_contexts, ai_suggestions, row_selection, current_user, editing_note)
   local parser = require("codereview.mr.diff_parser")
   context = context or config.get().diff.context
   file_contexts = file_contexts or {}
@@ -694,6 +696,8 @@ function M.render_all_files(buf, files, review, discussions, context, file_conte
                   sel_idx = sel_idx,
                   current_user = current_user,
                   outdated = disc_outdated,
+                  editing_note = editing_note,
+                  spacer_height = editing_note and editing_note.spacer_height or 0,
                 })
                 pcall(vim.api.nvim_buf_set_extmark, buf, DIFF_NS, i - 1, 0, {
                   virt_lines = result.virt_lines, virt_lines_above = false,
@@ -1622,7 +1626,7 @@ function M.setup_keymaps(layout, state)
     local view = vim.fn.winsaveview()
 
     if state.scroll_mode then
-      local result = M.render_all_files(layout.main_buf, state.files, state.review, state.discussions, state.context, state.file_contexts, state.ai_suggestions, state.row_selection, state.current_user)
+      local result = M.render_all_files(layout.main_buf, state.files, state.review, state.discussions, state.context, state.file_contexts, state.ai_suggestions, state.row_selection, state.current_user, state.editing_note)
       state.file_sections = result.file_sections
       state.scroll_line_data = result.line_data
       state.scroll_row_disc = result.row_discussions
@@ -1630,7 +1634,7 @@ function M.setup_keymaps(layout, state)
     else
       local file = state.files and state.files[state.current_file]
       if file then
-        local ld, rd, ra = M.render_file_diff(layout.main_buf, file, state.review, state.discussions, state.context, state.ai_suggestions, state.row_selection, state.current_user)
+        local ld, rd, ra = M.render_file_diff(layout.main_buf, file, state.review, state.discussions, state.context, state.ai_suggestions, state.row_selection, state.current_user, state.editing_note)
         state.line_data_cache[state.current_file] = ld
         state.row_disc_cache[state.current_file] = rd
         state.row_ai_cache[state.current_file] = ra
@@ -2363,10 +2367,46 @@ function M.setup_keymaps(layout, state)
         vim.notify("Can only edit your own comments", vim.log.levels.WARN)
         return
       end
+
+      -- Compute initial popup height from the prefill line count
+      local ifloat = require("codereview.ui.inline_float")
+      local init_lines = vim.split(note.body or "", "\n")
+      local initial_height = ifloat.compute_height(#init_lines, 0)
+
+      -- Set editing_note state so rerender_view() draws spacer virt_lines
+      state.editing_note = {
+        disc_id = disc.id,
+        note_idx = sel_idx,
+        spacer_height = initial_height + 2,
+      }
+      rerender_view()
+
+      -- Compute spacer_offset: how many virt_lines precede the spacer
+      local spacer_offset = tvl.build(disc, {
+        sel_idx = sel_idx,
+        current_user = state.current_user,
+        editing_note = state.editing_note,
+        spacer_height = state.editing_note.spacer_height,
+      }).spacer_offset
+
       local comment = require("codereview.mr.comment")
       comment.edit_note(disc, note, state.review, function()
         rerender_view()
-      end, { win_id = layout.main_win, anchor_line = cursor_row })
+      end, {
+        win_id = layout.main_win,
+        anchor_line = cursor_row,
+        spacer_offset = spacer_offset,
+        on_close = function()
+          state.editing_note = nil
+          rerender_view()
+        end,
+        on_resize = function(new_h)
+          if state.editing_note then
+            state.editing_note.spacer_height = new_h + 2
+            rerender_view()
+          end
+        end,
+      })
     end,
 
     delete_note = function()

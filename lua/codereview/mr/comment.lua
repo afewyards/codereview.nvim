@@ -49,6 +49,11 @@ function M.open_input_popup(title, callback, opts)
     local anchor_0 = opts.anchor_line - 1  -- convert to 0-indexed
     diff_buf = vim.api.nvim_win_get_buf(opts.win_id)
 
+    -- Overlay mode: spacer_offset is set when editing an existing note inline.
+    -- The spacer virt_lines are already rendered in the diff; skip reserve_space
+    -- and self-heal since there is no separate reserved gap to maintain.
+    local is_edit_overlay = type(opts.spacer_offset) == "number"
+
     -- Highlight the target line(s)
     local hl_start = opts.anchor_start or opts.anchor_line
     line_hl_ids = ifloat.highlight_lines(diff_buf, hl_start, opts.anchor_line)
@@ -57,38 +62,40 @@ function M.open_input_popup(title, callback, opts)
     local max_w = cfg.diff.comment_width + 8  -- match rendered comment width + border/padding
     local width = math.min(win_width - 4, max_w)
 
-    -- Reserve space: when replying to a thread, place the gap on the next
-    -- buffer line (above it) so it appears after the comment's virt_lines.
-    reserve_line = anchor_0
-    reserve_above = false
-    if opts.thread_height and opts.thread_height > 0 then
-      reserve_line = anchor_0 + 1
-      reserve_above = true
-    end
-    extmark_id = ifloat.reserve_space(diff_buf, reserve_line, total_height + 2, reserve_above)
+    if not is_edit_overlay then
+      -- Reserve space: when replying to a thread, place the gap on the next
+      -- buffer line (above it) so it appears after the comment's virt_lines.
+      reserve_line = anchor_0
+      reserve_above = false
+      if opts.thread_height and opts.thread_height > 0 then
+        reserve_line = anchor_0 + 1
+        reserve_above = true
+      end
+      extmark_id = ifloat.reserve_space(diff_buf, reserve_line, total_height + 2, reserve_above)
 
-    -- Self-heal: re-reserve space when diff buffer is rewritten (e.g. AI suggestions)
-    local heal_pending = false
-    vim.api.nvim_buf_attach(diff_buf, false, {
-      on_lines = function()
-        if closed then return true end
-        if heal_pending then return end
-        heal_pending = true
-        vim.schedule(function()
-          heal_pending = false
-          if closed then return end
-          if not vim.api.nvim_buf_is_valid(diff_buf) then return end
-          local cur_h = vim.api.nvim_win_is_valid(win)
-            and vim.api.nvim_win_get_height(win) or total_height
-          extmark_id = ifloat.reserve_space(diff_buf, reserve_line, cur_h + 2, reserve_above)
-          if #line_hl_ids > 0 then
-            ifloat.clear_line_hl(diff_buf, line_hl_ids)
-            line_hl_ids = ifloat.highlight_lines(
-              diff_buf, opts.anchor_start or opts.anchor_line, opts.anchor_line)
-          end
-        end)
-      end,
-    })
+      -- Self-heal: re-reserve space when diff buffer is rewritten (e.g. AI suggestions)
+      local heal_pending = false
+      vim.api.nvim_buf_attach(diff_buf, false, {
+        on_lines = function()
+          if closed then return true end
+          if heal_pending then return end
+          heal_pending = true
+          vim.schedule(function()
+            heal_pending = false
+            if closed then return end
+            if not vim.api.nvim_buf_is_valid(diff_buf) then return end
+            local cur_h = vim.api.nvim_win_is_valid(win)
+              and vim.api.nvim_win_get_height(win) or total_height
+            extmark_id = ifloat.reserve_space(diff_buf, reserve_line, cur_h + 2, reserve_above)
+            if #line_hl_ids > 0 then
+              ifloat.clear_line_hl(diff_buf, line_hl_ids)
+              line_hl_ids = ifloat.highlight_lines(
+                diff_buf, opts.anchor_start or opts.anchor_line, opts.anchor_line)
+            end
+          end)
+        end,
+      })
+    end
 
     win = vim.api.nvim_open_win(buf, true, {
       relative = "win",
@@ -96,7 +103,7 @@ function M.open_input_popup(title, callback, opts)
       bufpos = { anchor_0, 0 },
       width = width,
       height = total_height,
-      row = (opts.thread_height or 0) + 1,
+      row = is_edit_overlay and (opts.spacer_offset + 1) or (opts.thread_height or 0) + 1,
       col = 1,
       style = "minimal",
       border = ifloat.border(opts.action_type),

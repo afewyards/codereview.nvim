@@ -200,4 +200,104 @@ describe("mr.comment", function()
       assert.is_true(true)
     end)
   end)
+
+  describe("overlay mode (spacer_offset)", function()
+    local orig_win_get_buf
+    local orig_buf_attach
+    local orig_open_win
+    local attached_diff_bufs
+    local open_win_config
+    local reserve_space_called
+
+    before_each(function()
+      attached_diff_bufs = {}
+      open_win_config = nil
+      reserve_space_called = false
+
+      package.loaded["codereview.config"] = {
+        get = function() return { diff = { comment_width = 60 } } end,
+      }
+
+      orig_win_get_buf = vim.api.nvim_win_get_buf
+      vim.api.nvim_win_get_buf = function() return 99 end
+
+      orig_buf_attach = vim.api.nvim_buf_attach
+      vim.api.nvim_buf_attach = function(buf, _, _)
+        if buf == 99 then table.insert(attached_diff_bufs, buf) end
+        return true
+      end
+
+      orig_open_win = vim.api.nvim_open_win
+      vim.api.nvim_open_win = function(buf, enter, config)
+        open_win_config = config
+        -- Use a safe editor-relative fallback so the window actually opens
+        return orig_open_win(buf, false, {
+          relative = "editor", width = 10, height = 3, row = 0, col = 0,
+        })
+      end
+    end)
+
+    after_each(function()
+      vim.api.nvim_win_get_buf = orig_win_get_buf
+      vim.api.nvim_buf_attach = orig_buf_attach
+      vim.api.nvim_open_win = orig_open_win
+      package.loaded["codereview.config"] = nil
+    end)
+
+    it("skips reserve_space when spacer_offset is set", function()
+      local orig_ifloat = package.loaded["codereview.ui.inline_float"]
+      local ifloat = require("codereview.ui.inline_float")
+      local orig_reserve = ifloat.reserve_space
+      ifloat.reserve_space = function(...)
+        reserve_space_called = true
+        return orig_reserve(...)
+      end
+
+      comment.open_input_popup("Edit", function() end, {
+        anchor_line = 5,
+        win_id = 1,
+        spacer_offset = 2,
+      })
+
+      ifloat.reserve_space = orig_reserve
+      assert.is_false(reserve_space_called)
+    end)
+
+    it("skips self-heal buf_attach on diff_buf when spacer_offset is set", function()
+      comment.open_input_popup("Edit", function() end, {
+        anchor_line = 5,
+        win_id = 1,
+        spacer_offset = 2,
+      })
+      assert.equals(0, #attached_diff_bufs)
+    end)
+
+    it("uses spacer_offset + 1 as float row when spacer_offset is set", function()
+      comment.open_input_popup("Edit", function() end, {
+        anchor_line = 5,
+        win_id = 1,
+        spacer_offset = 3,
+      })
+      assert.is_not_nil(open_win_config)
+      assert.equals(3 + 1, open_win_config.row)
+    end)
+
+    it("still opens normally (no spacer_offset) with reserve_space and buf_attach", function()
+      local ifloat = require("codereview.ui.inline_float")
+      local orig_reserve = ifloat.reserve_space
+      ifloat.reserve_space = function(...)
+        reserve_space_called = true
+        return orig_reserve(...)
+      end
+
+      comment.open_input_popup("Comment", function() end, {
+        anchor_line = 5,
+        win_id = 1,
+      })
+
+      ifloat.reserve_space = orig_reserve
+      assert.is_true(reserve_space_called)
+      assert.equals(1, #attached_diff_bufs)
+    end)
+  end)
 end)
