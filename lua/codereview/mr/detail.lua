@@ -12,7 +12,8 @@ function M.format_time(iso_str)
   return string.format("%s-%s-%s %s:%s", y, mo, d, h, mi)
 end
 
-function M.build_header_lines(review)
+function M.build_header_lines(review, width)
+  width = width or 70
   local pipeline_icon = list_mod.pipeline_icon(review.pipeline_status)
   local highlights = {}
   local lines = {
@@ -22,8 +23,8 @@ function M.build_header_lines(review)
     string.format("Status: %s   Pipeline: %s", review.state, pipeline_icon),
   }
 
-  local approved_by = review.approved_by or {}
-  local approvals_required = review.approvals_required or 0
+  local approved_by = (type(review.approved_by) == "table") and review.approved_by or {}
+  local approvals_required = (type(review.approvals_required) == "number") and review.approvals_required or 0
   if approvals_required > 0 or #approved_by > 0 then
     local approver_names = {}
     for _, name in ipairs(approved_by) do
@@ -37,13 +38,13 @@ function M.build_header_lines(review)
     ))
   end
 
-  table.insert(lines, string.rep("-", 70))
+  table.insert(lines, string.rep("-", width))
 
   local block_result = nil
   if review.description and review.description ~= "" then
     table.insert(lines, "")
     local desc_start = #lines
-    block_result = markdown.parse_blocks(review.description, "CodeReviewComment", { width = 70 })
+    block_result = markdown.parse_blocks(review.description, "CodeReviewComment", { width = width })
     for _, bl in ipairs(block_result.lines) do
       table.insert(lines, bl)
     end
@@ -89,7 +90,8 @@ local function format_time_short(iso_str)
   return string.format("%s/%s %s:%s", mo, d, h, mi)
 end
 
-function M.build_activity_lines(discussions)
+function M.build_activity_lines(discussions, width)
+  width = width or 60
   local result = { lines = {}, highlights = {}, row_map = {}, code_blocks = {} }
 
   if not discussions or #discussions == 0 then
@@ -172,7 +174,7 @@ function M.build_activity_lines(discussions)
 
         -- Body lines parsed for block-level markdown
         local body_start = #lines
-        local body_result = markdown.parse_blocks(first_note.body or "", "CodeReviewComment", { width = 60 })
+        local body_result = markdown.parse_blocks(first_note.body or "", "CodeReviewComment", { width = width })
         for _, bl in ipairs(body_result.lines) do
           local row = #lines
           table.insert(lines, bl)
@@ -214,7 +216,7 @@ function M.build_activity_lines(discussions)
             end
 
             local reply_body_start = #lines
-            local reply_result = markdown.parse_blocks(reply.body or "", "CodeReviewComment", { width = 60 })
+            local reply_result = markdown.parse_blocks(reply.body or "", "CodeReviewComment", { width = width })
             for _, rl in ipairs(reply_result.lines) do
               local rrow = #lines
               table.insert(lines, rl)
