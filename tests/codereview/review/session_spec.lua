@@ -1,5 +1,12 @@
 -- tests/codereview/review/session_spec.lua
 
+-- Stub spinner to avoid nvim_win_set_width dependency in headless tests
+package.loaded["codereview.ui.spinner"] = {
+  open = function() end,
+  close = function() end,
+  set_label = function() end,
+}
+
 local session = require("codereview.review.session")
 
 describe("review.session", function()
@@ -70,6 +77,48 @@ describe("review.session", function()
       assert.is_false(s.active)
       assert.is_false(s.ai_pending)
       assert.is_nil(s.ai_job_id)
+    end)
+  end)
+
+  describe("ai_start() with multiple jobs", function()
+    it("stores job_ids table and sets total count", function()
+      session.start()
+      session.ai_start({ 10, 20, 30 }, 3)
+      local s = session.get()
+      assert.is_true(s.ai_pending)
+      assert.same({ 10, 20, 30 }, s.ai_job_ids)
+      assert.equals(3, s.ai_total)
+      assert.equals(0, s.ai_completed)
+    end)
+
+    it("wraps single job_id in a table", function()
+      session.start()
+      session.ai_start(42)
+      local s = session.get()
+      assert.is_true(s.ai_pending)
+      assert.same({ 42 }, s.ai_job_ids)
+      assert.equals(1, s.ai_total)
+    end)
+  end)
+
+  describe("ai_file_done()", function()
+    it("increments completed counter", function()
+      session.start()
+      session.ai_start({ 10, 20 }, 2)
+      session.ai_file_done()
+      local s = session.get()
+      assert.equals(1, s.ai_completed)
+      assert.is_true(s.ai_pending)
+    end)
+
+    it("calls ai_finish when all files complete", function()
+      session.start()
+      session.ai_start({ 10, 20 }, 2)
+      session.ai_file_done()
+      session.ai_file_done()
+      local s = session.get()
+      assert.equals(2, s.ai_completed)
+      assert.is_false(s.ai_pending)
     end)
   end)
 end)
