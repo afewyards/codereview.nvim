@@ -1616,6 +1616,7 @@ function M.ensure_virt_lines_visible(win, buf, row)
   local total_height = 1 + virt_count -- comment row + virtual lines
   local new_topline = row - math.floor((win_height - total_height) / 2)
   if new_topline < 1 then new_topline = 1 end
+  if new_topline > row then new_topline = row end
   vim.fn.winrestview({ topline = new_topline })
 end
 
