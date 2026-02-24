@@ -113,6 +113,51 @@ function M.parse_mr_draft(output)
   return vim.trim(title), vim.trim(description)
 end
 
+function M.build_file_review_prompt(review, file, summaries)
+  local path = file.new_path or file.old_path
+  local parts = {
+    "You are reviewing a single file in a merge request.",
+    "",
+    "## MR Title",
+    review.title or "",
+    "",
+    "## MR Description",
+    review.description or "(no description)",
+    "",
+  }
+
+  -- Other changed files with summaries
+  local others = {}
+  for fpath, summary in pairs(summaries or {}) do
+    if fpath ~= path then
+      table.insert(others, string.format("- `%s`: %s", fpath, summary))
+    end
+  end
+  if #others > 0 then
+    table.insert(parts, "## Other Changed Files in This MR")
+    for _, line in ipairs(others) do
+      table.insert(parts, line)
+    end
+    table.insert(parts, "")
+  end
+
+  table.insert(parts, "## File Under Review: " .. path)
+  table.insert(parts, "```diff")
+  table.insert(parts, file.diff or "")
+  table.insert(parts, "```")
+  table.insert(parts, "")
+  table.insert(parts, "## Instructions")
+  table.insert(parts, "")
+  table.insert(parts, "Review this file. Output a JSON array in a ```json code block.")
+  table.insert(parts, 'Each item: {"file": "' .. path .. '", "line": <new_line_number>, "severity": "error"|"warning"|"info"|"suggestion", "comment": "text"}')
+  table.insert(parts, 'Use \\n inside "comment" strings for line breaks.')
+  table.insert(parts, "If no issues, output `[]`.")
+  table.insert(parts, "Focus on: bugs, security, error handling, edge cases, naming, clarity.")
+  table.insert(parts, "Do NOT comment on style or formatting.")
+
+  return table.concat(parts, "\n")
+end
+
 function M.build_summary_prompt(review, diffs)
   local parts = {
     "You are summarizing changes in a merge request for context.",
