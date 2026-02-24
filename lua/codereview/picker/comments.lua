@@ -72,11 +72,15 @@ function M.pick(state, layout)
     return
   end
 
+  local function rebuild(filter)
+    return M.build_entries(state.discussions, state.ai_suggestions, state.files or {}, filter)
+  end
+
   local adapter = picker.get_adapter(name)
   adapter.pick_comments(entries, function(entry)
     local diff = require("codereview.mr.diff")
     diff.jump_to_comment(layout, state, entry)
-  end, { filter_key = "<C-r>" })
+  end, { filter_key = "<C-r>", rebuild = rebuild })
 end
 
 return M
