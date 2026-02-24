@@ -31,6 +31,8 @@ local defaults = {
   select_prev_note     = { key = "<S-Tab>", mode = "n", desc = "Select prev note" },
   edit_note            = { key = "e",       mode = "n", desc = "Edit note" },
   delete_note          = { key = "x",       mode = "n", desc = "Delete note" },
+  pick_comments        = { key = "<leader>fc", mode = "n", desc = "Pick comment/suggestion" },
+  pick_files           = { key = "<leader>ff", mode = "n", desc = "Pick file" },
 }
 
 local function deep_copy(orig)

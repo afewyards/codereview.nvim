@@ -31,7 +31,7 @@ describe("keymaps", function()
       assert.equals("Q", all.quit.key)
       local count = 0
       for _ in pairs(all) do count = count + 1 end
-      assert.equals(30, count)
+      assert.equals(32, count)
     end)
 
     it("has select_next_note default", function()
@@ -52,6 +52,20 @@ describe("keymaps", function()
     it("has delete_note default sharing x key", function()
       keymaps.setup()
       assert.equals("x", keymaps.get("delete_note"))
+    end)
+
+    it("includes pick_comments default", function()
+      local km = require("codereview.keymaps")
+      km.reset()
+      km.setup()
+      assert.equals("<leader>fc", km.get("pick_comments"))
+    end)
+
+    it("includes pick_files default", function()
+      local km = require("codereview.keymaps")
+      km.reset()
+      km.setup()
+      assert.equals("<leader>ff", km.get("pick_files"))
     end)
   end)
 
