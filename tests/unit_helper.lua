@@ -136,6 +136,7 @@ _G.vim = {
     end,
     nvim_win_get_cursor = function() return { 1, 0 } end,
     nvim_win_get_width = function() return 120 end,
+    nvim_win_set_width = function() end,
     nvim_win_set_cursor = function() end,
     nvim_create_buf = function(listed, scratch)
       _buf_counter = _buf_counter + 1

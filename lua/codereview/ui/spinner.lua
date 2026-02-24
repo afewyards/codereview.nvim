@@ -3,21 +3,23 @@
 local M = {}
 
 local FRAMES = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" }
-local LABEL = " AI reviewing… "
+local DEFAULT_LABEL = " AI reviewing… "
 local INTERVAL_MS = 80
 
 local win_id = nil
 local buf_id = nil
 local timer_id = nil
 local frame_idx = 1
+local current_label = DEFAULT_LABEL
 
 function M.open()
   if win_id and vim.api.nvim_win_is_valid(win_id) then return end
 
+  current_label = DEFAULT_LABEL
   buf_id = vim.api.nvim_create_buf(false, true)
   vim.bo[buf_id].bufhidden = "wipe"
 
-  local width = #LABEL + 2 -- frame char + space
+  local width = #current_label + 2 -- frame char + space
   win_id = vim.api.nvim_open_win(buf_id, false, {
     relative = "editor",
     anchor = "NE",
@@ -39,8 +41,13 @@ function M.open()
       M.close()
       return
     end
-    local text = " " .. FRAMES[frame_idx] .. LABEL
+    local text = " " .. FRAMES[frame_idx] .. current_label
     vim.api.nvim_buf_set_lines(buf_id, 0, -1, false, { text })
+    -- Resize window to fit new label
+    if win_id and vim.api.nvim_win_is_valid(win_id) then
+      local new_width = #text + 1
+      vim.api.nvim_win_set_width(win_id, new_width)
+    end
     frame_idx = frame_idx % #FRAMES + 1
   end
 
@@ -48,6 +55,12 @@ function M.open()
   timer_id = vim.fn.timer_start(INTERVAL_MS, function()
     vim.schedule(update)
   end, { ["repeat"] = -1 })
+end
+
+--- Update the spinner label text (e.g. " AI reviewing… 3/8 files ").
+---@param label string
+function M.set_label(label)
+  current_label = label
 end
 
 function M.close()
@@ -61,6 +74,7 @@ function M.close()
   win_id = nil
   buf_id = nil
   frame_idx = 1
+  current_label = DEFAULT_LABEL
 end
 
 return M
