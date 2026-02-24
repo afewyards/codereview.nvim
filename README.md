@@ -139,8 +139,7 @@ require("codereview").setup({
 | Key | Action |
 |-----|--------|
 | `]f` / `[f` | Next / previous file |
-| `]c` / `[c` | Next / previous comment |
-| `]s` / `[s` | Next / previous AI suggestion |
+| `Tab` / `S-Tab` | Next / previous annotation (comment or AI suggestion), cycles within row then across rows and files |
 
 ### Comments & Discussions
 
