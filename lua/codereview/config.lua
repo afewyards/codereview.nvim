@@ -5,7 +5,8 @@ local defaults = {
   base_url = nil,     -- API base URL override (auto-detected). Alias: gitlab_url
   project = nil,
   platform = nil,     -- "github" | "gitlab" | nil (auto-detect)
-  token = nil,
+  github_token = nil,
+  gitlab_token = nil,
   picker = nil,
   debug = false,      -- write request/auth logs to .codereview.log
   diff = { context = 8, scroll_threshold = 50, comment_width = 64 },
@@ -37,6 +38,12 @@ function M.setup(opts)
   -- Backward compat: gitlab_url → base_url
   if current.gitlab_url and not current.base_url then
     current.base_url = current.gitlab_url
+  end
+  if current.token then
+    vim.notify(
+      "[codereview] `token` is deprecated. Use `github_token` or `gitlab_token` instead.",
+      vim.log.levels.WARN
+    )
   end
   require("codereview.keymaps").setup(current.keymaps)
 end
