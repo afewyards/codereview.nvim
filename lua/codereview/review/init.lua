@@ -41,7 +41,10 @@ local function render_file_suggestions(diff_state, layout, suggestions)
       end
     end
     diff_mod.render_sidebar(layout.sidebar_buf, diff_state)
-    vim.api.nvim_set_current_win(layout.main_win)
+    local cur_win = vim.api.nvim_get_current_win()
+    if cur_win == layout.main_win or cur_win == layout.sidebar_win then
+      vim.api.nvim_set_current_win(layout.main_win)
+    end
   end)
 end
 

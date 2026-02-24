@@ -130,3 +130,53 @@ describe("review.init routing", function()
     assert.falsy(first.prompt:find("orchestrat"), "single-file should NOT use orchestrator prompt")
   end)
 end)
+
+describe("render_file_suggestions focus guard", function()
+  local orig_run, orig_get_current_win, orig_set_current_win
+
+  before_each(function()
+    orig_run = package.loaded["codereview.ai.subprocess"].run
+    orig_get_current_win = vim.api.nvim_get_current_win
+    orig_set_current_win = vim.api.nvim_set_current_win
+    package.loaded["codereview.ai.subprocess"].run = function(prompt, callback)
+      callback('```json\n[{"file":"a.lua","line":1,"severity":"suggestion","comment":"test note"}]\n```')
+      return 1
+    end
+  end)
+
+  after_each(function()
+    package.loaded["codereview.ai.subprocess"].run = orig_run
+    vim.api.nvim_get_current_win = orig_get_current_win
+    vim.api.nvim_set_current_win = orig_set_current_win
+  end)
+
+  it("skips set_current_win when current window is a float", function()
+    local set_win_calls = {}
+    vim.api.nvim_set_current_win = function(w) table.insert(set_win_calls, w) end
+    vim.api.nvim_get_current_win = function() return 999 end
+    local diff_state = {
+      files = { { new_path = "a.lua", diff = "diff-a" } },
+      discussions = {}, ai_suggestions = {}, view_mode = "diff",
+      current_file = 1, scroll_mode = false,
+      line_data_cache = {}, row_disc_cache = {}, row_ai_cache = {},
+    }
+    local layout = { main_buf = 0, sidebar_buf = 0, main_win = 1, sidebar_win = 2 }
+    review_mod.start({ title = "T", description = "d" }, diff_state, layout)
+    assert.equals(0, #set_win_calls, "set_current_win should not be called when a float is active")
+  end)
+
+  it("calls set_current_win when current window is main_win", function()
+    local set_win_calls = {}
+    vim.api.nvim_set_current_win = function(w) table.insert(set_win_calls, w) end
+    vim.api.nvim_get_current_win = function() return 1 end
+    local diff_state = {
+      files = { { new_path = "a.lua", diff = "diff-a" } },
+      discussions = {}, ai_suggestions = {}, view_mode = "diff",
+      current_file = 1, scroll_mode = false,
+      line_data_cache = {}, row_disc_cache = {}, row_ai_cache = {},
+    }
+    local layout = { main_buf = 0, sidebar_buf = 0, main_win = 1, sidebar_win = 2 }
+    review_mod.start({ title = "T", description = "d" }, diff_state, layout)
+    assert.truthy(#set_win_calls > 0, "set_current_win should be called when main_win is active")
+  end)
+end)
