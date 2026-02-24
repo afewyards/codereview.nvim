@@ -233,3 +233,120 @@ describe("providers.gitlab", function()
     end)
   end)
 end)
+
+describe("get_draft_notes", function()
+  before_each(function()
+    package.loaded["codereview.api.auth"] = {
+      get_token = function() return "glpat-test", "pat" end,
+    }
+  end)
+  after_each(function()
+    package.loaded["codereview.api.auth"] = nil
+  end)
+
+  it("fetches and normalizes draft notes into discussion shape", function()
+    local mock_client = {
+      paginate_all = function(_, path, _)
+        assert.truthy(path:find("/draft_notes"))
+        return {
+          {
+            id = 101,
+            author = { username = "alice" },
+            note = "fix this",
+            created_at = "2026-01-01T00:00:00Z",
+            position = {
+              new_path = "foo.lua", old_path = "foo.lua",
+              new_line = 10, old_line = nil,
+              base_sha = "aaa", head_sha = "bbb", start_sha = "ccc",
+              position_type = "text",
+            },
+          },
+        }
+      end,
+    }
+    local ctx = { base_url = "https://gitlab.com", project = "owner/repo" }
+    local review = { id = 42 }
+    local drafts, err = gitlab.get_draft_notes(mock_client, ctx, review)
+    assert.is_nil(err)
+    assert.equal(1, #drafts)
+    assert.is_true(drafts[1].is_draft)
+    assert.equal("You (draft)", drafts[1].notes[1].author)
+    assert.equal("fix this", drafts[1].notes[1].body)
+    assert.equal("foo.lua", drafts[1].notes[1].position.new_path)
+    assert.equal(10, drafts[1].notes[1].position.new_line)
+    assert.equal(101, drafts[1].server_draft_id)
+  end)
+
+  it("handles change_position for outdated drafts", function()
+    local mock_client = {
+      paginate_all = function()
+        return {
+          {
+            id = 102, note = "outdated draft",
+            position = {
+              new_path = "old.lua", old_path = "old.lua",
+              new_line = 5, old_line = nil,
+              base_sha = "aaa", head_sha = "bbb", start_sha = "ccc",
+            },
+            change_position = {
+              new_path = "new.lua", old_path = "old.lua",
+              new_line = 8, old_line = 5,
+            },
+          },
+        }
+      end,
+    }
+    local ctx = { base_url = "https://gitlab.com", project = "owner/repo" }
+    local drafts = gitlab.get_draft_notes(mock_client, ctx, { id = 1 })
+    assert.equal(1, #drafts)
+    local note = drafts[1].notes[1]
+    assert.is_not_nil(note.change_position)
+    assert.equal("new.lua", note.change_position.new_path)
+    assert.equal(8, note.change_position.new_line)
+  end)
+
+  it("returns empty table when no drafts", function()
+    local mock_client = {
+      paginate_all = function() return {} end,
+    }
+    local ctx = { base_url = "https://gitlab.com", project = "owner/repo" }
+    local drafts = gitlab.get_draft_notes(mock_client, ctx, { id = 1 })
+    assert.equal(0, #drafts)
+  end)
+
+  it("handles drafts without position (general MR comments)", function()
+    local mock_client = {
+      paginate_all = function()
+        return { { id = 103, note = "general comment" } }
+      end,
+    }
+    local ctx = { base_url = "https://gitlab.com", project = "owner/repo" }
+    local drafts = gitlab.get_draft_notes(mock_client, ctx, { id = 1 })
+    assert.equal(1, #drafts)
+    assert.is_nil(drafts[1].notes[1].position)
+  end)
+end)
+
+describe("delete_draft_note", function()
+  before_each(function()
+    package.loaded["codereview.api.auth"] = {
+      get_token = function() return "glpat-test", "pat" end,
+    }
+  end)
+  after_each(function()
+    package.loaded["codereview.api.auth"] = nil
+  end)
+
+  it("DELETEs draft_notes/:id", function()
+    local deleted_url
+    local mock_client = {
+      delete = function(_, path, _)
+        deleted_url = path
+        return { status = 204 }
+      end,
+    }
+    local ctx = { base_url = "https://gitlab.com", project = "owner/repo" }
+    gitlab.delete_draft_note(mock_client, ctx, { id = 42 }, 101)
+    assert.truthy(deleted_url:find("/draft_notes/101"))
+  end)
+end)

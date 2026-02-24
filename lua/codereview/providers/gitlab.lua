@@ -336,6 +336,59 @@ function M.close(client, ctx, review)
   )
 end
 
+--- Fetch all draft notes for an MR (unpublished review comments).
+function M.get_draft_notes(client, ctx, review)
+  local headers, err = get_headers()
+  if not headers then return nil, err end
+  local raw_drafts = client.paginate_all(ctx.base_url, mr_base(ctx, review.id) .. "/draft_notes", { headers = headers })
+  if not raw_drafts then return {}, nil end
+
+  local drafts = {}
+  for _, raw in ipairs(raw_drafts) do
+    local position = nil
+    if raw.position then
+      local p = raw.position
+      position = {
+        path = p.new_path or p.old_path,
+        new_path = p.new_path,
+        old_path = p.old_path,
+        new_line = p.new_line,
+        old_line = p.old_line,
+        base_sha = p.base_sha,
+        head_sha = p.head_sha,
+        start_sha = p.start_sha,
+      }
+    end
+
+    -- Preserve change_position for outdated drafts (matches normalize_note behavior)
+    local change_position = nil
+    if raw.change_position then
+      local cp = raw.change_position
+      change_position = { new_path = cp.new_path, old_path = cp.old_path, new_line = cp.new_line, old_line = cp.old_line }
+    end
+
+    table.insert(drafts, {
+      notes = {{
+        author = "You (draft)",
+        body = raw.note or "",
+        created_at = raw.created_at or "",
+        position = position,
+        change_position = change_position,
+      }},
+      is_draft = true,
+      server_draft_id = raw.id,
+    })
+  end
+  return drafts
+end
+
+--- Delete a single draft note.
+function M.delete_draft_note(client, ctx, review, draft_id)
+  local headers, err = get_headers()
+  if not headers then return nil, err end
+  return client.delete(ctx.base_url, mr_base(ctx, review.id) .. "/draft_notes/" .. draft_id, { headers = headers })
+end
+
 --- Create a draft note on an MR (not visible until published).
 --- @param params table { body, path, line }
 function M.create_draft_comment(client, ctx, review, params)
