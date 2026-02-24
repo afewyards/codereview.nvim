@@ -1406,6 +1406,7 @@ local function nav_comment(layout, state, delta)
     for _, r in ipairs(comment_rows) do
       if r > current_row then
         vim.api.nvim_win_set_cursor(layout.main_win, { r, 0 })
+        M.ensure_virt_lines_visible(layout.main_win, layout.main_buf, r)
         return
       end
     end
@@ -1416,6 +1417,7 @@ local function nav_comment(layout, state, delta)
         local rows = get_comment_rows(state, i)
         if #rows > 0 then
           vim.api.nvim_win_set_cursor(layout.main_win, { rows[1], 0 })
+          M.ensure_virt_lines_visible(layout.main_win, layout.main_buf, rows[1])
         end
         return
       end
@@ -1425,6 +1427,7 @@ local function nav_comment(layout, state, delta)
     for i = #comment_rows, 1, -1 do
       if comment_rows[i] < current_row then
         vim.api.nvim_win_set_cursor(layout.main_win, { comment_rows[i], 0 })
+        M.ensure_virt_lines_visible(layout.main_win, layout.main_buf, comment_rows[i])
         return
       end
     end
@@ -1435,6 +1438,7 @@ local function nav_comment(layout, state, delta)
         local rows = get_comment_rows(state, i)
         if #rows > 0 then
           vim.api.nvim_win_set_cursor(layout.main_win, { rows[#rows], 0 })
+          M.ensure_virt_lines_visible(layout.main_win, layout.main_buf, rows[#rows])
         end
         return
       end
@@ -1922,6 +1926,7 @@ function M.setup_keymaps(layout, state)
         for _, r in ipairs(rows) do
           if r > cursor then
             vim.api.nvim_win_set_cursor(layout.main_win, { r, 0 })
+            M.ensure_virt_lines_visible(layout.main_win, layout.main_buf, r)
             return
           end
         end
@@ -1951,6 +1956,7 @@ function M.setup_keymaps(layout, state)
         for i = #rows, 1, -1 do
           if rows[i] < cursor then
             vim.api.nvim_win_set_cursor(layout.main_win, { rows[i], 0 })
+            M.ensure_virt_lines_visible(layout.main_win, layout.main_buf, rows[i])
             return
           end
         end
@@ -1969,6 +1975,7 @@ function M.setup_keymaps(layout, state)
       for _, r in ipairs(rows) do
         if r > cursor then
           vim.api.nvim_win_set_cursor(layout.main_win, { r, 0 })
+          M.ensure_virt_lines_visible(layout.main_win, layout.main_buf, r)
           return
         end
       end
@@ -1984,6 +1991,7 @@ function M.setup_keymaps(layout, state)
       for i = #rows, 1, -1 do
         if rows[i] < cursor then
           vim.api.nvim_win_set_cursor(layout.main_win, { rows[i], 0 })
+          M.ensure_virt_lines_visible(layout.main_win, layout.main_buf, rows[i])
           return
         end
       end
