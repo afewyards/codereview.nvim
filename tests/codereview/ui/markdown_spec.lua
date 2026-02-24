@@ -582,6 +582,49 @@ describe("parse_blocks tables", function()
   end)
 end)
 
+describe("parse_blocks table wrapping", function()
+  it("wraps long cell text", function()
+    local long = string.rep("word ", 20)  -- 100 chars
+    local text = "| Header |\n| --- |\n| " .. long .. "|"
+    local r = markdown.parse_blocks(text, "CodeReviewComment", { width = 40 })
+    -- Should produce multiple buffer lines for the data row
+    local data_lines = 0
+    for _, l in ipairs(r.lines) do
+      if l:find("word") then data_lines = data_lines + 1 end
+    end
+    assert.truthy(data_lines > 1)
+  end)
+
+  it("right-aligns cells per separator", function()
+    local text = "| Num |\n| ---: |\n| 42 |"
+    local r = markdown.parse_blocks(text, "CodeReviewComment", { width = 40 })
+    -- "42" should be right-padded (spaces before the value)
+    local data_line = nil
+    for _, l in ipairs(r.lines) do
+      if l:find("42") then data_line = l; break end
+    end
+    assert.truthy(data_line)
+    -- Right align: spaces before 42
+    local before_42 = data_line:match("│(.-)42")
+    assert.truthy(before_42 and #before_42 > 1)
+  end)
+
+  it("center-aligns cells per separator", function()
+    local text = "| Col |\n| :---: |\n| hi |"
+    local r = markdown.parse_blocks(text, "CodeReviewComment", { width = 40 })
+    local data_line = nil
+    for _, l in ipairs(r.lines) do
+      if l:find("hi") then data_line = l; break end
+    end
+    assert.truthy(data_line)
+    -- Center align: spaces on both sides of "hi"
+    local before_hi = data_line:match("│(.-)hi")
+    local after_hi = data_line:match("hi(.-)[│┘]")
+    assert.truthy(before_hi and #before_hi >= 1)
+    assert.truthy(after_hi and #after_hi >= 1)
+  end)
+end)
+
 describe("ui.markdown", function()
   it("renders plain text lines", function()
     local lines = markdown.to_lines("Hello world\nSecond line")

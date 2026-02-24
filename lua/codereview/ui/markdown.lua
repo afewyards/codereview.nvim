@@ -319,45 +319,105 @@ end
 -- e.g. "| |"       -> {""}   (one empty cell)
 local function parse_table_row(line)
   local cells = {}
-  -- Strip leading/trailing whitespace from the whole line
   local s = line:match("^%s*(.-)%s*$") or line
-  -- Strip surrounding pipes if present
   s = s:match("^|(.-)%s*|?$") or s
-  -- Split by |
   for cell in (s .. "|"):gmatch("([^|]*)|") do
     table.insert(cells, cell:match("^%s*(.-)%s*$"))
   end
-  -- Drop only the single trailing empty string that the split pattern appends
   if #cells > 1 and cells[#cells] == "" then
     table.remove(cells)
   end
   return cells
 end
 
--- Render a pipe table from raw lines.
+-- Parse separator cell into alignment: "left", "right", or "center"
+local function parse_alignment(sep_cell)
+  local s = sep_cell:match("^%s*(.-)%s*$")
+  local has_left  = s:sub(1, 1) == ":"
+  local has_right = s:sub(-1) == ":"
+  if has_left and has_right then return "center" end
+  if has_right then return "right" end
+  return "left"
+end
+
+-- Word-wrap text to fit within max_width. Returns list of strings.
+local function word_wrap(text, max_width)
+  if #text <= max_width then return { text } end
+  local lines = {}
+  local current = ""
+  for word in text:gmatch("%S+") do
+    if current == "" then
+      if #word > max_width then
+        while #word > max_width do
+          table.insert(lines, word:sub(1, max_width))
+          word = word:sub(max_width + 1)
+        end
+        current = word
+      else
+        current = word
+      end
+    elseif #current + 1 + #word <= max_width then
+      current = current .. " " .. word
+    else
+      table.insert(lines, current)
+      if #word > max_width then
+        while #word > max_width do
+          table.insert(lines, word:sub(1, max_width))
+          word = word:sub(max_width + 1)
+        end
+        current = word
+      else
+        current = word
+      end
+    end
+  end
+  if current ~= "" then table.insert(lines, current) end
+  if #lines == 0 then return { "" } end
+  return lines
+end
+
+-- Pad text to exactly width chars with the given alignment.
+local function pad_cell(text, width, align)
+  local len = #text
+  if len >= width then return text:sub(1, width) end
+  local pad = width - len
+  if align == "right" then
+    return string.rep(" ", pad) .. text
+  elseif align == "center" then
+    local lp = math.floor(pad / 2)
+    return string.rep(" ", lp) .. text .. string.rep(" ", pad - lp)
+  else
+    return text .. string.rep(" ", pad)
+  end
+end
+
+-- Render a pipe table from raw lines with cell wrapping and alignment.
 -- Returns { lines = {...}, highlights = {...} } with row indices starting at start_row.
 local function render_table(tbl_lines, base_hl, start_row, opts)
   local result = { lines = {}, highlights = {} }
   if #tbl_lines < 2 then return result end
 
-  -- Parse header row (first line)
   local header_cells = parse_table_row(tbl_lines[1])
   local num_cols = #header_cells
   if num_cols == 0 then return result end
 
-  -- Parse data rows (remaining lines after separator)
+  -- Parse separator row for alignments
+  local sep_cells = parse_table_row(tbl_lines[2])
+  local alignments = {}
+  for ci = 1, num_cols do
+    alignments[ci] = sep_cells[ci] and parse_alignment(sep_cells[ci]) or "left"
+  end
+
+  -- Parse data rows; pad short rows with empty cells
   local data_rows = {}
   for li = 3, #tbl_lines do
     local row_cells = parse_table_row(tbl_lines[li])
-    -- Pad short rows with empty cells; ignore extra cells
     local padded = {}
-    for ci = 1, num_cols do
-      padded[ci] = row_cells[ci] or ""
-    end
+    for ci = 1, num_cols do padded[ci] = row_cells[ci] or "" end
     table.insert(data_rows, padded)
   end
 
-  -- Calculate max column widths
+  -- Calculate column widths, then apply wrapping cap
   local col_widths = {}
   for ci = 1, num_cols do
     col_widths[ci] = math.max(3, #header_cells[ci])
@@ -365,8 +425,11 @@ local function render_table(tbl_lines, base_hl, start_row, opts)
       col_widths[ci] = math.max(col_widths[ci], #row[ci])
     end
   end
+  local max_col_width = math.max(5, math.floor((opts.width or 70) / num_cols) - 3)
+  for ci = 1, num_cols do
+    col_widths[ci] = math.min(col_widths[ci], max_col_width)
+  end
 
-  -- Helper: build a border line using box-drawing chars
   local function make_border(left, mid, right, fill)
     local parts = {}
     for ci = 1, num_cols do
@@ -375,7 +438,6 @@ local function render_table(tbl_lines, base_hl, start_row, opts)
     return left .. table.concat(parts, mid) .. right
   end
 
-  -- Helper: emit a line into result with a highlight
   local function emit(line_text, hl_group)
     local row = start_row + #result.lines
     table.insert(result.lines, line_text)
@@ -384,14 +446,6 @@ local function render_table(tbl_lines, base_hl, start_row, opts)
     end
   end
 
-  -- Helper: left-pad a cell value to col_widths[ci]
-  local function pad_left(text, width)
-    local len = #text
-    if len >= width then return text:sub(1, width) end
-    return text .. string.rep(" ", width - len)
-  end
-
-  -- Helper: build a data row string from cell values
   local function make_data_line(cell_values)
     local parts = {}
     for ci = 1, num_cols do
@@ -404,23 +458,41 @@ local function render_table(tbl_lines, base_hl, start_row, opts)
   -- Emit top border
   emit(make_border("┌", "┬", "┐", "─"), "CodeReviewMdTableBorder")
 
-  -- Emit header row (left-aligned)
-  local cell_values = {}
+  -- Emit header row (wrapped + aligned)
+  local header_wrapped = {}
+  local header_max_lines = 1
   for ci = 1, num_cols do
-    cell_values[ci] = pad_left(header_cells[ci], col_widths[ci])
+    local wrapped = word_wrap(header_cells[ci], col_widths[ci])
+    header_wrapped[ci] = wrapped
+    header_max_lines = math.max(header_max_lines, #wrapped)
   end
-  emit(make_data_line(cell_values), "CodeReviewMdTableHeader")
+  for li = 1, header_max_lines do
+    local cv = {}
+    for ci = 1, num_cols do
+      cv[ci] = pad_cell(header_wrapped[ci][li] or "", col_widths[ci], alignments[ci])
+    end
+    emit(make_data_line(cv), "CodeReviewMdTableHeader")
+  end
 
   -- Emit separator
   emit(make_border("├", "┼", "┤", "─"), "CodeReviewMdTableBorder")
 
-  -- Emit data rows (left-aligned)
+  -- Emit data rows (wrapped + aligned)
   for _, row_cells in ipairs(data_rows) do
-    local rv = {}
+    local cell_wrapped = {}
+    local row_max_lines = 1
     for ci = 1, num_cols do
-      rv[ci] = pad_left(row_cells[ci], col_widths[ci])
+      local wrapped = word_wrap(row_cells[ci], col_widths[ci])
+      cell_wrapped[ci] = wrapped
+      row_max_lines = math.max(row_max_lines, #wrapped)
     end
-    emit(make_data_line(rv), nil)
+    for li = 1, row_max_lines do
+      local cv = {}
+      for ci = 1, num_cols do
+        cv[ci] = pad_cell(cell_wrapped[ci][li] or "", col_widths[ci], alignments[ci])
+      end
+      emit(make_data_line(cv), nil)
+    end
   end
 
   -- Emit bottom border
