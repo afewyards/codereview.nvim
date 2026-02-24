@@ -14,6 +14,7 @@ end
 
 function M.build_header_lines(review)
   local pipeline_icon = list_mod.pipeline_icon(review.pipeline_status)
+  local highlights = {}
   local lines = {
     string.format("#%d: %s", review.id, review.title),
     "",
@@ -41,11 +42,17 @@ function M.build_header_lines(review)
   if review.description and review.description ~= "" then
     table.insert(lines, "")
     for _, line in ipairs(markdown.to_lines(review.description)) do
-      table.insert(lines, line)
+      local row = #lines  -- 0-indexed row for this line
+      local segs = markdown.parse_inline(line, "CodeReviewComment")
+      local stripped, hls = markdown.segments_to_extmarks(segs, row, "CodeReviewComment")
+      table.insert(lines, stripped)
+      for _, h in ipairs(hls) do
+        table.insert(highlights, h)
+      end
     end
   end
 
-  return lines
+  return { lines = lines, highlights = highlights }
 end
 
 local function wrap_text(text, width)
@@ -159,10 +166,13 @@ function M.build_activity_lines(discussions)
           table.insert(highlights, {thread_start_row, fill_start, fill_start + fill * 3, "CodeReviewThreadBorder"})
         end
 
-        -- Body lines (raw markdown, no prefix so treesitter can render)
+        -- Body lines parsed for inline markdown
         for _, bl in ipairs(vim.split(first_note.body or "", "\n")) do
           local row = #lines
-          table.insert(lines, bl)
+          local segs = markdown.parse_inline(bl, "CodeReviewComment")
+          local stripped, hls = markdown.segments_to_extmarks(segs, row, "CodeReviewComment")
+          table.insert(lines, stripped)
+          for _, h in ipairs(hls) do table.insert(highlights, h) end
           row_map[row] = { type = "thread", discussion = disc }
         end
 
@@ -190,7 +200,10 @@ function M.build_activity_lines(discussions)
 
             for _, rl in ipairs(vim.split(reply.body or "", "\n")) do
               local rrow = #lines
-              table.insert(lines, rl)
+              local segs = markdown.parse_inline(rl, "CodeReviewComment")
+              local stripped, hls = markdown.segments_to_extmarks(segs, rrow, "CodeReviewComment")
+              table.insert(lines, stripped)
+              for _, h in ipairs(hls) do table.insert(highlights, h) end
               row_map[rrow] = { type = "thread", discussion = disc }
             end
           end

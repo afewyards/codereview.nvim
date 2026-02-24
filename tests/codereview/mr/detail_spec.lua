@@ -16,13 +16,42 @@ describe("mr.detail", function()
         approved_by = { "reviewer1" },
         approvals_required = 2,
       }
-      local lines = detail.build_header_lines(review)
-      assert.truthy(#lines > 0)
-      local joined = table.concat(lines, "\n")
+      local result = detail.build_header_lines(review)
+      assert.truthy(#result.lines > 0)
+      local joined = table.concat(result.lines, "\n")
       assert.truthy(joined:find("#42"))
       assert.truthy(joined:find("Fix auth token refresh"))
       assert.truthy(joined:find("maria"))
       assert.truthy(joined:find("Approvals"))
+    end)
+
+    it("strips markdown from description and returns highlights", function()
+      local review = {
+        id = 1, title = "Test", author = "me",
+        source_branch = "feat", target_branch = "main",
+        state = "opened", pipeline_status = "success",
+        description = "This is **important** info",
+        approved_by = {}, approvals_required = 0,
+      }
+      local result = detail.build_header_lines(review)
+      local joined = table.concat(result.lines, "\n")
+      assert.truthy(joined:find("This is important info"))
+      assert.falsy(joined:find("%*%*"))
+      assert.is_table(result.highlights)
+      assert.truthy(#result.highlights > 0)
+    end)
+
+    it("returns struct with lines and empty highlights for no description", function()
+      local review = {
+        id = 1, title = "Test", author = "me",
+        source_branch = "feat", target_branch = "main",
+        state = "opened", pipeline_status = "success",
+        description = "",
+        approved_by = {}, approvals_required = 0,
+      }
+      local result = detail.build_header_lines(review)
+      assert.is_table(result.lines)
+      assert.is_table(result.highlights)
     end)
   end)
 
@@ -216,6 +245,60 @@ describe("mr.detail", function()
       local result = detail.build_activity_lines(discussions)
       local joined = table.concat(result.lines, "\n")
       assert.falsy(joined:find("Inline note"))
+    end)
+
+    it("strips markdown from comment body and adds highlights", function()
+      local discussions = {
+        {
+          id = "md",
+          notes = {
+            {
+              id = 1,
+              body = "This is **important**",
+              author = "jan",
+              created_at = "2026-02-20T10:00:00Z",
+              system = false,
+            },
+          },
+        },
+      }
+      local result = detail.build_activity_lines(discussions)
+      local joined = table.concat(result.lines, "\n")
+      assert.truthy(joined:find("This is important"))
+      assert.falsy(joined:find("%*%*"))
+      local has_bold = false
+      for _, hl in ipairs(result.highlights) do
+        if hl[4] == "CodeReviewCommentBold" then has_bold = true end
+      end
+      assert.is_true(has_bold)
+    end)
+
+    it("strips markdown from reply body", function()
+      local discussions = {
+        {
+          id = "md2",
+          notes = {
+            {
+              id = 1,
+              body = "Fix this",
+              author = "alice",
+              created_at = "2026-02-20T10:00:00Z",
+              system = false,
+            },
+            {
+              id = 2,
+              body = "Done, see `fix()`",
+              author = "bob",
+              created_at = "2026-02-20T11:00:00Z",
+              system = false,
+            },
+          },
+        },
+      }
+      local result = detail.build_activity_lines(discussions)
+      local joined = table.concat(result.lines, "\n")
+      assert.truthy(joined:find("Done, see fix%(%)"))
+      assert.falsy(joined:find("`fix"))
     end)
 
     it("still renders system notes as simple lines", function()
