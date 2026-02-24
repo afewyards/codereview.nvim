@@ -295,6 +295,7 @@ end
 -- parse_blocks(text, base_hl, opts) -> { lines, highlights, code_blocks }
 -- State machine with goto continue so future block handlers can skip the paragraph fallback.
 function M.parse_blocks(text, base_hl, opts)
+  opts = opts or {}
   local result = { lines = {}, highlights = {}, code_blocks = {} }
   if not text or text == "" then return result end
 
@@ -318,6 +319,17 @@ function M.parse_blocks(text, base_hl, opts)
         for _, hl in ipairs(inline_hls) do
           table.insert(result.highlights, hl)
         end
+        goto continue
+      end
+    end
+
+    -- Horizontal rule: ---, ***, ___
+    if state == "normal" then
+      if line:match("^%-%-%-$") or line:match("^%*%*%*$") or line:match("^___$") then
+        local width = opts.width or 70
+        local rule = string.rep("─", width)
+        table.insert(result.lines, rule)
+        table.insert(result.highlights, { row, 0, #rule, "CodeReviewMdHr" })
         goto continue
       end
     end
