@@ -292,4 +292,42 @@ function M.segments_to_extmarks(segments, row, base_hl)
   return text, highlights
 end
 
+-- parse_blocks(text, base_hl, opts) -> { lines, highlights, code_blocks }
+-- State machine with goto continue so future block handlers can skip the paragraph fallback.
+function M.parse_blocks(text, base_hl, opts)
+  local result = { lines = {}, highlights = {}, code_blocks = {} }
+  if not text or text == "" then return result end
+
+  local raw_lines = M.to_lines(text)
+  local i = 1
+  local state = "normal" -- future states: "in_code_block", "in_table"
+
+  while i <= #raw_lines do
+    local line = raw_lines[i]
+    local row = #result.lines
+
+    -- Future block-type detections go here, using `goto continue` to skip paragraph fallback.
+    -- Example pattern:
+    --   if state == "normal" and line:match("^```") then
+    --     ... handle code fence start ...
+    --     goto continue
+    --   end
+
+    -- Paragraph fallback: all unrecognized lines in normal state
+    if state == "normal" then
+      local segs = M.parse_inline(line, base_hl)
+      local rendered_text, hls = M.segments_to_extmarks(segs, row, base_hl)
+      table.insert(result.lines, rendered_text)
+      for _, hl in ipairs(hls) do
+        table.insert(result.highlights, hl)
+      end
+    end
+
+    ::continue::
+    i = i + 1
+  end
+
+  return result
+end
+
 return M
