@@ -63,16 +63,24 @@ end
 
 --- Build virtual lines for a comment thread.
 --- @param disc table  the discussion
---- @param opts table  { sel_idx?, current_user?, outdated? }
+--- @param opts table  { sel_idx?, current_user?, outdated?, editing_note?, spacer_height? }
+---   editing_note: { disc_id, note_idx } — replaces that note's body with blank spacer lines
+---   spacer_height: number of spacer lines to insert (default 0)
 --- @return { virt_lines: table[], spacer_offset: number|nil }
 function M.build(disc, opts)
   opts = opts or {}
   local sel_idx = opts.sel_idx
   local current_user = opts.current_user
   local outdated = opts.outdated
+  local editing_note = opts.editing_note
+  local spacer_height = opts.spacer_height or 0
 
   local notes = disc.notes
   if not notes or #notes == 0 then return { virt_lines = {}, spacer_offset = nil } end
+
+  -- Determine if this disc is the one being edited
+  local editing_this = editing_note and editing_note.disc_id == disc.id
+  local editing_note_idx = editing_this and editing_note.note_idx or nil
 
   local first = notes[1]
   local resolved = M.is_resolved(disc)
@@ -95,6 +103,7 @@ function M.build(disc, opts)
   local fill = math.max(0, 62 - #header_text - #header_meta - #status_str - #outdated_str)
 
   local virt_lines = {}
+  local spacer_offset = nil
 
   -- ┌ @author · 02/15 14:30 · Unresolved ─────────
   local n1_bdr = (sel_idx == 1) and "CodeReviewSelectedNote" or bdr
@@ -112,9 +121,16 @@ function M.build(disc, opts)
   table.insert(header_chunks, { string.rep("─", fill), n1_bdr })
   table.insert(virt_lines, header_chunks)
 
-  -- Comment body (wrapped, full)
-  for _, bl in ipairs(wrap_text(first.body, config.get().diff.comment_width)) do
-    table.insert(virt_lines, md_virt_line({ "  │ ", n1_bdr }, bl, n1_body_hl))
+  -- Comment body (wrapped, full) — or spacers when editing this note
+  if editing_note_idx == 1 then
+    spacer_offset = #virt_lines  -- = 1 (after header)
+    for _ = 1, spacer_height do
+      table.insert(virt_lines, { { "  │" .. string.rep(" ", 61), bdr } })
+    end
+  else
+    for _, bl in ipairs(wrap_text(first.body, config.get().diff.comment_width)) do
+      table.insert(virt_lines, md_virt_line({ "  │ ", n1_bdr }, bl, n1_body_hl))
+    end
   end
 
   -- Replies
@@ -126,14 +142,22 @@ function M.build(disc, opts)
       local ri_bdr = (sel_idx == i) and "CodeReviewSelectedNote" or bdr
       local ri_aut = (sel_idx == i) and "CodeReviewSelectedNote" or aut
       local ri_body_hl = (sel_idx == i) and "CodeReviewSelectedNote" or body_hl
-      table.insert(virt_lines, { { "  │", ri_bdr } })
-      table.insert(virt_lines, {
-        { "  │  ↪ ", ri_bdr },
-        { "@" .. reply.author, ri_aut },
-        { rmeta, ri_bdr },
-      })
-      for _, rl in ipairs(wrap_text(reply.body, 58)) do
-        table.insert(virt_lines, md_virt_line({ "  │    ", ri_bdr }, rl, ri_body_hl))
+      if editing_note_idx == i then
+        -- Skip separator + reply header + body; insert spacers in their place
+        spacer_offset = #virt_lines
+        for _ = 1, spacer_height do
+          table.insert(virt_lines, { { "  │" .. string.rep(" ", 61), ri_bdr } })
+        end
+      else
+        table.insert(virt_lines, { { "  │", ri_bdr } })
+        table.insert(virt_lines, {
+          { "  │  ↪ ", ri_bdr },
+          { "@" .. reply.author, ri_aut },
+          { rmeta, ri_bdr },
+        })
+        for _, rl in ipairs(wrap_text(reply.body, 58)) do
+          table.insert(virt_lines, md_virt_line({ "  │    ", ri_bdr }, rl, ri_body_hl))
+        end
       end
     end
   end
@@ -167,7 +191,7 @@ function M.build(disc, opts)
     })
   end
 
-  return { virt_lines = virt_lines, spacer_offset = nil }
+  return { virt_lines = virt_lines, spacer_offset = spacer_offset }
 end
 
 -- Export helpers needed by diff.lua for AI suggestion rendering

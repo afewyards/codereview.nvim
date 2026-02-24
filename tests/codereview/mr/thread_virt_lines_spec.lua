@@ -149,6 +149,107 @@ describe("thread_virt_lines", function()
     end)
   end)
 
+  describe("spacer support", function()
+    it("editing note_idx=1 replaces body with spacers and sets spacer_offset=1", function()
+      local disc = {
+        id = "disc1",
+        notes = {
+          { author = "alice", body = "Original body", created_at = "2026-02-20T10:00:00Z" },
+        },
+      }
+      local result = tvl.build(disc, {
+        editing_note = { disc_id = "disc1", note_idx = 1 },
+        spacer_height = 3,
+      })
+      assert.equals(1, result.spacer_offset)
+      -- header is still present
+      assert.equals("  ┌ ", result.virt_lines[1][1][1])
+      -- 3 spacer lines follow the header
+      assert.equals(3 + 2, #result.virt_lines) -- header + 3 spacers + footer
+      for i = 2, 4 do
+        local chunk = result.virt_lines[i][1][1]
+        assert.truthy(chunk:find("│"), "line " .. i .. " should contain │")
+        -- "  │" is 5 bytes (│ is 3-byte UTF-8) + 61 spaces = 66
+        assert.equals(5 + 61, #chunk)
+      end
+      -- body text must not appear
+      local texts = {}
+      for _, line in ipairs(result.virt_lines) do
+        for _, chunk in ipairs(line) do table.insert(texts, chunk[1]) end
+      end
+      assert.falsy(table.concat(texts, " "):find("Original body"))
+    end)
+
+    it("editing reply (note_idx=2) skips separator+header+body, inserts spacers", function()
+      local disc = {
+        id = "disc2",
+        notes = {
+          { author = "alice", body = "First", created_at = "2026-02-20T10:00:00Z" },
+          { author = "bob", body = "Reply text", created_at = "2026-02-20T11:00:00Z" },
+        },
+      }
+      local result = tvl.build(disc, {
+        editing_note = { disc_id = "disc2", note_idx = 2 },
+        spacer_height = 2,
+      })
+      -- spacer_offset = header(1) + first body(1) = 2
+      assert.equals(2, result.spacer_offset)
+      -- "Reply text" body must not appear
+      local texts = {}
+      for _, line in ipairs(result.virt_lines) do
+        for _, chunk in ipairs(line) do table.insert(texts, chunk[1]) end
+      end
+      assert.falsy(table.concat(texts, " "):find("Reply text"))
+      -- alice's first note body should still be present
+      assert.truthy(table.concat(texts, " "):find("First"))
+      -- 2 spacer lines should be present
+      local spacer_count = 0
+      for _, line in ipairs(result.virt_lines) do
+        -- spacer lines: single chunk, "  │" (5 bytes) + 61 spaces = 66 bytes
+        if #line == 1 and #line[1][1] == 5 + 61 then
+          spacer_count = spacer_count + 1
+        end
+      end
+      assert.equals(2, spacer_count)
+    end)
+
+    it("non-matching disc_id returns spacer_offset=nil and renders normally", function()
+      local disc = {
+        id = "disc3",
+        notes = {
+          { author = "alice", body = "Body text", created_at = "2026-02-20T10:00:00Z" },
+        },
+      }
+      local result = tvl.build(disc, {
+        editing_note = { disc_id = "other_disc", note_idx = 1 },
+        spacer_height = 3,
+      })
+      assert.is_nil(result.spacer_offset)
+      -- body should render normally
+      local texts = {}
+      for _, line in ipairs(result.virt_lines) do
+        for _, chunk in ipairs(line) do table.insert(texts, chunk[1]) end
+      end
+      assert.truthy(table.concat(texts, " "):find("Body text"))
+    end)
+
+    it("spacer_height=0 with editing_note produces no spacer lines", function()
+      local disc = {
+        id = "disc4",
+        notes = {
+          { author = "alice", body = "Content", created_at = "2026-02-20T10:00:00Z" },
+        },
+      }
+      local result = tvl.build(disc, {
+        editing_note = { disc_id = "disc4", note_idx = 1 },
+        spacer_height = 0,
+      })
+      assert.equals(1, result.spacer_offset)
+      -- only header + footer
+      assert.equals(2, #result.virt_lines)
+    end)
+  end)
+
   describe("is_resolved", function()
     it("uses discussion.resolved when set", function()
       assert.is_true(tvl.is_resolved({ resolved = true, notes = {} }))
