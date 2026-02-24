@@ -1397,6 +1397,39 @@ end
 
 function M.jump_to_file(layout, state, file_idx)
   if not state.files or not state.files[file_idx] then return end
+
+  -- Transition out of summary mode into diff mode (mirrors sidebar click logic)
+  if state.view_mode == "summary" then
+    state.view_mode = "diff"
+    state.current_file = file_idx
+    vim.wo[layout.main_win].wrap = false
+    vim.wo[layout.main_win].linebreak = false
+    if state.scroll_mode then
+      local result = M.render_all_files(layout.main_buf, state.files, state.review, state.discussions, state.context, state.file_contexts, state.ai_suggestions)
+      state.file_sections = result.file_sections
+      state.scroll_line_data = result.line_data
+      state.scroll_row_disc = result.row_discussions
+      state.scroll_row_ai = result.row_ai
+      M.render_sidebar(layout.sidebar_buf, state)
+      for _, sec in ipairs(state.file_sections) do
+        if sec.file_idx == file_idx then
+          vim.api.nvim_win_set_cursor(layout.main_win, { sec.start_line, 0 })
+          break
+        end
+      end
+    else
+      M.render_sidebar(layout.sidebar_buf, state)
+      local ld, rd, ra = M.render_file_diff(
+        layout.main_buf, state.files[file_idx], state.review, state.discussions, state.context, state.ai_suggestions)
+      state.line_data_cache[file_idx] = ld
+      state.row_disc_cache[file_idx] = rd
+      state.row_ai_cache[file_idx] = ra
+      vim.api.nvim_win_set_cursor(layout.main_win, { 1, 0 })
+    end
+    vim.api.nvim_set_current_win(layout.main_win)
+    return
+  end
+
   if state.scroll_mode then
     -- In scroll mode, jump to the file section
     if state.file_sections then
