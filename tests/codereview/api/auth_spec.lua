@@ -67,6 +67,18 @@ describe("auth", function()
       assert.equals("ghp_only", auth.get_token("github"))
       assert.equals("glpat_only", auth.get_token("gitlab"))
     end)
+
+    it("refresh clears only the specified platform cache", function()
+      vim.env.GITHUB_TOKEN = "ghp_cached"
+      vim.env.GITLAB_TOKEN = "glpat_cached"
+      auth.get_token("github")
+      auth.get_token("gitlab")
+      vim.env.GITHUB_TOKEN = nil
+      vim.env.GITLAB_TOKEN = nil
+      auth.refresh("github")
+      assert.is_nil(auth.get_token("github"))
+      assert.equals("glpat_cached", auth.get_token("gitlab"))
+    end)
   end)
 
   describe("get_token with platform", function()

@@ -41,7 +41,7 @@ function M.setup(opts)
   end
   if current.token then
     vim.notify(
-      "[codereview] `token` is deprecated. Use `github_token` or `gitlab_token` instead.",
+      "[codereview] `token` is deprecated and will NOT be used. Set `github_token` or `gitlab_token` instead.",
       vim.log.levels.WARN
     )
   end
