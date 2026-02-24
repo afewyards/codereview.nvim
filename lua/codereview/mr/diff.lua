@@ -954,12 +954,13 @@ function M.render_summary(buf, state)
     end
   end)
   local detail = require("codereview.mr.detail")
+  local pane_width = math.floor(vim.api.nvim_win_get_width(state.layout.main_win) * 0.8)
 
-  local header = detail.build_header_lines(state.review)
+  local header = detail.build_header_lines(state.review, pane_width)
   local lines = {}
   for _, l in ipairs(header.lines) do table.insert(lines, l) end
 
-  local activity = detail.build_activity_lines(state.discussions)
+  local activity = detail.build_activity_lines(state.discussions, pane_width)
   for _, line in ipairs(activity.lines) do
     table.insert(lines, line)
   end

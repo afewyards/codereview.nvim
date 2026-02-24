@@ -51,6 +51,14 @@ describe("parse_inline", function()
     }, segs)
   end)
 
+  it("parses link with code span in label [`code`](url)", function()
+    local segs = markdown.parse_inline("[`file.tsx:48`](http://example.com)", "CodeReviewComment")
+    -- Code span inside label keeps its highlight; URL is stripped
+    assert.same({
+      { "file.tsx:48", "CodeReviewCommentCode" },
+    }, segs)
+  end)
+
   it("handles unresolved base highlight", function()
     local segs = markdown.parse_inline("**bold**", "CodeReviewCommentUnresolved")
     assert.same({
@@ -673,7 +681,7 @@ describe("parse_blocks table wrapping", function()
     assert.is_true(found_hello)
   end)
 
-  it("table narrower than container when content is small", function()
+  it("table expands to fill container width", function()
     local text = "| AB | CD |\n| --- | --- |\n| ab | cd |"
     local r = markdown.parse_blocks(text, "CodeReviewComment", { width = 70 })
     local border_line = nil
@@ -681,7 +689,73 @@ describe("parse_blocks table wrapping", function()
       if l:find("┌") then border_line = l; break end
     end
     assert.truthy(border_line)
-    assert.truthy(#border_line < 70)
+    local display_width = select(2, border_line:gsub("[^\128-\191]", ""))
+    assert.equals(70, display_width)
+  end)
+end)
+
+describe("parse_blocks table inline formatting", function()
+  it("renders link label in table cell, stripping URL", function()
+    local text = "| File | Rule |\n| --- | --- |\n| [foo.ts](http://example.com/foo) | [eqeqeq](http://oxc.rs) |"
+    local r = markdown.parse_blocks(text, "CodeReviewComment", { width = 60 })
+    -- Data row should show "foo.ts" not "[foo.ts](http://...)"
+    local found_label = false
+    local found_raw = false
+    for _, l in ipairs(r.lines) do
+      if l:find("foo%.ts") then found_label = true end
+      if l:find("%[foo%.ts%]%(") then found_raw = true end
+    end
+    assert.is_true(found_label, "link label should appear in table")
+    assert.is_false(found_raw, "raw markdown link syntax should be stripped")
+  end)
+
+  it("applies CodeReviewCommentLink highlight to link label in table cell", function()
+    local text = "| Col |\n| --- |\n| [docs](http://x.com) |"
+    local r = markdown.parse_blocks(text, "CodeReviewComment", { width = 60 })
+    local found_link_hl = false
+    for _, h in ipairs(r.highlights) do
+      if h[4] == "CodeReviewCommentLink" then found_link_hl = true end
+    end
+    assert.is_true(found_link_hl, "link label should have CodeReviewCommentLink highlight")
+  end)
+
+  it("calculates column width from display text, not raw markdown", function()
+    -- Long URL should not inflate column width
+    local text = "| Link | Short |\n| --- | --- |\n| [ab](http://very-long-url.example.com/path/to/thing) | hi |"
+    local r = markdown.parse_blocks(text, "CodeReviewComment", { width = 40 })
+    -- "ab" is 2 chars display; without fix, raw text is ~55 chars
+    -- The link column should NOT dominate the table width
+    local data_line = nil
+    for _, l in ipairs(r.lines) do
+      if l:find("ab") and l:find("hi") then data_line = l; break end
+    end
+    assert.truthy(data_line, "both cells should appear on same line when URL is stripped")
+  end)
+
+  it("renders bold text in table cell", function()
+    local text = "| Col |\n| --- |\n| **bold** |"
+    local r = markdown.parse_blocks(text, "CodeReviewComment", { width = 60 })
+    local found_bold = false
+    local found_raw = false
+    for _, l in ipairs(r.lines) do
+      if l:find("bold") then found_bold = true end
+      if l:find("%*%*bold%*%*") then found_raw = true end
+    end
+    assert.is_true(found_bold, "bold text should appear")
+    assert.is_false(found_raw, "raw ** delimiters should be stripped")
+  end)
+
+  it("renders code span in table cell", function()
+    local text = "| Col |\n| --- |\n| `code` |"
+    local r = markdown.parse_blocks(text, "CodeReviewComment", { width = 60 })
+    local found_code = false
+    local found_raw = false
+    for _, l in ipairs(r.lines) do
+      if l:find("code") then found_code = true end
+      if l:find("`code`") then found_raw = true end
+    end
+    assert.is_true(found_code, "code text should appear")
+    assert.is_false(found_raw, "backtick delimiters should be stripped")
   end)
 end)
 

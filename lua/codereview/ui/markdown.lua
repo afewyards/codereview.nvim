@@ -166,15 +166,17 @@ function M.parse_inline(text, base_hl)
   end
 
   -- Pass 2: links [label](url) (no flanking needed)
+  -- Only require structural chars ([, ](url)) to be unclaimed; label may contain code/bold.
   pos = 1
   while pos <= len do
     local ls, le = text:find("%[([^%]]+)%]%([^%)]+%)", pos)
     if not ls then break end
-    -- Only process if the entire range hasn't been claimed by code spans
     local bracket_end = text:find("%]", ls)
-    if bracket_end and range_is_base(ls, le) then
+    if bracket_end and fmt[ls] == base_hl and range_is_base(bracket_end, le) then
       fmt[ls] = nil -- strip [
-      for i = ls + 1, bracket_end - 1 do fmt[i] = hl("CodeReviewCommentLink") end
+      for i = ls + 1, bracket_end - 1 do
+        if fmt[i] == base_hl then fmt[i] = hl("CodeReviewCommentLink") end
+      end
       for i = bracket_end, le do fmt[i] = nil end -- strip ](url)
     end
     pos = le + 1
@@ -391,6 +393,43 @@ local function pad_cell(text, width, align)
   end
 end
 
+-- Process cell text through inline parser for table rendering.
+-- Returns display text (markdown stripped) and per-byte highlight array.
+local function process_cell_inline(text, base_hl)
+  if not text or text == "" then return "", {} end
+  local segs = M.parse_inline(text, base_hl)
+  local display = ""
+  local char_hl = {}
+  for _, seg in ipairs(segs) do
+    for i = 1, #seg[1] do
+      table.insert(char_hl, seg[2])
+    end
+    display = display .. seg[1]
+  end
+  return display, char_hl
+end
+
+-- Get per-wrapped-line highlight slices from the display text's char_hl.
+-- Tracks character offsets through word_wrap boundaries.
+local function wrapped_hl_slices(display, char_hl, wrapped, base_hl)
+  local slices = {}
+  local offset = 0
+  for li, wline in ipairs(wrapped) do
+    if li > 1 then
+      while offset < #display and display:sub(offset + 1, offset + 1):match("%s") do
+        offset = offset + 1
+      end
+    end
+    local slice = {}
+    for i = 1, #wline do
+      slice[i] = char_hl[offset + i] or base_hl
+    end
+    table.insert(slices, slice)
+    offset = offset + #wline
+  end
+  return slices
+end
+
 -- Render a pipe table from raw lines with cell wrapping and alignment.
 -- Returns { lines = {...}, highlights = {...} } with row indices starting at start_row.
 local function render_table(tbl_lines, base_hl, start_row, opts)
@@ -417,17 +456,34 @@ local function render_table(tbl_lines, base_hl, start_row, opts)
     table.insert(data_rows, padded)
   end
 
-  -- Calculate natural column widths (max content width per column, min 3)
+  -- Pre-process cells: strip markdown syntax, get display text + per-char highlights
+  local header_proc = {}
+  for ci = 1, num_cols do
+    local d, ch = process_cell_inline(header_cells[ci], base_hl)
+    header_proc[ci] = { display = d, char_hl = ch }
+  end
+
+  local data_proc = {}
+  for ri, row in ipairs(data_rows) do
+    data_proc[ri] = {}
+    for ci = 1, num_cols do
+      local d, ch = process_cell_inline(row[ci], base_hl)
+      data_proc[ri][ci] = { display = d, char_hl = ch }
+    end
+  end
+
+  -- Calculate natural column widths from display text (min 3)
   local col_widths = {}
   for ci = 1, num_cols do
-    col_widths[ci] = math.max(3, #header_cells[ci])
-    for _, row in ipairs(data_rows) do
-      col_widths[ci] = math.max(col_widths[ci], #row[ci])
+    col_widths[ci] = math.max(3, #header_proc[ci].display)
+    for ri = 1, #data_proc do
+      col_widths[ci] = math.max(col_widths[ci], #data_proc[ri][ci].display)
     end
   end
 
   -- Content budget: subtract border/padding overhead (each col: "│ " + " " = 3 chars, plus final "│")
-  local available = (opts.width or 70) - (3 * num_cols + 1)
+  local table_width = opts.width or vim.api.nvim_win_get_width(0)
+  local available = table_width - (3 * num_cols + 1)
 
   -- Per-column cap
   local max_col = math.max(5, math.floor(available / num_cols))
@@ -482,6 +538,16 @@ local function render_table(tbl_lines, base_hl, start_row, opts)
     end
   end
 
+  -- Expand columns to fill available width
+  local slack = available - sum_widths()
+  if slack > 0 then
+    local per = math.floor(slack / num_cols)
+    local remainder = slack - per * num_cols
+    for ci = 1, num_cols do
+      col_widths[ci] = col_widths[ci] + per + (ci <= remainder and 1 or 0)
+    end
+  end
+
   local function make_border(left, mid, right, fill)
     local parts = {}
     for ci = 1, num_cols do
@@ -490,65 +556,118 @@ local function render_table(tbl_lines, base_hl, start_row, opts)
     return left .. table.concat(parts, mid) .. right
   end
 
-  local function emit(line_text, hl_group)
+  local function emit_border(line_text, hl_group)
     local row = start_row + #result.lines
     table.insert(result.lines, line_text)
-    if hl_group then
-      table.insert(result.highlights, { row, 0, #line_text, hl_group })
+    table.insert(result.highlights, { row, 0, #line_text, hl_group })
+  end
+
+  -- Emit a data line with per-cell inline highlights.
+  -- cells[ci] = { padded = "...", hl_slice = {...} or nil, content_offset = N }
+  local function emit_data_line(cells, line_hl)
+    local row = start_row + #result.lines
+    local parts = {}
+    for ci = 1, num_cols do
+      table.insert(parts, " " .. cells[ci].padded .. " ")
+    end
+    local line_text = "│" .. table.concat(parts, "│") .. "│"
+    table.insert(result.lines, line_text)
+
+    if line_hl then
+      table.insert(result.highlights, { row, 0, #line_text, line_hl })
+    end
+
+    -- Apply per-cell inline highlights (grouped by contiguous runs)
+    local byte_pos = 4  -- "│ " = 3 + 1 bytes (0-indexed start of cell content)
+    for ci = 1, num_cols do
+      local cell = cells[ci]
+      if cell.hl_slice and #cell.hl_slice > 0 then
+        local content_start = byte_pos + cell.content_offset
+        local i = 1
+        while i <= #cell.hl_slice do
+          local hl = cell.hl_slice[i]
+          if hl ~= base_hl then
+            local run_start = i
+            while i <= #cell.hl_slice and cell.hl_slice[i] == hl do
+              i = i + 1
+            end
+            table.insert(result.highlights, {
+              row, content_start + run_start - 1, content_start + i - 1, hl,
+            })
+          else
+            i = i + 1
+          end
+        end
+      end
+      byte_pos = byte_pos + col_widths[ci] + 5  -- " │ " = 1 + 3 + 1 bytes
     end
   end
 
-  local function make_data_line(cell_values)
-    local parts = {}
-    for ci = 1, num_cols do
-      local val = cell_values[ci] or string.rep(" ", col_widths[ci])
-      table.insert(parts, " " .. val .. " ")
-    end
-    return "│" .. table.concat(parts, "│") .. "│"
+  -- Compute content_offset within padded cell based on alignment
+  local function content_offset_for_align(content_len, width, align)
+    if align == "right" then return width - content_len end
+    if align == "center" then return math.floor((width - content_len) / 2) end
+    return 0
   end
 
   -- Emit top border
-  emit(make_border("┌", "┬", "┐", "─"), "CodeReviewMdTableBorder")
+  emit_border(make_border("┌", "┬", "┐", "─"), "CodeReviewMdTableBorder")
 
-  -- Emit header row (wrapped + aligned)
+  -- Emit header row (wrapped + aligned, with inline highlights)
   local header_wrapped = {}
+  local header_hl_slices = {}
   local header_max_lines = 1
   for ci = 1, num_cols do
-    local wrapped = word_wrap(header_cells[ci], col_widths[ci])
+    local proc = header_proc[ci]
+    local wrapped = word_wrap(proc.display, col_widths[ci])
     header_wrapped[ci] = wrapped
+    header_hl_slices[ci] = wrapped_hl_slices(proc.display, proc.char_hl, wrapped, base_hl)
     header_max_lines = math.max(header_max_lines, #wrapped)
   end
   for li = 1, header_max_lines do
-    local cv = {}
+    local cells = {}
     for ci = 1, num_cols do
-      cv[ci] = pad_cell(header_wrapped[ci][li] or "", col_widths[ci], alignments[ci])
+      local wtext = header_wrapped[ci][li] or ""
+      cells[ci] = {
+        padded = pad_cell(wtext, col_widths[ci], alignments[ci]),
+        hl_slice = header_hl_slices[ci][li],
+        content_offset = content_offset_for_align(#wtext, col_widths[ci], alignments[ci]),
+      }
     end
-    emit(make_data_line(cv), "CodeReviewMdTableHeader")
+    emit_data_line(cells, "CodeReviewMdTableHeader")
   end
 
   -- Emit separator
-  emit(make_border("├", "┼", "┤", "─"), "CodeReviewMdTableBorder")
+  emit_border(make_border("├", "┼", "┤", "─"), "CodeReviewMdTableBorder")
 
-  -- Emit data rows (wrapped + aligned)
-  for _, row_cells in ipairs(data_rows) do
+  -- Emit data rows (wrapped + aligned, with inline highlights)
+  for ri = 1, #data_proc do
     local cell_wrapped = {}
+    local cell_hl_slices = {}
     local row_max_lines = 1
     for ci = 1, num_cols do
-      local wrapped = word_wrap(row_cells[ci], col_widths[ci])
+      local proc = data_proc[ri][ci]
+      local wrapped = word_wrap(proc.display, col_widths[ci])
       cell_wrapped[ci] = wrapped
+      cell_hl_slices[ci] = wrapped_hl_slices(proc.display, proc.char_hl, wrapped, base_hl)
       row_max_lines = math.max(row_max_lines, #wrapped)
     end
     for li = 1, row_max_lines do
-      local cv = {}
+      local cells = {}
       for ci = 1, num_cols do
-        cv[ci] = pad_cell(cell_wrapped[ci][li] or "", col_widths[ci], alignments[ci])
+        local wtext = cell_wrapped[ci][li] or ""
+        cells[ci] = {
+          padded = pad_cell(wtext, col_widths[ci], alignments[ci]),
+          hl_slice = cell_hl_slices[ci][li],
+          content_offset = content_offset_for_align(#wtext, col_widths[ci], alignments[ci]),
+        }
       end
-      emit(make_data_line(cv), nil)
+      emit_data_line(cells, nil)
     end
   end
 
   -- Emit bottom border
-  emit(make_border("└", "┴", "┘", "─"), "CodeReviewMdTableBorder")
+  emit_border(make_border("└", "┴", "┘", "─"), "CodeReviewMdTableBorder")
 
   return result
 end
