@@ -989,6 +989,47 @@ function M.render_summary(buf, state)
     })
   end
 
+  -- Apply treesitter syntax highlighting to code blocks
+  local all_code_blocks = {}
+  if header.code_blocks then
+    for _, cb in ipairs(header.code_blocks) do
+      table.insert(all_code_blocks, cb)
+    end
+  end
+  if activity.code_blocks then
+    for _, cb in ipairs(activity.code_blocks) do
+      table.insert(all_code_blocks, {
+        start_row = header_count + cb.start_row,
+        end_row = header_count + cb.end_row,
+        lang = cb.lang,
+        text = cb.text,
+        indent = cb.indent,
+      })
+    end
+  end
+
+  for _, cb in ipairs(all_code_blocks) do
+    if cb.lang and cb.lang ~= "" then
+      local ok, parser = pcall(vim.treesitter.get_string_parser, cb.text, cb.lang)
+      if ok and parser then
+        local trees = parser:parse()
+        if trees and trees[1] then
+          local root = trees[1]:root()
+          local query_ok, query = pcall(vim.treesitter.query.get, cb.lang, "highlights")
+          if query_ok and query then
+            for id, node in query:iter_captures(root, cb.text, 0, -1) do
+              local name = query.captures[id]
+              local sr, sc, er, ec = node:range()
+              pcall(vim.api.nvim_buf_set_extmark, buf, SUMMARY_NS,
+                cb.start_row + sr, sc + cb.indent,
+                { end_row = cb.start_row + er, end_col = ec + cb.indent, hl_group = "@" .. name })
+            end
+          end
+        end
+      end
+    end
+  end
+
   -- Build summary row map (buffer row -> discussion)
   state.summary_row_map = {}
   for offset, entry in pairs(activity.row_map) do
