@@ -208,7 +208,9 @@ function M.open_input_popup(title, callback, opts)
         if vim.api.nvim_win_is_valid(win) then
           vim.api.nvim_win_set_height(win, new_height)
         end
-        if extmark_id and diff_buf and vim.api.nvim_buf_is_valid(diff_buf) then
+        if opts.spacer_offset ~= nil and opts.on_resize then
+          opts.on_resize(new_height)
+        elseif extmark_id and diff_buf and vim.api.nvim_buf_is_valid(diff_buf) then
           ifloat.update_space(diff_buf, extmark_id, reserve_line, new_height + 2, reserve_above)
           -- Scroll diff so the reserved space stays visible
           if opts.win_id and vim.api.nvim_win_is_valid(opts.win_id) then

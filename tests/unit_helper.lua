@@ -185,6 +185,9 @@ _G.vim = {
     end,
     nvim_buf_attach = function(buf, send_buffer, callbacks) return true end,
     nvim_win_get_height = function() return 10 end,
+    nvim_win_set_height = function() end,
+    nvim_win_get_position = function() return { 0, 0 } end,
+    nvim_win_call = function(win, fn) return fn() end,
     nvim_win_get_buf = function() return 1 end,
     nvim_buf_get_extmarks = function(buf, ns, start, end_, opts)
       if not _extmark_store[buf] then return {} end
