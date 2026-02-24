@@ -61,6 +61,40 @@ describe("providers.github", function()
       local discussions = github.normalize_graphql_threads(threads)
       assert.equal(0, #discussions)
     end)
+
+    it("falls back to originalLine when line is nil (outdated comment)", function()
+      local threads = { {
+        id = "PRRT_outdated", isResolved = false, isOutdated = true,
+        diffSide = "RIGHT", startDiffSide = nil,
+        comments = { nodes = { {
+          databaseId = 10, author = { login = "alice" },
+          body = "old feedback", createdAt = "2026-01-01T00:00:00Z",
+          path = "foo.lua", line = vim.NIL, originalLine = 20,
+          startLine = vim.NIL, originalStartLine = vim.NIL,
+          outdated = true, commit = { oid = "old-sha" },
+        } } },
+      } }
+      local discussions = github.normalize_graphql_threads(threads)
+      assert.equal(20, discussions[1].notes[1].position.new_line)
+      assert.is_true(discussions[1].notes[1].position.outdated)
+    end)
+
+    it("sets outdated=false for current comments", function()
+      local threads = { {
+        id = "PRRT_current", isResolved = false, isOutdated = false,
+        diffSide = "RIGHT", startDiffSide = nil,
+        comments = { nodes = { {
+          databaseId = 11, author = { login = "bob" },
+          body = "current", createdAt = "2026-01-01T00:00:00Z",
+          path = "bar.lua", line = 5, originalLine = 5,
+          startLine = vim.NIL, originalStartLine = vim.NIL,
+          outdated = false, commit = { oid = "cur-sha" },
+        } } },
+      } }
+      local discussions = github.normalize_graphql_threads(threads)
+      assert.equal(5, discussions[1].notes[1].position.new_line)
+      assert.is_false(discussions[1].notes[1].position.outdated)
+    end)
   end)
 
   describe("build_auth_header", function()

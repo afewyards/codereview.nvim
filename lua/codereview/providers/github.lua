@@ -105,6 +105,10 @@ function M.normalize_graphql_threads(thread_nodes)
     if #comments > 0 then
       local notes = {}
       for _, c in ipairs(comments) do
+        local line = (c.line ~= vim.NIL) and c.line or nil
+        local start_line = (c.startLine ~= vim.NIL) and c.startLine or nil
+        local original_line = (c.originalLine ~= vim.NIL) and c.originalLine or nil
+        local original_start_line = (c.originalStartLine ~= vim.NIL) and c.originalStartLine or nil
         table.insert(notes, {
           id = c.databaseId,
           node_id = c.id,
@@ -116,11 +120,12 @@ function M.normalize_graphql_threads(thread_nodes)
           resolved = thread.isResolved or false,
           position = {
             new_path = c.path,
-            new_line = c.line,
+            new_line = line or original_line,
             side = thread.diffSide,
-            start_line = c.startLine,
+            start_line = start_line or original_start_line,
             start_side = thread.startDiffSide,
             commit_sha = c.commit and c.commit.oid,
+            outdated = thread.isOutdated or c.outdated or false,
           },
         })
       end
@@ -212,6 +217,7 @@ function M.get_discussions(client, ctx, review)
                 isResolved
                 diffSide
                 startDiffSide
+                isOutdated
                 comments(first: 100) {
                   nodes {
                     databaseId
@@ -220,7 +226,10 @@ function M.get_discussions(client, ctx, review)
                     createdAt
                     path
                     line
+                    originalLine
                     startLine
+                    originalStartLine
+                    outdated
                     commit { oid }
                   }
                 }
