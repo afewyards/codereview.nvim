@@ -53,7 +53,7 @@ describe("config_file", function()
 
   it("config file token takes precedence over plugin config token", function()
     write_config_file(tmpdir, { "token = ghp_file_token" })
-    config.setup({ token = "plugin_config_token" })
+    config.setup({ github_token = "plugin_config_token" })
     local token = auth.get_token("github")
     assert.equals("ghp_file_token", token)
   end)
