@@ -36,4 +36,37 @@ describe("config", function()
     local c = config.get()
     assert.equals(50, c.diff.scroll_threshold)
   end)
+
+  it("has github_token and gitlab_token defaults as nil", function()
+    config.setup({})
+    local c = config.get()
+    assert.is_nil(c.github_token)
+    assert.is_nil(c.gitlab_token)
+    assert.is_nil(c.token) -- removed
+  end)
+
+  it("accepts github_token in setup", function()
+    config.setup({ github_token = "ghp_abc" })
+    local c = config.get()
+    assert.equals("ghp_abc", c.github_token)
+  end)
+
+  it("accepts gitlab_token in setup", function()
+    config.setup({ gitlab_token = "glpat-xyz" })
+    local c = config.get()
+    assert.equals("glpat-xyz", c.gitlab_token)
+  end)
+
+  it("warns when legacy token field is passed", function()
+    local warned = false
+    local orig = vim.notify
+    vim.notify = function(msg, level)
+      if msg:find("deprecated") and level == vim.log.levels.WARN then
+        warned = true
+      end
+    end
+    config.setup({ token = "old-token" })
+    vim.notify = orig
+    assert.is_true(warned)
+  end)
 end)
