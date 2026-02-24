@@ -403,6 +403,45 @@ function M.parse_blocks(text, base_hl, opts)
       end
     end
 
+    -- Blockquote: lines starting with "> " or bare ">"
+    if state == "normal" and (line:match("^> ") or line == ">") then
+      -- Collect all consecutive blockquote lines
+      local bq_lines = {}
+      while i <= #raw_lines and (raw_lines[i]:match("^> ") or raw_lines[i] == ">") do
+        local inner = raw_lines[i]:match("^> ?(.*)") or ""
+        table.insert(bq_lines, inner)
+        i = i + 1
+      end
+      local inner_text = table.concat(bq_lines, "\n")
+      local inner_result = M.parse_blocks(inner_text, base_hl, opts)
+      local bq_indent = "  "
+      local start_row = #result.lines
+      for _, rl in ipairs(inner_result.lines) do
+        local bq_row = #result.lines
+        local padded = bq_indent .. rl
+        table.insert(result.lines, padded)
+        table.insert(result.highlights, { bq_row, 0, #padded, "CodeReviewMdBlockquote" })
+      end
+      -- Offset inner highlights
+      local offset = #bq_indent
+      for _, h in ipairs(inner_result.highlights) do
+        table.insert(result.highlights, { start_row + h[1], h[2] + offset, h[3] + offset, h[4] })
+      end
+      -- Offset inner code_blocks
+      for _, cb in ipairs(inner_result.code_blocks) do
+        table.insert(result.code_blocks, {
+          start_row = start_row + cb.start_row,
+          end_row = start_row + cb.end_row,
+          lang = cb.lang,
+          text = cb.text,
+          indent = cb.indent + offset,
+        })
+      end
+      -- i already advanced past all bq lines; undo the ::continue:: increment
+      i = i - 1
+      goto continue
+    end
+
     -- Ordered list: ^(%s*)(%d+)%. (.+)
     if state == "normal" then
       local ol_indent, ol_num, ol_content = line:match("^(%s*)(%d+)%. (.+)")

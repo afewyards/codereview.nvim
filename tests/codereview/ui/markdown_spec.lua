@@ -482,6 +482,47 @@ describe("parse_blocks unordered lists", function()
   end)
 end)
 
+describe("parse_blocks blockquotes", function()
+  it("renders single-line blockquote", function()
+    local r = markdown.parse_blocks("> quoted text", "CodeReviewComment", {})
+    assert.equals(1, #r.lines)
+    assert.equals("  quoted text", r.lines[1])
+    local found_bq = false
+    for _, h in ipairs(r.highlights) do
+      if h[4] == "CodeReviewMdBlockquote" then found_bq = true end
+    end
+    assert.is_true(found_bq)
+  end)
+
+  it("renders multi-line blockquote", function()
+    local r = markdown.parse_blocks("> line one\n> line two", "CodeReviewComment", {})
+    assert.equals(2, #r.lines)
+    assert.equals("  line one", r.lines[1])
+    assert.equals("  line two", r.lines[2])
+  end)
+
+  it("renders nested blockquote", function()
+    local r = markdown.parse_blocks("> > nested", "CodeReviewComment", {})
+    assert.equals(1, #r.lines)
+    assert.equals("    nested", r.lines[1])
+  end)
+
+  it("renders blockquote with inline markdown", function()
+    local r = markdown.parse_blocks("> **bold** text", "CodeReviewComment", {})
+    assert.equals("  bold text", r.lines[1])
+  end)
+
+  it("renders blockquote containing code block", function()
+    local r = markdown.parse_blocks("> ```lua\n> local x = 1\n> ```", "CodeReviewComment", {})
+    assert.truthy(#r.lines > 0)
+    local found_cb = false
+    for _, h in ipairs(r.highlights) do
+      if h[4] == "CodeReviewMdCodeBlock" then found_cb = true end
+    end
+    assert.is_true(found_cb)
+  end)
+end)
+
 describe("ui.markdown", function()
   it("renders plain text lines", function()
     local lines = markdown.to_lines("Hello world\nSecond line")
