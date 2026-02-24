@@ -372,12 +372,15 @@ local function render_ai_suggestions_at_row(buf, row, sugs, row_selection)
     local header_fill = math.max(0, 62 - #header_label)
 
     -- Footer: actions + counter when multiple
-    local footer_content = drafted and "x:dismiss" or "a:accept  x:dismiss  e:edit"
+    local footer_content = ""
+    if is_selected then
+      footer_content = drafted and "x:dismiss" or "a:accept  x:dismiss  e:edit"
+    end
     local counter = ""
     if sug_count > 1 then
       counter = " " .. i .. "/" .. sug_count
     end
-    local footer_fill = math.max(0, 62 - #footer_content - #counter - 1)
+    local footer_fill = math.max(0, 62 - #footer_content - #counter - (footer_content ~= "" and 1 or 0))
 
     -- Header
     table.insert(virt_lines, {
@@ -391,14 +394,22 @@ local function render_ai_suggestions_at_row(buf, row, sugs, row_selection)
     end
 
     -- Footer
-    local footer_parts = {
-      { "  └ ", bdr },
-      { footer_content, body_hl },
-    }
-    if counter ~= "" then
-      table.insert(footer_parts, { " " .. string.rep("─", footer_fill) .. counter, bdr })
+    local footer_parts = {}
+    if footer_content ~= "" then
+      footer_parts[#footer_parts + 1] = { "  └ ", bdr }
+      footer_parts[#footer_parts + 1] = { footer_content, body_hl }
+      if counter ~= "" then
+        footer_parts[#footer_parts + 1] = { " " .. string.rep("─", footer_fill) .. counter, bdr }
+      else
+        footer_parts[#footer_parts + 1] = { " " .. string.rep("─", footer_fill), bdr }
+      end
     else
-      table.insert(footer_parts, { " " .. string.rep("─", footer_fill), bdr })
+      if counter ~= "" then
+        local plain_fill = math.max(0, 62 - #counter)
+        footer_parts[#footer_parts + 1] = { "  └" .. string.rep("─", plain_fill) .. counter, bdr }
+      else
+        footer_parts[#footer_parts + 1] = { "  └" .. string.rep("─", 63), bdr }
+      end
     end
     table.insert(virt_lines, footer_parts)
   end
