@@ -306,12 +306,37 @@ function M.parse_blocks(text, base_hl, opts)
     local line = raw_lines[i]
     local row = #result.lines
 
-    -- Future block-type detections go here, using `goto continue` to skip paragraph fallback.
-    -- Example pattern:
-    --   if state == "normal" and line:match("^```") then
-    --     ... handle code fence start ...
-    --     goto continue
-    --   end
+    -- Header: ^#{1,6} <content>
+    if state == "normal" then
+      local hashes, content = line:match("^(#+) (.+)")
+      if hashes and #hashes <= 6 then
+        local level = #hashes
+        local segs = M.parse_inline(content, base_hl)
+        local rendered_text, inline_hls = M.segments_to_extmarks(segs, row, base_hl)
+        table.insert(result.lines, rendered_text)
+        table.insert(result.highlights, { row, 0, #rendered_text, "CodeReviewMdH" .. level })
+        for _, hl in ipairs(inline_hls) do
+          table.insert(result.highlights, hl)
+        end
+        goto continue
+      end
+    end
+
+    -- Ordered list: ^(%s*)(%d+)%. (.+)
+    if state == "normal" then
+      local ol_indent, ol_num, ol_content = line:match("^(%s*)(%d+)%. (.+)")
+      if ol_content then
+        local prefix = ol_indent .. ol_num .. ". "
+        local segs = M.parse_inline(ol_content, base_hl)
+        local rendered_text, inline_hls = M.segments_to_extmarks(segs, row, base_hl)
+        table.insert(result.lines, prefix .. rendered_text)
+        local offset = #prefix
+        for _, hl in ipairs(inline_hls) do
+          table.insert(result.highlights, { hl[1], hl[2] + offset, hl[3] + offset, hl[4] })
+        end
+        goto continue
+      end
+    end
 
     -- Paragraph fallback: all unrecognized lines in normal state
     if state == "normal" then
