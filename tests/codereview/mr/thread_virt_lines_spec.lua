@@ -233,6 +233,42 @@ describe("thread_virt_lines", function()
       assert.truthy(table.concat(texts, " "):find("Body text"))
     end)
 
+    it("editing last note in 3-note thread inserts spacers before footer", function()
+      local disc = {
+        id = "disc5",
+        notes = {
+          { author = "alice", body = "First", created_at = "2026-02-20T10:00:00Z" },
+          { author = "bob", body = "Second", created_at = "2026-02-20T11:00:00Z" },
+          { author = "charlie", body = "Last note", created_at = "2026-02-20T12:00:00Z" },
+        },
+      }
+      local result = tvl.build(disc, {
+        editing_note = { disc_id = "disc5", note_idx = 3 },
+        spacer_height = 2,
+      })
+      -- spacer_offset: header(1) + alice_body(1) + bob_sep(1) + bob_reply_header(1) + bob_body(1) = 5
+      assert.equals(5, result.spacer_offset)
+      -- "Last note" body must not appear
+      local texts = {}
+      for _, line in ipairs(result.virt_lines) do
+        for _, chunk in ipairs(line) do table.insert(texts, chunk[1]) end
+      end
+      assert.falsy(table.concat(texts, " "):find("Last note"))
+      -- earlier notes still rendered
+      assert.truthy(table.concat(texts, " "):find("First"))
+      assert.truthy(table.concat(texts, " "):find("@bob"))
+      -- 2 spacer lines present
+      local spacer_count = 0
+      for _, line in ipairs(result.virt_lines) do
+        if #line == 1 and #line[1][1] == 5 + 61 then
+          spacer_count = spacer_count + 1
+        end
+      end
+      assert.equals(2, spacer_count)
+      -- footer is still last
+      assert.truthy(result.virt_lines[#result.virt_lines][1][1]:find("└"))
+    end)
+
     it("spacer_height=0 with editing_note produces no spacer lines", function()
       local disc = {
         id = "disc4",
