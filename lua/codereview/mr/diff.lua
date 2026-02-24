@@ -1402,7 +1402,7 @@ function M.jump_to_file(layout, state, file_idx)
     if state.file_sections then
       for _, sec in ipairs(state.file_sections) do
         if sec.file_idx == file_idx then
-          vim.api.nvim_win_set_cursor(layout.main_win, { sec.start_row, 0 })
+          vim.api.nvim_win_set_cursor(layout.main_win, { sec.start_line, 0 })
           return
         end
       end
@@ -1418,10 +1418,16 @@ function M.jump_to_comment(layout, state, entry)
   if not entry.file_idx then return end
 
   if state.scroll_mode then
-    local row_cache = entry.type == "ai_suggestion" and state.scroll_row_ai or state.scroll_row_disc
+    local row_cache
+    if entry.type == "ai_suggestion" then
+      row_cache = state.scroll_row_ai
+    else
+      row_cache = state.scroll_row_disc
+    end
     if row_cache then
       for r, items in pairs(row_cache) do
-        for _, item in ipairs(type(items) == "table" and items or { items }) do
+        local item_list = entry.type == "ai_suggestion" and { items } or items
+        for _, item in ipairs(item_list) do
           local match = false
           if entry.type == "discussion" and item.id == entry.discussion.id then match = true end
           if entry.type == "ai_suggestion" and item == entry.suggestion then match = true end
@@ -1437,12 +1443,16 @@ function M.jump_to_comment(layout, state, entry)
     if state.current_file ~= entry.file_idx then
       switch_to_file(layout, state, entry.file_idx)
     end
-    local row_cache = entry.type == "ai_suggestion"
-      and state.row_ai_cache[entry.file_idx]
-      or state.row_disc_cache[entry.file_idx]
+    local row_cache
+    if entry.type == "ai_suggestion" then
+      row_cache = state.row_ai_cache[entry.file_idx]
+    else
+      row_cache = state.row_disc_cache[entry.file_idx]
+    end
     if row_cache then
       for r, items in pairs(row_cache) do
-        for _, item in ipairs(type(items) == "table" and items or { items }) do
+        local item_list = entry.type == "ai_suggestion" and { items } or items
+        for _, item in ipairs(item_list) do
           local match = false
           if entry.type == "discussion" and item.id == entry.discussion.id then match = true end
           if entry.type == "ai_suggestion" and item == entry.suggestion then match = true end
