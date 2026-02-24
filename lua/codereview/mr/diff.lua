@@ -145,17 +145,46 @@ end
 
 -- ─── Sign helpers ─────────────────────────────────────────────────────────────
 
-local function discussion_matches_file(discussion, file_diff)
+local function is_outdated(discussion, review)
+  local note = discussion.notes and discussion.notes[1]
+  if not note then return false end
+  if note.position and note.position.outdated then return true end
+  if not review or not review.head_sha then return false end
+  if not note.position or not note.position.head_sha then return false end
+  return note.position.head_sha ~= review.head_sha
+end
+
+local function discussion_matches_file(discussion, file_diff, review)
   local note = discussion.notes and discussion.notes[1]
   if not note or not note.position then return false end
+  if is_outdated(discussion, review) and note.change_position then
+    local cp = note.change_position
+    local path = cp.new_path or cp.old_path
+    return path == file_diff.new_path or path == file_diff.old_path
+  end
   local pos = note.position
   local path = pos.new_path or pos.old_path
   return path == file_diff.new_path or path == file_diff.old_path
 end
 
-local function discussion_line(discussion)
+local function discussion_line(discussion, review)
   local note = discussion.notes and discussion.notes[1]
   if not note or not note.position then return nil end
+  if is_outdated(discussion, review) then
+    if note.position.outdated then
+      -- GitHub outdated: new_line is already set to the fallback originalLine
+      local end_line = tonumber(note.position.new_line) or tonumber(note.position.old_line)
+      return end_line, nil, true
+    end
+    if note.change_position then
+      -- GitLab outdated: remap to change_position lines
+      local cp = note.change_position
+      local end_line = tonumber(cp.new_line) or tonumber(cp.old_line)
+      return end_line, nil, true
+    end
+    -- GitLab outdated without change_position: skip
+    return nil
+  end
   local pos = note.position
   local end_line = tonumber(pos.new_line) or tonumber(pos.old_line)
   -- Range comments: derive start from GitHub start_line or GitLab line_range
@@ -169,7 +198,7 @@ local function is_resolved(discussion)
   return note and note.resolved
 end
 
-function M.place_comment_signs(buf, line_data, discussions, file_diff, row_selection, current_user)
+function M.place_comment_signs(buf, line_data, discussions, file_diff, row_selection, current_user, review)
   -- Remove old signs for this buffer
   pcall(vim.fn.sign_unplace, "CodeReview", { buffer = buf })
 
@@ -177,8 +206,8 @@ function M.place_comment_signs(buf, line_data, discussions, file_diff, row_selec
   local row_discussions = {}
 
   for _, discussion in ipairs(discussions or {}) do
-    if discussion_matches_file(discussion, file_diff) then
-      local target_line, range_start = discussion_line(discussion)
+    if discussion_matches_file(discussion, file_diff, review) then
+      local target_line, range_start, outdated = discussion_line(discussion, review)
       if target_line then
         local sign_name = is_resolved(discussion) and "CodeReviewCommentSign"
           or "CodeReviewUnresolvedSign"
@@ -217,10 +246,11 @@ function M.place_comment_signs(buf, line_data, discussions, file_diff, row_selec
                 or is_pending and "CodeReviewCommentPending"
                 or resolved and "CodeReviewCommentResolved" or "CodeReviewCommentUnresolved"
               local status_str = is_err and " Failed " or is_pending and " Posting… " or resolved and " Resolved " or " Unresolved "
+              local outdated_str = outdated and " Outdated " or ""
               local time_str = format_time_short(first.created_at)
               local header_meta = time_str ~= "" and (" · " .. time_str) or ""
               local header_text = "@" .. first.author
-              local fill = math.max(0, 62 - #header_text - #header_meta - #status_str)
+              local fill = math.max(0, 62 - #header_text - #header_meta - #status_str - #outdated_str)
 
               local sel = row_selection and row_selection[row]
               local sel_idx = sel and sel.type == "comment" and sel.disc_id == discussion.id and sel.note_idx or nil
@@ -231,13 +261,17 @@ function M.place_comment_signs(buf, line_data, discussions, file_diff, row_selec
               local n1_bdr = (sel_idx == 1) and "CodeReviewSelectedNote" or bdr
               local n1_aut = (sel_idx == 1) and "CodeReviewSelectedNote" or aut
               local n1_body_hl = (sel_idx == 1) and "CodeReviewSelectedNote" or body_hl
-              table.insert(virt_lines, {
+              local header_chunks = {
                 { "  ┌ ", n1_bdr },
                 { header_text, n1_aut },
                 { header_meta, n1_bdr },
                 { status_str, status_hl },
-                { string.rep("─", fill), n1_bdr },
-              })
+              }
+              if outdated_str ~= "" then
+                table.insert(header_chunks, { outdated_str, "CodeReviewCommentOutdated" })
+              end
+              table.insert(header_chunks, { string.rep("─", fill), n1_bdr })
+              table.insert(virt_lines, header_chunks)
 
               -- Comment body (wrapped, full)
               for _, bl in ipairs(wrap_text(first.body, config.get().diff.comment_width)) do
@@ -571,7 +605,7 @@ function M.render_file_diff(buf, file_diff, review, discussions, context, ai_sug
 
   local row_discussions = {}
   if discussions then
-    row_discussions = M.place_comment_signs(buf, line_data, discussions, file_diff, row_selection, current_user) or {}
+    row_discussions = M.place_comment_signs(buf, line_data, discussions, file_diff, row_selection, current_user, review) or {}
   end
 
   local row_ai = {}
@@ -764,8 +798,8 @@ function M.render_all_files(buf, files, review, discussions, context, file_conte
   local all_row_discussions = {}
   for _, section in ipairs(file_sections) do
     for _, disc in ipairs(discussions or {}) do
-      if discussion_matches_file(disc, section.file) then
-        local target_line, range_start = discussion_line(disc)
+      if discussion_matches_file(disc, section.file, review) then
+        local target_line, range_start, disc_outdated = discussion_line(disc, review)
         if target_line then
           local sign_name = is_resolved(disc) and "CodeReviewCommentSign"
             or "CodeReviewUnresolvedSign"
@@ -803,10 +837,11 @@ function M.render_all_files(buf, files, review, discussions, context, file_conte
                   or is_pending and "CodeReviewCommentPending"
                   or resolved and "CodeReviewCommentResolved" or "CodeReviewCommentUnresolved"
                 local status_str = is_err and " Failed " or is_pending and " Posting… " or resolved and " Resolved " or " Unresolved "
+                local outdated_str = disc_outdated and " Outdated " or ""
                 local time_str = format_time_short(first.created_at)
                 local header_meta = time_str ~= "" and (" · " .. time_str) or ""
                 local header_text = "@" .. first.author
-                local fill = math.max(0, 62 - #header_text - #header_meta - #status_str)
+                local fill = math.max(0, 62 - #header_text - #header_meta - #status_str - #outdated_str)
 
                 local sel = row_selection and row_selection[i]
                 local sel_idx = sel and sel.type == "comment" and sel.disc_id == disc.id and sel.note_idx or nil
@@ -815,11 +850,15 @@ function M.render_all_files(buf, files, review, discussions, context, file_conte
                 local n1_bdr = (sel_idx == 1) and "CodeReviewSelectedNote" or bdr
                 local n1_aut = (sel_idx == 1) and "CodeReviewSelectedNote" or aut
                 local n1_body_hl = (sel_idx == 1) and "CodeReviewSelectedNote" or body_hl
-                table.insert(virt_lines, {
+                local header_chunks = {
                   { "  ┌ ", n1_bdr }, { header_text, n1_aut },
                   { header_meta, n1_bdr }, { status_str, status_hl },
-                  { string.rep("─", fill), n1_bdr },
-                })
+                }
+                if outdated_str ~= "" then
+                  table.insert(header_chunks, { outdated_str, "CodeReviewCommentOutdated" })
+                end
+                table.insert(header_chunks, { string.rep("─", fill), n1_bdr })
+                table.insert(virt_lines, header_chunks)
                 for _, bl in ipairs(wrap_text(first.body, config.get().diff.comment_width)) do
                   table.insert(virt_lines, md_virt_line({ "  │ ", n1_bdr }, bl, n1_body_hl))
                 end
