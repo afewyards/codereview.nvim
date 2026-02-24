@@ -7,7 +7,13 @@ function M.start(review, diff_state, layout)
   local diffs = diff_state.files
   local discussions = diff_state.discussions
 
-  local review_prompt = prompt_mod.build_review_prompt(review, diffs)
+  local review_prompt
+  local use_orchestrator = #diffs > 1
+  if use_orchestrator then
+    review_prompt = prompt_mod.build_orchestrator_prompt(review, diffs)
+  else
+    review_prompt = prompt_mod.build_review_prompt(review, diffs)
+  end
 
   local session = require("codereview.review.session")
   session.start()
@@ -64,7 +70,7 @@ function M.start(review, diff_state, layout)
       diff_mod.render_sidebar(layout.sidebar_buf, diff_state)
       vim.api.nvim_set_current_win(layout.main_win)
     end)
-  end)
+  end, { skip_agent = use_orchestrator })
 
   if job_id and job_id > 0 then
     session.ai_start(job_id)

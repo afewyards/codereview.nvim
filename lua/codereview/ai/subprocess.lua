@@ -15,14 +15,17 @@ end
 --- Run Claude CLI in pipe mode.
 --- @param prompt string
 --- @param callback fun(output: string|nil, err: string|nil)
-function M.run(prompt, callback)
+--- @param opts? { skip_agent?: boolean }
+function M.run(prompt, callback, opts)
+	opts = opts or {}
 	local cfg = config.get()
 	if not cfg.ai.enabled then
 		callback(nil, "AI review is disabled in config")
 		return
 	end
 
-	local cmd = M.build_cmd(cfg.ai.claude_cmd, cfg.ai.agent)
+	local agent = (not opts.skip_agent) and cfg.ai.agent or nil
+	local cmd = M.build_cmd(cfg.ai.claude_cmd, agent)
 	log.debug("AI subprocess: starting " .. table.concat(cmd, " "))
 	local stdout_chunks = {}
 	local stderr_chunks = {}
