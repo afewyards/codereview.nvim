@@ -279,4 +279,17 @@ function M.parse_inline(text, base_hl)
   return segments
 end
 
+function M.segments_to_extmarks(segments, row, base_hl)
+  local text = ""
+  local highlights = {}
+  for _, seg in ipairs(segments) do
+    local start_col = #text
+    text = text .. seg[1]
+    if seg[2] ~= base_hl then
+      table.insert(highlights, { row, start_col, #text, seg[2] })
+    end
+  end
+  return text, highlights
+end
+
 return M
