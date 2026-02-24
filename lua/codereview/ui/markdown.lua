@@ -417,7 +417,7 @@ local function render_table(tbl_lines, base_hl, start_row, opts)
     table.insert(data_rows, padded)
   end
 
-  -- Calculate column widths, then apply wrapping cap
+  -- Calculate natural column widths (max content width per column, min 3)
   local col_widths = {}
   for ci = 1, num_cols do
     col_widths[ci] = math.max(3, #header_cells[ci])
@@ -425,9 +425,61 @@ local function render_table(tbl_lines, base_hl, start_row, opts)
       col_widths[ci] = math.max(col_widths[ci], #row[ci])
     end
   end
-  local max_col_width = math.max(5, math.floor((opts.width or 70) / num_cols) - 3)
+
+  -- Content budget: subtract border/padding overhead (each col: "│ " + " " = 3 chars, plus final "│")
+  local available = (opts.width or 70) - (3 * num_cols + 1)
+
+  -- Per-column cap
+  local max_col = math.max(5, math.floor(available / num_cols))
   for ci = 1, num_cols do
-    col_widths[ci] = math.min(col_widths[ci], max_col_width)
+    col_widths[ci] = math.min(col_widths[ci], max_col)
+  end
+
+  -- Shrink widest columns first if total exceeds budget
+  local function sum_widths()
+    local s = 0
+    for ci = 1, num_cols do s = s + col_widths[ci] end
+    return s
+  end
+
+  while sum_widths() > available do
+    local max_w = 0
+    for ci = 1, num_cols do
+      if col_widths[ci] > max_w then max_w = col_widths[ci] end
+    end
+    if max_w <= 3 then break end  -- can't shrink further
+
+    local second_max = 3
+    for ci = 1, num_cols do
+      if col_widths[ci] < max_w and col_widths[ci] > second_max then
+        second_max = col_widths[ci]
+      end
+    end
+
+    local count = 0
+    for ci = 1, num_cols do
+      if col_widths[ci] == max_w then count = count + 1 end
+    end
+
+    local excess = sum_widths() - available
+    local full_save = (max_w - second_max) * count
+
+    if full_save > excess then
+      -- Partially reduce: only shrink enough to fit
+      local reduce = math.ceil(excess / count)
+      for ci = 1, num_cols do
+        if col_widths[ci] == max_w then
+          col_widths[ci] = math.max(3, col_widths[ci] - reduce)
+        end
+      end
+    else
+      -- Level all widest down to second-widest
+      for ci = 1, num_cols do
+        if col_widths[ci] == max_w then
+          col_widths[ci] = math.max(3, second_max)
+        end
+      end
+    end
   end
 
   local function make_border(left, mid, right, fill)
