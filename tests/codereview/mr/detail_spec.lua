@@ -400,4 +400,23 @@ describe("mr.detail", function()
       assert.falsy(joined:find("┌"))
     end)
   end)
+
+  describe("draft resume on open", function()
+    it("enters review session and populates local_drafts when drafts resumed", function()
+      local session = require("codereview.review.session")
+      session.reset()
+      local state = { local_drafts = {}, discussions = {} }
+      local server_drafts = {
+        { notes = {{ author = "You (draft)", body = "fix", position = { new_path = "a.lua", new_line = 1 } }}, is_draft = true, server_draft_id = 1 },
+      }
+
+      detail._apply_resumed_drafts(state, server_drafts)
+
+      assert.is_true(session.get().active)
+      assert.equal(1, #state.local_drafts)
+      assert.equal(1, #state.discussions)
+
+      session.reset()
+    end)
+  end)
 end)

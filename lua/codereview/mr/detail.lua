@@ -279,6 +279,16 @@ function M.count_discussions(discussions)
   return total, unresolved
 end
 
+--- Apply resumed server-side drafts to state. Enters review session.
+function M._apply_resumed_drafts(state, server_drafts)
+  local session = require("codereview.review.session")
+  session.start()
+  for _, d in ipairs(server_drafts) do
+    table.insert(state.local_drafts, d)
+    table.insert(state.discussions, d)
+  end
+end
+
 function M.open(entry)
   local ok, provider, ctx, review, discussions, files = pcall(function()
     local prov, pctx, perr = providers.detect()
@@ -352,6 +362,18 @@ function M.open(entry)
   diff.render_summary(layout.main_buf, state)
   diff.setup_keymaps(layout, state)
   vim.api.nvim_set_current_win(layout.main_win)
+
+  -- Check for server-side draft comments
+  local drafts_mod = require("codereview.review.drafts")
+  drafts_mod.check_and_prompt(provider, client_mod, ctx, review, function(server_drafts)
+    if server_drafts then
+      M._apply_resumed_drafts(state, server_drafts)
+      diff.render_sidebar(layout.sidebar_buf, state)
+      if state.view_mode == "summary" then
+        diff.render_summary(layout.main_buf, state)
+      end
+    end
+  end)
 end
 
 return M
