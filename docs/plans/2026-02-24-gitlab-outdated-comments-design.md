@@ -1,46 +1,46 @@
-# GitLab Outdated Comments Design
+# Outdated Comments Design (GitLab + GitHub)
 
 ## Problem
 
-Comments on old MR diff versions silently disappear or land on wrong lines.
+Comments on old diff versions are broken on both providers:
 
-Root cause: `normalize_note` drops position SHAs (`base_sha`, `head_sha`, `start_sha`) and `change_position`. The diff always renders from the MR's current SHAs, so old-version line numbers don't match.
+- **GitLab:** Comments land on **wrong lines** — `normalize_note` drops position SHAs and `change_position`, so old-version line numbers are matched against the current diff.
+- **GitHub:** Comments **silently vanish** — when a comment becomes outdated, `line` becomes null in the GraphQL response. The query doesn't fetch `isOutdated` or `originalLine` as fallback.
 
 ## Approach
 
+### GitLab
+
 SHA-based outdated detection + `change_position` remapping.
 
-### 1. Preserve position SHAs during normalization
+1. **Preserve position SHAs** — `normalize_note`: extract `base_sha`, `head_sha`, `start_sha` from `raw.position`. Extract `change_position` with its `new_line`, `old_line`, `new_path`, `old_path`.
+2. **Detect outdated** — compare note's `position.head_sha` to `review.head_sha`. Different = outdated.
+3. **Remap via change_position** — use `change_position` line numbers instead of original when available.
+4. **Unmappable fallback** — no `change_position` or no valid lines: skip diff placement. Still visible in activity view.
 
-`providers/gitlab.lua` `normalize_note`: extract `base_sha`, `head_sha`, `start_sha` from `raw.position`. Extract `change_position` (GitLab populates this when diff version changed) with its `new_line`, `old_line`, `new_path`, `old_path`.
+### GitHub
 
-### 2. Detect outdated comments
+Query missing fields + `originalLine` fallback.
 
-Compare note's `position.head_sha` to `review.head_sha`. Different = outdated.
+1. **Add to GraphQL query** — `isOutdated` on thread, `originalLine`/`originalStartLine`/`outdated` on comment.
+2. **Fallback to originalLine** — when `line` is null, use `originalLine`. GitHub does server-side remapping so `line` already has the remapped value when mappable.
+3. **Pass `outdated` flag** — normalize `isOutdated`/`outdated` into position so diff.lua can badge it.
 
-### 3. Remap via change_position
+### Shared (diff.lua)
 
-If `change_position` has valid line numbers, use those instead of original `position` lines for placement in the diff buffer.
-
-### 4. Unmappable comments fallback
-
-If `change_position` is absent/null or has no valid lines: skip diff placement entirely. These still appear in activity/summary view (already shows all discussions regardless of position).
-
-### 5. Subtle outdated badge
-
-Remapped comments show a small "outdated" indicator in the comment header, next to resolved/unresolved status.
+1. **Outdated badge** — subtle "Outdated" indicator in comment header for any comment with `position.outdated = true`.
+2. **Pass review to placement** — `place_comment_signs` receives `review` for GitLab SHA comparison.
 
 ## Files changed
 
 | File | Change |
 |------|--------|
 | `providers/gitlab.lua` | `normalize_note`: preserve SHAs + `change_position` |
-| `mr/diff.lua` | `discussion_line`: use `change_position` when available; detect outdated via SHA comparison |
-| `mr/diff.lua` | `place_comment_signs`: "outdated" badge in header for remapped comments |
-| `mr/detail.lua` | Pass `review` through to diff rendering for SHA comparison |
+| `providers/github.lua` | GraphQL: add `isOutdated`, `originalLine`, `originalStartLine`, `outdated`; `normalize_graphql_threads`: fallback to `originalLine`, set `outdated` flag |
+| `mr/diff.lua` | `discussion_line`: use `change_position` when outdated (GitLab); detect via SHA or `outdated` flag |
+| `mr/diff.lua` | `place_comment_signs`: accept `review`, render "outdated" badge |
 
 ## Out of scope
 
 - Activity view: already shows all discussions, no changes needed
-- New comment posting: already sends current SHAs
-- GitHub provider: separate concern
+- New comment posting: already sends current SHAs on both providers
