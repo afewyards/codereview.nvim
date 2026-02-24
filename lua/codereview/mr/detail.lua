@@ -39,20 +39,24 @@ function M.build_header_lines(review)
 
   table.insert(lines, string.rep("-", 70))
 
+  local block_result = nil
   if review.description and review.description ~= "" then
     table.insert(lines, "")
-    for _, line in ipairs(markdown.to_lines(review.description)) do
-      local row = #lines  -- 0-indexed row for this line
-      local segs = markdown.parse_inline(line, "CodeReviewComment")
-      local stripped, hls = markdown.segments_to_extmarks(segs, row, "CodeReviewComment")
-      table.insert(lines, stripped)
-      for _, h in ipairs(hls) do
-        table.insert(highlights, h)
-      end
+    local desc_start = #lines
+    block_result = markdown.parse_blocks(review.description, "CodeReviewComment", { width = 70 })
+    for _, bl in ipairs(block_result.lines) do
+      table.insert(lines, bl)
+    end
+    for _, h in ipairs(block_result.highlights) do
+      table.insert(highlights, { desc_start + h[1], h[2], h[3], h[4] })
     end
   end
 
-  return { lines = lines, highlights = highlights }
+  return {
+    lines = lines,
+    highlights = highlights,
+    code_blocks = block_result and block_result.code_blocks or {},
+  }
 end
 
 local function wrap_text(text, width)

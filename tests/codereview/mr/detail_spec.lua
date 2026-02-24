@@ -53,6 +53,57 @@ describe("mr.detail", function()
       assert.is_table(result.lines)
       assert.is_table(result.highlights)
     end)
+
+    it("renders markdown headers in description", function()
+      local review = {
+        id = 1, title = "Test", author = "me",
+        source_branch = "feat", target_branch = "main",
+        state = "opened", pipeline_status = "success",
+        description = "## Summary\n\nThis fixes a bug",
+        approved_by = {}, approvals_required = 0,
+      }
+      local result = detail.build_header_lines(review)
+      local joined = table.concat(result.lines, "\n")
+      assert.truthy(joined:find("Summary"))
+      -- Should have H2 highlight
+      local has_h2 = false
+      for _, h in ipairs(result.highlights) do
+        if h[4] == "CodeReviewMdH2" then has_h2 = true end
+      end
+      assert.is_true(has_h2)
+    end)
+
+    it("renders code blocks in description", function()
+      local review = {
+        id = 1, title = "Test", author = "me",
+        source_branch = "feat", target_branch = "main",
+        state = "opened", pipeline_status = "success",
+        description = "```lua\nlocal x = 1\n```",
+        approved_by = {}, approvals_required = 0,
+      }
+      local result = detail.build_header_lines(review)
+      local joined = table.concat(result.lines, "\n")
+      assert.truthy(joined:find("local x = 1"))
+      local has_cb = false
+      for _, h in ipairs(result.highlights) do
+        if h[4] == "CodeReviewMdCodeBlock" then has_cb = true end
+      end
+      assert.is_true(has_cb)
+    end)
+
+    it("returns code_blocks in result struct", function()
+      local review = {
+        id = 1, title = "Test", author = "me",
+        source_branch = "feat", target_branch = "main",
+        state = "opened", pipeline_status = "success",
+        description = "```lua\nlocal x = 1\n```",
+        approved_by = {}, approvals_required = 0,
+      }
+      local result = detail.build_header_lines(review)
+      assert.is_table(result.code_blocks)
+      assert.equals(1, #result.code_blocks)
+      assert.equals("lua", result.code_blocks[1].lang)
+    end)
   end)
 
   describe("build_activity_lines", function()
