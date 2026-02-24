@@ -1395,6 +1395,68 @@ local function switch_to_file(layout, state, idx)
   state.row_ai_cache[idx] = ra
 end
 
+function M.jump_to_file(layout, state, file_idx)
+  if not state.files or not state.files[file_idx] then return end
+  if state.scroll_mode then
+    -- In scroll mode, jump to the file section
+    if state.file_sections then
+      for _, sec in ipairs(state.file_sections) do
+        if sec.file_idx == file_idx then
+          vim.api.nvim_win_set_cursor(layout.main_win, { sec.start_row, 0 })
+          return
+        end
+      end
+    end
+  else
+    -- Per-file mode: switch to the file
+    switch_to_file(layout, state, file_idx)
+    vim.api.nvim_win_set_cursor(layout.main_win, { 1, 0 })
+  end
+end
+
+function M.jump_to_comment(layout, state, entry)
+  if not entry.file_idx then return end
+
+  if state.scroll_mode then
+    local row_cache = entry.type == "ai_suggestion" and state.scroll_row_ai or state.scroll_row_disc
+    if row_cache then
+      for r, items in pairs(row_cache) do
+        for _, item in ipairs(type(items) == "table" and items or { items }) do
+          local match = false
+          if entry.type == "discussion" and item.id == entry.discussion.id then match = true end
+          if entry.type == "ai_suggestion" and item == entry.suggestion then match = true end
+          if match then
+            vim.api.nvim_win_set_cursor(layout.main_win, { r, 0 })
+            M.ensure_virt_lines_visible(layout.main_win, layout.main_buf, r)
+            return
+          end
+        end
+      end
+    end
+  else
+    if state.current_file ~= entry.file_idx then
+      switch_to_file(layout, state, entry.file_idx)
+    end
+    local row_cache = entry.type == "ai_suggestion"
+      and state.row_ai_cache[entry.file_idx]
+      or state.row_disc_cache[entry.file_idx]
+    if row_cache then
+      for r, items in pairs(row_cache) do
+        for _, item in ipairs(type(items) == "table" and items or { items }) do
+          local match = false
+          if entry.type == "discussion" and item.id == entry.discussion.id then match = true end
+          if entry.type == "ai_suggestion" and item == entry.suggestion then match = true end
+          if match then
+            vim.api.nvim_win_set_cursor(layout.main_win, { r, 0 })
+            M.ensure_virt_lines_visible(layout.main_win, layout.main_buf, r)
+            return
+          end
+        end
+      end
+    end
+  end
+end
+
 local function nav_comment(layout, state, delta)
   local files = state.files or {}
   local cursor = vim.api.nvim_win_get_cursor(layout.main_win)
