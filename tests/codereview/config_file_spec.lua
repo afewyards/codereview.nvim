@@ -8,9 +8,12 @@ local function make_tmpdir()
   return tmpdir
 end
 
-local function write_config_file(dir, data)
-  local path = dir .. "/.codereview.json"
-  vim.fn.writefile({ vim.json.encode(data) }, path)
+--- Write a .codereview.nvim dotenv-style config file.
+--- @param dir string directory path
+--- @param lines string[] lines to write (raw, no processing)
+local function write_config_file(dir, lines)
+  local path = dir .. "/.codereview.nvim"
+  vim.fn.writefile(lines, path)
   return path
 end
 
@@ -31,35 +34,17 @@ describe("config_file", function()
     vim.fn.delete(tmpdir, "rf")
   end)
 
-  it("reads platform-scoped github_token for github platform", function()
-    write_config_file(tmpdir, { github_token = "ghp_file_token" })
+  -- Token resolution via get_token() ---
+
+  it("reads token from .codereview.nvim file", function()
+    write_config_file(tmpdir, { "token = ghp_file_token" })
     local token, token_type = auth.get_token("github")
     assert.equals("ghp_file_token", token)
     assert.equals("pat", token_type)
   end)
 
-  it("reads platform-scoped gitlab_token for gitlab platform", function()
-    write_config_file(tmpdir, { gitlab_token = "glpat_file_token" })
-    local token, token_type = auth.get_token("gitlab")
-    assert.equals("glpat_file_token", token)
-    assert.equals("pat", token_type)
-  end)
-
-  it("falls back to generic token when no platform-scoped token", function()
-    write_config_file(tmpdir, { token = "generic_file_token" })
-    local token, token_type = auth.get_token("github")
-    assert.equals("generic_file_token", token)
-    assert.equals("pat", token_type)
-  end)
-
-  it("platform-scoped token takes precedence over generic token", function()
-    write_config_file(tmpdir, { github_token = "ghp_specific", token = "generic" })
-    local token = auth.get_token("github")
-    assert.equals("ghp_specific", token)
-  end)
-
   it("env var takes precedence over config file token", function()
-    write_config_file(tmpdir, { github_token = "ghp_file_token" })
+    write_config_file(tmpdir, { "token = file_token" })
     vim.env.GITHUB_TOKEN = "ghp_env_token"
     local token = auth.get_token("github")
     assert.equals("ghp_env_token", token)
@@ -67,7 +52,7 @@ describe("config_file", function()
   end)
 
   it("config file token takes precedence over plugin config token", function()
-    write_config_file(tmpdir, { github_token = "ghp_file_token" })
+    write_config_file(tmpdir, { "token = ghp_file_token" })
     config.setup({ token = "plugin_config_token" })
     local token = auth.get_token("github")
     assert.equals("ghp_file_token", token)
@@ -75,13 +60,6 @@ describe("config_file", function()
 
   it("returns nil gracefully when config file is missing", function()
     -- no file written
-    config.setup({})
-    local token = auth.get_token("github")
-    assert.is_nil(token)
-  end)
-
-  it("does not crash on invalid JSON", function()
-    vim.fn.writefile({ "not valid json {{{{" }, tmpdir .. "/.codereview.json")
     config.setup({})
     local token = auth.get_token("github")
     assert.is_nil(token)
@@ -101,10 +79,55 @@ describe("config_file", function()
       call_count = call_count + 1
       return orig_readfile(path)
     end
-    write_config_file(tmpdir, { github_token = "ghp_cached", gitlab_token = "glpat_cached" })
+    write_config_file(tmpdir, { "token = ghp_cached" })
     auth.get_token("github") -- reads file (count = 1)
     auth.get_token("gitlab") -- reuses cached file (count still 1)
     vim.fn.readfile = orig_readfile
     assert.equals(1, call_count)
+  end)
+
+  -- Dotenv parser behaviour (via _read_config_file_for_test) ---
+
+  it("skips comment lines starting with #", function()
+    write_config_file(tmpdir, {
+      "# this is a comment",
+      "token = real_token",
+      "# another comment",
+    })
+    local parsed = auth._read_config_file_for_test()
+    assert.equals("real_token", parsed.token)
+    assert.is_nil(parsed["# this is a comment"])
+  end)
+
+  it("skips blank lines", function()
+    write_config_file(tmpdir, {
+      "",
+      "token = blank_test",
+      "",
+    })
+    local parsed = auth._read_config_file_for_test()
+    assert.equals("blank_test", parsed.token)
+  end)
+
+  it("trims whitespace from keys and values", function()
+    write_config_file(tmpdir, { "  token  =  padded_value  " })
+    local parsed = auth._read_config_file_for_test()
+    assert.equals("padded_value", parsed.token)
+  end)
+
+  it("handles values containing =", function()
+    write_config_file(tmpdir, { "token = abc=def=ghi" })
+    local parsed = auth._read_config_file_for_test()
+    assert.equals("abc=def=ghi", parsed.token)
+  end)
+
+  it("reads platform and project keys", function()
+    write_config_file(tmpdir, {
+      "platform = github",
+      "project = owner/repo",
+    })
+    local parsed = auth._read_config_file_for_test()
+    assert.equals("github", parsed.platform)
+    assert.equals("owner/repo", parsed.project)
   end)
 end)
