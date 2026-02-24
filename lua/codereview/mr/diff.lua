@@ -2692,30 +2692,148 @@ function M.setup_keymaps(layout, state)
       if state.view_mode ~= "diff" then return end
       local cursor_row = vim.api.nvim_win_get_cursor(layout.main_win)[1]
       local row_ai = state.scroll_mode and state.scroll_row_ai or (state.row_ai_cache[state.current_file] or {})
-      local ai_at_row = row_ai[cursor_row] or {}
       local row_disc_map = state.scroll_mode and state.scroll_row_disc or (state.row_disc_cache[state.current_file] or {})
+      local ai_at_row = row_ai[cursor_row] or {}
       local discs_at_row = row_disc_map[cursor_row] or {}
       local items = M.build_row_items(ai_at_row, discs_at_row)
-      if #items == 0 then return end
-      local current = state.row_selection[cursor_row]
-      local next_sel = M.cycle_row_selection(items, current, 1)
-      state.row_selection = { [cursor_row] = next_sel }
-      rerender_view()
+
+      -- Try cycling within current row first
+      if #items > 0 then
+        local current = state.row_selection[cursor_row]
+        local next_sel = M.cycle_row_selection(items, current, 1)
+        if next_sel then
+          state.row_selection = { [cursor_row] = next_sel }
+          rerender_view()
+          return
+        end
+      end
+
+      -- Past edge (or empty row): jump to next annotated row
+      local all_rows = M.get_annotated_rows(row_disc_map, row_ai)
+      for _, r in ipairs(all_rows) do
+        if r > cursor_row then
+          vim.api.nvim_win_set_cursor(layout.main_win, { r, 0 })
+          M.ensure_virt_lines_visible(layout.main_win, layout.main_buf, r)
+          local next_ai = row_ai[r] or {}
+          local next_disc = row_disc_map[r] or {}
+          local next_items = M.build_row_items(next_ai, next_disc)
+          state.row_selection = { [r] = next_items[1] or nil }
+          rerender_view()
+          return
+        end
+      end
+
+      -- No more rows in current file/buffer
+      if state.scroll_mode then
+        -- Wrap to first annotated row in scroll buffer
+        if #all_rows > 0 then
+          local r = all_rows[1]
+          vim.api.nvim_win_set_cursor(layout.main_win, { r, 0 })
+          M.ensure_virt_lines_visible(layout.main_win, layout.main_buf, r)
+          local next_ai = row_ai[r] or {}
+          local next_disc = row_disc_map[r] or {}
+          local next_items = M.build_row_items(next_ai, next_disc)
+          state.row_selection = { [r] = next_items[1] or nil }
+          rerender_view()
+        end
+      else
+        -- Per-file mode: try next files, wrapping around
+        local files = state.files or {}
+        local total = #files
+        for offset = 1, total do
+          local idx = ((state.current_file - 1 + offset) % total) + 1
+          if M.file_has_annotations(state, idx) then
+            switch_to_file(layout, state, idx)
+            local ra = state.row_ai_cache[idx] or {}
+            local rd = state.row_disc_cache[idx] or {}
+            local rows = M.get_annotated_rows(rd, ra)
+            if #rows > 0 then
+              vim.api.nvim_win_set_cursor(layout.main_win, { rows[1], 0 })
+              M.ensure_virt_lines_visible(layout.main_win, layout.main_buf, rows[1])
+              local next_ai = ra[rows[1]] or {}
+              local next_disc = rd[rows[1]] or {}
+              local next_items = M.build_row_items(next_ai, next_disc)
+              state.row_selection = { [rows[1]] = next_items[1] or nil }
+              rerender_view()
+            end
+            return
+          end
+        end
+      end
     end,
 
     select_prev_note = function()
       if state.view_mode ~= "diff" then return end
       local cursor_row = vim.api.nvim_win_get_cursor(layout.main_win)[1]
       local row_ai = state.scroll_mode and state.scroll_row_ai or (state.row_ai_cache[state.current_file] or {})
-      local ai_at_row = row_ai[cursor_row] or {}
       local row_disc_map = state.scroll_mode and state.scroll_row_disc or (state.row_disc_cache[state.current_file] or {})
+      local ai_at_row = row_ai[cursor_row] or {}
       local discs_at_row = row_disc_map[cursor_row] or {}
       local items = M.build_row_items(ai_at_row, discs_at_row)
-      if #items == 0 then return end
-      local current = state.row_selection[cursor_row]
-      local next_sel = M.cycle_row_selection(items, current, -1)
-      state.row_selection = { [cursor_row] = next_sel }
-      rerender_view()
+
+      -- Try cycling within current row first
+      if #items > 0 then
+        local current = state.row_selection[cursor_row]
+        local next_sel = M.cycle_row_selection(items, current, -1)
+        if next_sel then
+          state.row_selection = { [cursor_row] = next_sel }
+          rerender_view()
+          return
+        end
+      end
+
+      -- Past edge: jump to prev annotated row
+      local all_rows = M.get_annotated_rows(row_disc_map, row_ai)
+      for i = #all_rows, 1, -1 do
+        if all_rows[i] < cursor_row then
+          local r = all_rows[i]
+          vim.api.nvim_win_set_cursor(layout.main_win, { r, 0 })
+          M.ensure_virt_lines_visible(layout.main_win, layout.main_buf, r)
+          local prev_ai = row_ai[r] or {}
+          local prev_disc = row_disc_map[r] or {}
+          local prev_items = M.build_row_items(prev_ai, prev_disc)
+          state.row_selection = { [r] = prev_items[#prev_items] or nil }
+          rerender_view()
+          return
+        end
+      end
+
+      -- No more rows: cross-file backward or wrap
+      if state.scroll_mode then
+        if #all_rows > 0 then
+          local r = all_rows[#all_rows]
+          vim.api.nvim_win_set_cursor(layout.main_win, { r, 0 })
+          M.ensure_virt_lines_visible(layout.main_win, layout.main_buf, r)
+          local prev_ai = row_ai[r] or {}
+          local prev_disc = row_disc_map[r] or {}
+          local prev_items = M.build_row_items(prev_ai, prev_disc)
+          state.row_selection = { [r] = prev_items[#prev_items] or nil }
+          rerender_view()
+        end
+      else
+        local files = state.files or {}
+        local total = #files
+        for offset = 1, total do
+          local idx = ((state.current_file - 1 - offset) % total) + 1
+          if M.file_has_annotations(state, idx) then
+            switch_to_file(layout, state, idx)
+            local ra = state.row_ai_cache[idx] or {}
+            local rd = state.row_disc_cache[idx] or {}
+            local rows = M.get_annotated_rows(rd, ra)
+            if #rows > 0 then
+              local r = rows[#rows]
+              vim.api.nvim_win_set_cursor(layout.main_win, { r, 0 })
+              M.ensure_virt_lines_visible(layout.main_win, layout.main_buf, r)
+              local prev_ai = ra[r] or {}
+              local prev_disc = rd[r] or {}
+              local prev_items = M.build_row_items(prev_ai, prev_disc)
+              state.row_selection = { [r] = prev_items[#prev_items] or nil }
+              rerender_view()
+            end
+            return
+          end
+        end
+      end
     end,
 
     pick_comments = function()
