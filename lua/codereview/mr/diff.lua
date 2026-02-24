@@ -868,9 +868,11 @@ function M.render_summary(buf, state)
     end
   end)
   local detail = require("codereview.mr.detail")
-  local markdown_mod = require("codereview.ui.markdown")
 
-  local lines = detail.build_header_lines(state.review)
+  local header = detail.build_header_lines(state.review)
+  local lines = {}
+  for _, l in ipairs(header.lines) do table.insert(lines, l) end
+
   local activity = detail.build_activity_lines(state.discussions)
   for _, line in ipairs(activity.lines) do
     table.insert(lines, line)
@@ -882,8 +884,17 @@ function M.render_summary(buf, state)
   -- Clear old summary highlights
   vim.api.nvim_buf_clear_namespace(buf, SUMMARY_NS, 0, -1)
 
+  local header_count = #header.lines
+
+  -- Apply header (description) highlights
+  for _, hl in ipairs(header.highlights) do
+    pcall(vim.api.nvim_buf_set_extmark, buf, SUMMARY_NS, hl[1], hl[2], {
+      end_col = hl[3],
+      hl_group = hl[4],
+    })
+  end
+
   -- Activity lines start after header
-  local header_count = #detail.build_header_lines(state.review)
   for _, hl in ipairs(activity.highlights) do
     local row = header_count + hl[1]  -- 0-indexed row in buffer
     pcall(vim.api.nvim_buf_set_extmark, buf, SUMMARY_NS, row, hl[2], {
@@ -892,16 +903,15 @@ function M.render_summary(buf, state)
     })
   end
 
-  -- Build summary row map (buffer row → discussion)
+  -- Build summary row map (buffer row -> discussion)
   state.summary_row_map = {}
   for offset, entry in pairs(activity.row_map) do
     state.summary_row_map[header_count + offset + 1] = entry  -- +1 for 1-indexed rows
   end
 
-  markdown_mod.set_buf_markdown(buf)
   vim.bo[buf].modifiable = false
 
-  -- Enable soft wrap so markdown lines aren't clipped
+  -- Enable soft wrap for long lines
   if state.layout and state.layout.main_win then
     vim.wo[state.layout.main_win].wrap = true
     vim.wo[state.layout.main_win].linebreak = true

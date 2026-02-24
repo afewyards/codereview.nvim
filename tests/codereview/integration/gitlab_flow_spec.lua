@@ -80,7 +80,7 @@ describe("GitLab integration flow", function()
         description = "",
       }
 
-      local lines = detail.build_header_lines(review)
+      local lines = detail.build_header_lines(review).lines
 
       -- Should contain #42 (not !42 which would be GitLab-specific raw notation)
       local found_id = false
@@ -113,7 +113,7 @@ describe("GitLab integration flow", function()
         description = "",
       }
 
-      local lines = detail.build_header_lines(review)
+      local lines = detail.build_header_lines(review).lines
 
       local found_ok = false
       for _, line in ipairs(lines) do

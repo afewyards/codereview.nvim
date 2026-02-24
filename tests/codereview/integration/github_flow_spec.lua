@@ -91,7 +91,7 @@ describe("GitHub integration flow", function()
       }
 
       local review = github.normalize_pr(pr)
-      local lines = detail.build_header_lines(review)
+      local lines = detail.build_header_lines(review).lines
 
       local found_hash_id = false
       for _, line in ipairs(lines) do
@@ -114,7 +114,7 @@ describe("GitHub integration flow", function()
       }
 
       local review = github.normalize_pr(pr)
-      local lines = detail.build_header_lines(review)
+      local lines = detail.build_header_lines(review).lines
 
       local found_author = false
       for _, line in ipairs(lines) do
@@ -139,7 +139,7 @@ describe("GitHub integration flow", function()
       -- GitHub PRs have no approved_by in normalized shape
       assert.equal(0, #review.approved_by)
 
-      local lines = detail.build_header_lines(review)
+      local lines = detail.build_header_lines(review).lines
 
       -- With 0 approved_by and 0 approvals_required, Approvals line is omitted
       local found_approvals = false

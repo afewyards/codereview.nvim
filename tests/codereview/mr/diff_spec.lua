@@ -377,6 +377,23 @@ describe("mr.diff", function()
 
       vim.api.nvim_buf_delete(buf, { force = true })
     end)
+
+    it("does NOT set filetype to markdown", function()
+      local buf = vim.api.nvim_create_buf(false, true)
+      local state = {
+        review = {
+          id = 1, title = "Test", author = "me",
+          source_branch = "feat", target_branch = "main",
+          state = "opened", pipeline_status = "success",
+          description = "",
+          approved_by = {}, approvals_required = 0,
+        },
+        discussions = {},
+      }
+      diff.render_summary(buf, state)
+      assert.not_equals("markdown", vim.bo[buf].filetype)
+      vim.api.nvim_buf_delete(buf, { force = true })
+    end)
   end)
 
   describe("render_sidebar with summary button", function()
