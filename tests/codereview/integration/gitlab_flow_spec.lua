@@ -306,3 +306,156 @@ describe("GitLab integration flow", function()
     package.preload["codereview.providers"] = nil
   end)
 end)
+
+-- Load diff module for outdated comment placement tests
+local diff = require("codereview.mr.diff")
+local github = require("codereview.providers.github")
+
+describe("outdated comment flow", function()
+  local function make_buf(n)
+    local buf = vim.api.nvim_create_buf(false, true)
+    local lines = {}
+    for i = 1, n do lines[i] = "line " .. i end
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+    return buf
+  end
+
+  local function make_line_data(new_lines)
+    local ld = {}
+    for _, nl in ipairs(new_lines) do
+      table.insert(ld, { item = { new_line = nl, old_line = nl }, type = "context", file_idx = 1 })
+    end
+    return ld
+  end
+
+  local function find_virt_lines_row(buf)
+    local marks = vim.api.nvim_buf_get_extmarks(buf, -1, 0, -1, { details = true })
+    for _, m in ipairs(marks) do
+      if m[4] and m[4].virt_lines then
+        return m[2] + 1  -- convert 0-indexed to 1-indexed
+      end
+    end
+    return nil
+  end
+
+  it("GitLab: normalizes and remaps outdated comment", function()
+    -- Raw GitLab discussion: position.head_sha is old, change_position is sibling of position
+    local raw_disc = {
+      id = "disc-gl-1",
+      resolved = false,
+      notes = {
+        {
+          id = 101,
+          author = { username = "alice" },
+          body = "This line changed",
+          created_at = "2026-01-10T12:00:00Z",
+          system = false,
+          resolvable = true,
+          resolved = false,
+          position = {
+            new_path = "src/foo.lua",
+            old_path = "src/foo.lua",
+            new_line = 10,
+            old_line = 10,
+            head_sha = "old-head",
+            base_sha = "base-sha",
+            start_sha = "start-sha",
+          },
+          -- change_position is a SIBLING of position (not nested inside)
+          change_position = {
+            new_path = "src/foo.lua",
+            old_path = "src/foo.lua",
+            new_line = 25,
+            old_line = 25,
+          },
+        },
+      },
+    }
+
+    local normalized = gitlab.normalize_discussion(raw_disc)
+
+    -- SHAs must be preserved from position
+    local note = normalized.notes[1]
+    assert.equal("old-head", note.position.head_sha)
+    assert.equal("base-sha", note.position.base_sha)
+    assert.equal("start-sha", note.position.start_sha)
+
+    -- change_position must be present on the normalized note
+    assert.is_not_nil(note.change_position, "change_position should be preserved after normalization")
+    assert.equal("src/foo.lua", note.change_position.new_path)
+    assert.equal(25, note.change_position.new_line)
+
+    -- Now simulate placing the comment into a diff buffer
+    -- review.head_sha differs from position.head_sha => comment is outdated
+    local review = { head_sha = "cur-head" }
+    local buf = make_buf(30)
+    -- line_data covers lines 20-26 (new_line=25 is the 6th entry)
+    local line_data = make_line_data({ 20, 21, 22, 23, 24, 25, 26 })
+    local file_diff = { new_path = "src/foo.lua", old_path = "src/foo.lua" }
+
+    diff.place_comment_signs(buf, line_data, { normalized }, file_diff, nil, nil, review)
+
+    local found_row = find_virt_lines_row(buf)
+    -- change_position.new_line=25 is the 6th entry in line_data
+    assert.equal(6, found_row, "outdated GitLab comment should land on the change_position row (25 = index 6)")
+
+    vim.api.nvim_buf_delete(buf, { force = true })
+  end)
+
+  it("GitHub: normalizes outdated comment with originalLine fallback", function()
+    -- Raw GitHub thread: isOutdated=true, line=vim.NIL, originalLine=30
+    local raw_threads = {
+      {
+        id = "thread-gh-1",
+        isResolved = false,
+        isOutdated = true,
+        diffSide = "RIGHT",
+        startDiffSide = vim.NIL,
+        comments = {
+          nodes = {
+            {
+              databaseId = 9001,
+              id = "comment-node-1",
+              author = { login = "bob" },
+              body = "This is outdated",
+              createdAt = "2026-01-15T09:30:00Z",
+              path = "src/bar.lua",
+              line = vim.NIL,         -- nil because the line no longer exists at HEAD
+              originalLine = 30,      -- where the comment was originally placed
+              startLine = vim.NIL,
+              originalStartLine = vim.NIL,
+              outdated = true,
+              commit = { oid = "old-commit-sha" },
+            },
+          },
+        },
+      },
+    }
+
+    local discussions = github.normalize_graphql_threads(raw_threads)
+
+    assert.equal(1, #discussions, "should produce one discussion")
+    local note = discussions[1].notes[1]
+
+    -- new_line should fall back to originalLine=30
+    assert.equal(30, note.position.new_line, "new_line should be originalLine (30) when line is vim.NIL")
+
+    -- outdated flag must be set
+    assert.is_true(note.position.outdated, "position.outdated should be true for isOutdated thread")
+
+    -- Now simulate placing the comment into a diff buffer
+    local buf = make_buf(35)
+    -- line_data covers lines 28-32 (new_line=30 is the 3rd entry)
+    local line_data = make_line_data({ 28, 29, 30, 31, 32 })
+    local file_diff = { new_path = "src/bar.lua", old_path = "src/bar.lua" }
+    local review = { head_sha = "cur-head" }
+
+    diff.place_comment_signs(buf, line_data, discussions, file_diff, nil, nil, review)
+
+    local found_row = find_virt_lines_row(buf)
+    -- new_line=30 is the 3rd entry in line_data
+    assert.equal(3, found_row, "GitHub outdated comment should land on the originalLine row (30 = index 3)")
+
+    vim.api.nvim_buf_delete(buf, { force = true })
+  end)
+end)
