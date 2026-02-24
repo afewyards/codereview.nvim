@@ -644,7 +644,9 @@ describe("parse_blocks table wrapping", function()
       if l:find("┌") then border_line = l; break end
     end
     assert.truthy(border_line)
-    assert.truthy(utf8.len(border_line) <= 60)
+    -- Count display width: UTF-8 chars (skip continuation bytes 0x80-0xBF)
+    local display_width = select(2, border_line:gsub("[^\128-\191]", ""))
+    assert.truthy(display_width <= 60)
   end)
 
   it("columns respect minimum width of 3", function()
