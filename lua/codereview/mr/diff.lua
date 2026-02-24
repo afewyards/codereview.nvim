@@ -3123,6 +3123,30 @@ function M.open(review, discussions)
 
   M.setup_keymaps(layout, state)
   vim.api.nvim_set_current_win(layout.main_win)
+
+  -- Check for server-side draft comments
+  local drafts_mod = require("codereview.review.drafts")
+  drafts_mod.check_and_prompt(provider, client_mod, ctx, review, function(server_drafts)
+    if server_drafts then
+      local session = require("codereview.review.session")
+      session.start()
+      for _, d in ipairs(server_drafts) do
+        table.insert(state.local_drafts, d)
+        table.insert(state.discussions, d)
+      end
+      -- Re-render to show draft markers
+      M.render_sidebar(layout.sidebar_buf, state)
+      if state.scroll_mode then
+        local render_result = M.render_all_files(layout.main_buf, state.files, review, state.discussions, state.context, state.file_contexts, state.ai_suggestions, state.row_selection, state.current_user)
+        state.file_sections = render_result.file_sections
+        state.scroll_line_data = render_result.line_data
+        state.scroll_row_disc = render_result.row_discussions
+        state.scroll_row_ai = render_result.row_ai
+      else
+        M.render_file_diff(layout.main_buf, state.files[state.current_file], review, state.discussions, state.context, state.ai_suggestions, state.row_selection, state.current_user)
+      end
+    end
+  end)
 end
 
 return M
