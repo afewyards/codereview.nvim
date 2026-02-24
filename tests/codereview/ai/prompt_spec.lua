@@ -31,8 +31,11 @@ else
           local obj_str = inner:sub(obj_start, i)
           local obj = {}
           -- Parse key-value pairs from flat object
+          local function json_unescape(s)
+            return (s:gsub("\\n", "\n"):gsub("\\t", "\t"):gsub("\\\\", "\\")):gsub('\\"', '"')
+          end
           for key, val in obj_str:gmatch('"([^"]+)"%s*:%s*"([^"]*)"') do
-            obj[key] = val
+            obj[key] = json_unescape(val)
           end
           for key, val in obj_str:gmatch('"([^"]+)"%s*:%s*(-?%d+)') do
             obj[key] = tonumber(val)
@@ -86,6 +89,14 @@ describe("ai.prompt", function()
       assert.equals(15, suggestions[1].line)
       assert.equals("Missing error check", suggestions[1].comment)
       assert.equals("pending", suggestions[1].status)
+    end)
+
+    it("preserves newlines in comment fields", function()
+      local output = '```json\n[{"file": "src/auth.lua", "line": 10, "severity": "warning", "comment": "Missing nil check.\\n\\nAdd a guard before accessing resp.body."}]\n```'
+      local suggestions = prompt.parse_review_output(output)
+      assert.equals(1, #suggestions)
+      assert.truthy(suggestions[1].comment:find("\n"), "comment should contain real newlines")
+      assert.equals("Missing nil check.\n\nAdd a guard before accessing resp.body.", suggestions[1].comment)
     end)
 
     it("handles output with no JSON", function()

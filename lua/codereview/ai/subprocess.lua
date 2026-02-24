@@ -33,8 +33,11 @@ function M.run(prompt, callback)
 		stderr_buffered = true,
 		on_stdout = function(_, data)
 			if data then
-				for _, chunk in ipairs(data) do
-					if chunk ~= "" then
+				-- Preserve all lines including blank ones (important for newlines
+				-- inside JSON string values). Only drop the trailing empty string
+				-- that Neovim always appends after the final newline.
+				for i, chunk in ipairs(data) do
+					if i < #data or chunk ~= "" then
 						table.insert(stdout_chunks, chunk)
 					end
 				end
@@ -42,8 +45,8 @@ function M.run(prompt, callback)
 		end,
 		on_stderr = function(_, data)
 			if data then
-				for _, chunk in ipairs(data) do
-					if chunk ~= "" then
+				for i, chunk in ipairs(data) do
+					if i < #data or chunk ~= "" then
 						table.insert(stderr_chunks, chunk)
 					end
 				end
