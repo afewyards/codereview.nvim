@@ -1,6 +1,10 @@
 local M = {}
 local config = require("codereview.config")
 local markdown = require("codereview.ui.markdown")
+local tvl = require("codereview.mr.thread_virt_lines")
+local wrap_text = tvl.wrap_text
+local md_virt_line = tvl.md_virt_line
+local is_resolved = tvl.is_resolved
 
 -- LINE_NR_WIDTH: "%5d | %-5d " = 5+3+5+1 = 14 chars
 local LINE_NR_WIDTH = 14
@@ -86,63 +90,6 @@ local function apply_word_hl(buf, row, col_start, col_end, hl_group)
   })
 end
 
--- ─── Text helpers ───────────────────────────────────────────────────────────
-
-local function md_virt_line(prefix_chunk, text, base_hl)
-  local segs = markdown.parse_inline(text, base_hl)
-  local line = { prefix_chunk }
-  vim.list_extend(line, segs)
-  return line
-end
-
-local function wrap_text(text, width)
-  local result = {}
-  for _, paragraph in ipairs(vim.split(text or "", "\n")) do
-    if paragraph == "" then
-      table.insert(result, "")
-    elseif #paragraph <= width then
-      table.insert(result, paragraph)
-    else
-      local spans = markdown.find_spans(paragraph)
-      local function in_span(pos)
-        for _, r in ipairs(spans) do
-          if pos > r[1] and pos < r[2] then return true end
-        end
-        return false
-      end
-
-      local line = ""
-      local char_pos = 1 -- tracks position in original paragraph
-      for word in paragraph:gmatch("%S+") do
-        local ws = paragraph:find("%S", char_pos)
-        char_pos = ws + #word
-
-        if line ~= "" and #line + #word + 1 > width then
-          -- The break point is the space before this word (at ws - 1)
-          if #spans > 0 and in_span(ws - 1) then
-            -- Inside a markdown span: don't break, keep the line going
-            line = line .. " " .. word
-          else
-            table.insert(result, line)
-            line = word
-          end
-        else
-          line = line == "" and word or (line .. " " .. word)
-        end
-      end
-      if line ~= "" then table.insert(result, line) end
-    end
-  end
-  return result
-end
-
-local function format_time_short(iso_str)
-  if not iso_str then return "" end
-  local mo, d, h, mi = iso_str:match("%d+-(%d+)-(%d+)T(%d+):(%d+)")
-  if not mo then return "" end
-  return string.format("%s/%s %s:%s", mo, d, h, mi)
-end
-
 -- ─── Sign helpers ─────────────────────────────────────────────────────────────
 
 local function is_outdated(discussion, review)
@@ -192,12 +139,6 @@ local function discussion_line(discussion, review)
   return end_line, start_line
 end
 
-local function is_resolved(discussion)
-  if discussion.resolved ~= nil then return discussion.resolved end
-  local note = discussion.notes and discussion.notes[1]
-  return note and note.resolved
-end
-
 function M.place_comment_signs(buf, line_data, discussions, file_diff, row_selection, current_user, review)
   -- Remove old signs for this buffer
   pcall(vim.fn.sign_unplace, "CodeReview", { buffer = buf })
@@ -233,103 +174,15 @@ function M.place_comment_signs(buf, line_data, discussions, file_diff, row_selec
             -- Render full comment thread inline
             local notes = discussion.notes
             if notes and #notes > 0 then
-              local first = notes[1]
-              local resolved = is_resolved(discussion)
-              local is_pending = discussion.is_optimistic
-              local is_err = discussion.is_failed
-              local bdr = is_err and "CodeReviewCommentFailed" or is_pending and "CodeReviewCommentPending" or "CodeReviewCommentBorder"
-              local aut = is_err and "CodeReviewCommentFailed" or is_pending and "CodeReviewCommentPending" or "CodeReviewCommentAuthor"
-              local body_hl = is_err and "CodeReviewCommentFailed"
-                or is_pending and "CodeReviewCommentPending"
-                or resolved and "CodeReviewComment" or "CodeReviewCommentUnresolved"
-              local status_hl = is_err and "CodeReviewCommentFailed"
-                or is_pending and "CodeReviewCommentPending"
-                or resolved and "CodeReviewCommentResolved" or "CodeReviewCommentUnresolved"
-              local status_str = is_err and " Failed " or is_pending and " Posting… " or resolved and " Resolved " or " Unresolved "
-              local outdated_str = outdated and " Outdated " or ""
-              local time_str = format_time_short(first.created_at)
-              local header_meta = time_str ~= "" and (" · " .. time_str) or ""
-              local header_text = "@" .. first.author
-              local fill = math.max(0, 62 - #header_text - #header_meta - #status_str - #outdated_str)
-
               local sel = row_selection and row_selection[row]
               local sel_idx = sel and sel.type == "comment" and sel.disc_id == discussion.id and sel.note_idx or nil
-
-              local virt_lines = {}
-
-              -- ┌ @author · 02/15 14:30 · Unresolved ─────────
-              local n1_bdr = (sel_idx == 1) and "CodeReviewSelectedNote" or bdr
-              local n1_aut = (sel_idx == 1) and "CodeReviewSelectedNote" or aut
-              local n1_body_hl = (sel_idx == 1) and "CodeReviewSelectedNote" or body_hl
-              local header_chunks = {
-                { "  ┌ ", n1_bdr },
-                { header_text, n1_aut },
-                { header_meta, n1_bdr },
-                { status_str, status_hl },
-              }
-              if outdated_str ~= "" then
-                table.insert(header_chunks, { outdated_str, "CodeReviewCommentOutdated" })
-              end
-              table.insert(header_chunks, { string.rep("─", fill), n1_bdr })
-              table.insert(virt_lines, header_chunks)
-
-              -- Comment body (wrapped, full)
-              for _, bl in ipairs(wrap_text(first.body, config.get().diff.comment_width)) do
-                table.insert(virt_lines, md_virt_line({ "  │ ", n1_bdr }, bl, n1_body_hl))
-              end
-
-              -- Replies
-              for i = 2, #notes do
-                local reply = notes[i]
-                if not reply.system then
-                  local rt = format_time_short(reply.created_at)
-                  local rmeta = rt ~= "" and (" · " .. rt) or ""
-                  local ri_bdr = (sel_idx == i) and "CodeReviewSelectedNote" or bdr
-                  local ri_aut = (sel_idx == i) and "CodeReviewSelectedNote" or aut
-                  local ri_body_hl = (sel_idx == i) and "CodeReviewSelectedNote" or body_hl
-                  table.insert(virt_lines, { { "  │", ri_bdr } })
-                  table.insert(virt_lines, {
-                    { "  │  ↪ ", ri_bdr },
-                    { "@" .. reply.author, ri_aut },
-                    { rmeta, ri_bdr },
-                  })
-                  for _, rl in ipairs(wrap_text(reply.body, 58)) do
-                    table.insert(virt_lines, md_virt_line({ "  │    ", ri_bdr }, rl, ri_body_hl))
-                  end
-                end
-              end
-
-              -- └ footer ──────────────────────
-              local footer_content
-              if is_err then
-                footer_content = "gR:retry  D:discard"
-              elseif is_pending then
-                footer_content = "posting…"
-              elseif sel_idx then
-                local sel_note = notes[sel_idx]
-                if sel_note and current_user and sel_note.author == current_user then
-                  footer_content = "r:reply  gt:un/resolve  e:edit  x:delete"
-                else
-                  footer_content = "r:reply  gt:un/resolve"
-                end
-              else
-                footer_content = ""
-              end
-              local footer_fill = math.max(0, 62 - #footer_content - (footer_content ~= "" and 1 or 0))
-              if footer_content ~= "" then
-                table.insert(virt_lines, {
-                  { "  └ ", bdr },
-                  { footer_content, body_hl },
-                  { " " .. string.rep("─", footer_fill), bdr },
-                })
-              else
-                table.insert(virt_lines, {
-                  { "  └" .. string.rep("─", 63), bdr },
-                })
-              end
-
+              local result = tvl.build(discussion, {
+                sel_idx = sel_idx,
+                current_user = current_user,
+                outdated = outdated,
+              })
               pcall(vim.api.nvim_buf_set_extmark, buf, DIFF_NS, row - 1, 0, {
-                virt_lines = virt_lines,
+                virt_lines = result.virt_lines,
                 virt_lines_above = false,
               })
             end
@@ -835,89 +688,15 @@ function M.render_all_files(buf, files, review, discussions, context, file_conte
 
               local notes = disc.notes
               if notes and #notes > 0 then
-                local first = notes[1]
-                local resolved = is_resolved(disc)
-                local is_pending = disc.is_optimistic
-                local is_err = disc.is_failed
-                local bdr = is_err and "CodeReviewCommentFailed" or is_pending and "CodeReviewCommentPending" or "CodeReviewCommentBorder"
-                local aut = is_err and "CodeReviewCommentFailed" or is_pending and "CodeReviewCommentPending" or "CodeReviewCommentAuthor"
-                local body_hl = is_err and "CodeReviewCommentFailed"
-                  or is_pending and "CodeReviewCommentPending"
-                  or resolved and "CodeReviewComment" or "CodeReviewCommentUnresolved"
-                local status_hl = is_err and "CodeReviewCommentFailed"
-                  or is_pending and "CodeReviewCommentPending"
-                  or resolved and "CodeReviewCommentResolved" or "CodeReviewCommentUnresolved"
-                local status_str = is_err and " Failed " or is_pending and " Posting… " or resolved and " Resolved " or " Unresolved "
-                local outdated_str = disc_outdated and " Outdated " or ""
-                local time_str = format_time_short(first.created_at)
-                local header_meta = time_str ~= "" and (" · " .. time_str) or ""
-                local header_text = "@" .. first.author
-                local fill = math.max(0, 62 - #header_text - #header_meta - #status_str - #outdated_str)
-
                 local sel = row_selection and row_selection[i]
                 local sel_idx = sel and sel.type == "comment" and sel.disc_id == disc.id and sel.note_idx or nil
-
-                local virt_lines = {}
-                local n1_bdr = (sel_idx == 1) and "CodeReviewSelectedNote" or bdr
-                local n1_aut = (sel_idx == 1) and "CodeReviewSelectedNote" or aut
-                local n1_body_hl = (sel_idx == 1) and "CodeReviewSelectedNote" or body_hl
-                local header_chunks = {
-                  { "  ┌ ", n1_bdr }, { header_text, n1_aut },
-                  { header_meta, n1_bdr }, { status_str, status_hl },
-                }
-                if outdated_str ~= "" then
-                  table.insert(header_chunks, { outdated_str, "CodeReviewCommentOutdated" })
-                end
-                table.insert(header_chunks, { string.rep("─", fill), n1_bdr })
-                table.insert(virt_lines, header_chunks)
-                for _, bl in ipairs(wrap_text(first.body, config.get().diff.comment_width)) do
-                  table.insert(virt_lines, md_virt_line({ "  │ ", n1_bdr }, bl, n1_body_hl))
-                end
-                for ni = 2, #notes do
-                  local reply = notes[ni]
-                  if not reply.system then
-                    local rt = format_time_short(reply.created_at)
-                    local rmeta = rt ~= "" and (" · " .. rt) or ""
-                    local ri_bdr = (sel_idx == ni) and "CodeReviewSelectedNote" or bdr
-                    local ri_aut = (sel_idx == ni) and "CodeReviewSelectedNote" or aut
-                    local ri_body_hl = (sel_idx == ni) and "CodeReviewSelectedNote" or body_hl
-                    table.insert(virt_lines, { { "  │", ri_bdr } })
-                    table.insert(virt_lines, {
-                      { "  │  ↪ ", ri_bdr }, { "@" .. reply.author, ri_aut }, { rmeta, ri_bdr },
-                    })
-                    for _, rl in ipairs(wrap_text(reply.body, 58)) do
-                      table.insert(virt_lines, md_virt_line({ "  │    ", ri_bdr }, rl, ri_body_hl))
-                    end
-                  end
-                end
-                local footer_content
-                if is_err then
-                  footer_content = "gR:retry  D:discard"
-                elseif is_pending then
-                  footer_content = "posting…"
-                elseif sel_idx then
-                  local sel_note = notes[sel_idx]
-                  if sel_note and current_user and sel_note.author == current_user then
-                    footer_content = "r:reply  gt:un/resolve  e:edit  x:delete"
-                  else
-                    footer_content = "r:reply  gt:un/resolve"
-                  end
-                else
-                  footer_content = ""
-                end
-                local footer_fill = math.max(0, 62 - #footer_content - (footer_content ~= "" and 1 or 0))
-                if footer_content ~= "" then
-                  table.insert(virt_lines, {
-                    { "  └ ", bdr }, { footer_content, body_hl },
-                    { " " .. string.rep("─", footer_fill), bdr },
-                  })
-                else
-                  table.insert(virt_lines, {
-                    { "  └" .. string.rep("─", 63), bdr },
-                  })
-                end
+                local result = tvl.build(disc, {
+                  sel_idx = sel_idx,
+                  current_user = current_user,
+                  outdated = disc_outdated,
+                })
                 pcall(vim.api.nvim_buf_set_extmark, buf, DIFF_NS, i - 1, 0, {
-                  virt_lines = virt_lines, virt_lines_above = false,
+                  virt_lines = result.virt_lines, virt_lines_above = false,
                 })
               end
 
