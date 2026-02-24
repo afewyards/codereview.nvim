@@ -49,7 +49,8 @@ function M.start(review, diff_state, layout)
         local result = diff_mod.render_all_files(
           layout.main_buf, diff_state.files, diff_state.review,
           diff_state.discussions, diff_state.context,
-          diff_state.file_contexts, suggestions
+          diff_state.file_contexts, suggestions,
+          diff_state.row_selection, diff_state.current_user
         )
         diff_state.file_sections = result.file_sections
         diff_state.scroll_line_data = result.line_data
@@ -60,7 +61,8 @@ function M.start(review, diff_state, layout)
         if file then
           local ld, rd, ra = diff_mod.render_file_diff(
             layout.main_buf, file, diff_state.review,
-            diff_state.discussions, diff_state.context, suggestions
+            diff_state.discussions, diff_state.context, suggestions,
+            diff_state.row_selection, diff_state.current_user
           )
           diff_state.line_data_cache[diff_state.current_file] = ld
           diff_state.row_disc_cache[diff_state.current_file] = rd

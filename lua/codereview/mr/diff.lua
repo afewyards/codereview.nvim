@@ -313,6 +313,68 @@ function M.place_comment_signs(buf, line_data, discussions, file_diff, row_selec
   return row_discussions
 end
 
+--- Render AI suggestions for a single row as virtual lines with sign placement.
+--- @param buf number buffer handle
+--- @param row number 1-indexed buffer row
+--- @param sugs table[] array of suggestion objects at this row
+--- @param row_selection table|nil current row_selection state
+local function render_ai_suggestions_at_row(buf, row, sugs, row_selection)
+  pcall(vim.fn.sign_place, 0, "CodeReviewAI", "CodeReviewAISign", buf, { lnum = row })
+  local sel = row_selection and row_selection[row]
+  local sel_ai_idx = sel and sel.type == "ai" and sel.index or nil
+  local sug_count = #sugs
+  local virt_lines = {}
+
+  for i, suggestion in ipairs(sugs) do
+    local is_selected = (sel_ai_idx == i)
+    local drafted = suggestion.status == "accepted" or suggestion.status == "edited"
+    local bdr = is_selected and "CodeReviewSelectedNote"
+      or drafted and "CodeReviewCommentBorder" or "CodeReviewAIDraftBorder"
+    local body_hl = is_selected and "CodeReviewSelectedNote"
+      or drafted and "CodeReviewComment" or "CodeReviewAIDraft"
+    local severity = suggestion.severity or "info"
+    local header_label = drafted and (" AI [" .. severity .. "] ✓ drafted ")
+      or (" AI [" .. severity .. "] ")
+    local header_fill = math.max(0, 62 - #header_label)
+
+    -- Footer: actions + counter when multiple
+    local footer_content = drafted and "x:dismiss" or "a:accept  x:dismiss  e:edit"
+    local counter = ""
+    if sug_count > 1 then
+      counter = " " .. i .. "/" .. sug_count
+    end
+    local footer_fill = math.max(0, 62 - #footer_content - #counter - 1)
+
+    -- Header
+    table.insert(virt_lines, {
+      { "  ┌" .. header_label, bdr },
+      { string.rep("─", header_fill), bdr },
+    })
+
+    -- Body
+    for _, bl in ipairs(wrap_text(suggestion.comment, config.get().diff.comment_width)) do
+      table.insert(virt_lines, md_virt_line({ "  │ ", bdr }, bl, body_hl))
+    end
+
+    -- Footer
+    local footer_parts = {
+      { "  └ ", bdr },
+      { footer_content, body_hl },
+    }
+    if counter ~= "" then
+      table.insert(footer_parts, { " " .. string.rep("─", footer_fill) .. counter, bdr })
+    else
+      table.insert(footer_parts, { " " .. string.rep("─", footer_fill), bdr })
+    end
+    table.insert(virt_lines, footer_parts)
+  end
+
+  pcall(vim.api.nvim_buf_set_extmark, buf, AIDRAFT_NS, row - 1, 0, {
+    virt_lines = virt_lines,
+    virt_lines_above = false,
+  })
+end
+
 function M.place_ai_suggestions(buf, line_data, suggestions, file_diff, row_selection)
   -- Clear old AI signs and extmarks
   pcall(vim.fn.sign_unplace, "CodeReviewAI", { buffer = buf })
@@ -338,60 +400,7 @@ function M.place_ai_suggestions(buf, line_data, suggestions, file_diff, row_sele
 
   -- Pass 2: render all suggestions per row with selection awareness
   for row, sugs in pairs(row_ai_map) do
-    pcall(vim.fn.sign_place, 0, "CodeReviewAI", "CodeReviewAISign", buf, { lnum = row })
-    local sel = row_selection and row_selection[row]
-    local sel_ai_idx = sel and sel.type == "ai" and sel.index or nil
-    local sug_count = #sugs
-    local virt_lines = {}
-
-    for i, suggestion in ipairs(sugs) do
-      local is_selected = (sel_ai_idx == i)
-      local drafted = suggestion.status == "accepted" or suggestion.status == "edited"
-      local bdr = is_selected and "CodeReviewSelectedNote"
-        or drafted and "CodeReviewCommentBorder" or "CodeReviewAIDraftBorder"
-      local body_hl = is_selected and "CodeReviewSelectedNote"
-        or drafted and "CodeReviewComment" or "CodeReviewAIDraft"
-      local severity = suggestion.severity or "info"
-      local header_label = drafted and (" AI [" .. severity .. "] ✓ drafted ")
-        or (" AI [" .. severity .. "] ")
-      local header_fill = math.max(0, 62 - #header_label)
-
-      -- Footer: actions + counter when multiple
-      local footer_content = drafted and "x:dismiss" or "a:accept  x:dismiss  e:edit"
-      local counter = ""
-      if sug_count > 1 then
-        counter = " " .. i .. "/" .. sug_count
-      end
-      local footer_fill = math.max(0, 62 - #footer_content - #counter - 1)
-
-      -- Header
-      table.insert(virt_lines, {
-        { "  ┌" .. header_label, bdr },
-        { string.rep("─", header_fill), bdr },
-      })
-
-      -- Body
-      for _, bl in ipairs(wrap_text(suggestion.comment, config.get().diff.comment_width)) do
-        table.insert(virt_lines, md_virt_line({ "  │ ", bdr }, bl, body_hl))
-      end
-
-      -- Footer
-      local footer_parts = {
-        { "  └ ", bdr },
-        { footer_content, body_hl },
-      }
-      if counter ~= "" then
-        table.insert(footer_parts, { " " .. string.rep("─", footer_fill) .. counter, bdr })
-      else
-        table.insert(footer_parts, { " " .. string.rep("─", footer_fill), bdr })
-      end
-      table.insert(virt_lines, footer_parts)
-    end
-
-    pcall(vim.api.nvim_buf_set_extmark, buf, AIDRAFT_NS, row - 1, 0, {
-      virt_lines = virt_lines,
-      virt_lines_above = false,
-    })
+    render_ai_suggestions_at_row(buf, row, sugs, row_selection)
   end
 
   return row_ai_map
@@ -427,60 +436,7 @@ function M.place_ai_suggestions_all(buf, all_line_data, file_sections, suggestio
 
   -- Pass 2: render all suggestions per row with selection awareness
   for row, sugs in pairs(scroll_row_ai) do
-    pcall(vim.fn.sign_place, 0, "CodeReviewAI", "CodeReviewAISign", buf, { lnum = row })
-    local sel = row_selection and row_selection[row]
-    local sel_ai_idx = sel and sel.type == "ai" and sel.index or nil
-    local sug_count = #sugs
-    local virt_lines = {}
-
-    for i, suggestion in ipairs(sugs) do
-      local is_selected = (sel_ai_idx == i)
-      local drafted = suggestion.status == "accepted" or suggestion.status == "edited"
-      local bdr = is_selected and "CodeReviewSelectedNote"
-        or drafted and "CodeReviewCommentBorder" or "CodeReviewAIDraftBorder"
-      local body_hl = is_selected and "CodeReviewSelectedNote"
-        or drafted and "CodeReviewComment" or "CodeReviewAIDraft"
-      local severity = suggestion.severity or "info"
-      local header_label = drafted and (" AI [" .. severity .. "] ✓ drafted ")
-        or (" AI [" .. severity .. "] ")
-      local header_fill = math.max(0, 62 - #header_label)
-
-      -- Footer: actions + counter when multiple
-      local footer_content = drafted and "x:dismiss" or "a:accept  x:dismiss  e:edit"
-      local counter = ""
-      if sug_count > 1 then
-        counter = " " .. i .. "/" .. sug_count
-      end
-      local footer_fill = math.max(0, 62 - #footer_content - #counter - 1)
-
-      -- Header
-      table.insert(virt_lines, {
-        { "  ┌" .. header_label, bdr },
-        { string.rep("─", header_fill), bdr },
-      })
-
-      -- Body
-      for _, bl in ipairs(wrap_text(suggestion.comment, config.get().diff.comment_width)) do
-        table.insert(virt_lines, md_virt_line({ "  │ ", bdr }, bl, body_hl))
-      end
-
-      -- Footer
-      local footer_parts = {
-        { "  └ ", bdr },
-        { footer_content, body_hl },
-      }
-      if counter ~= "" then
-        table.insert(footer_parts, { " " .. string.rep("─", footer_fill) .. counter, bdr })
-      else
-        table.insert(footer_parts, { " " .. string.rep("─", footer_fill), bdr })
-      end
-      table.insert(virt_lines, footer_parts)
-    end
-
-    pcall(vim.api.nvim_buf_set_extmark, buf, AIDRAFT_NS, row - 1, 0, {
-      virt_lines = virt_lines,
-      virt_lines_above = false,
-    })
+    render_ai_suggestions_at_row(buf, row, sugs, row_selection)
   end
 
   return scroll_row_ai
@@ -1773,6 +1729,7 @@ end
 
 local function toggle_scroll_mode(layout, state)
   local cursor_row = vim.api.nvim_win_get_cursor(layout.main_win)[1]
+  state.row_selection = {}
 
   if state.scroll_mode then
     -- EXITING scroll mode → per-file
@@ -2490,7 +2447,8 @@ function M.setup_keymaps(layout, state)
       local cursor = vim.api.nvim_win_get_cursor(layout.main_win)[1]
       local row_ai = state.scroll_mode and state.scroll_row_ai or (state.row_ai_cache[state.current_file] or {})
       local sel = state.row_selection[cursor]
-      local ai_idx = sel and sel.type == "ai" and sel.index or 1
+      if not sel or sel.type ~= "ai" then return end
+      local ai_idx = sel.index
       local suggestion = row_ai[cursor] and row_ai[cursor][ai_idx]
       if not suggestion then return end
 
@@ -2524,7 +2482,8 @@ function M.setup_keymaps(layout, state)
       local cursor = vim.api.nvim_win_get_cursor(layout.main_win)[1]
       local row_ai = state.scroll_mode and state.scroll_row_ai or (state.row_ai_cache[state.current_file] or {})
       local sel = state.row_selection[cursor]
-      local ai_idx = sel and sel.type == "ai" and sel.index or 1
+      if not sel or sel.type ~= "ai" then return end
+      local ai_idx = sel.index
       local suggestion = row_ai[cursor] and row_ai[cursor][ai_idx]
       if not suggestion then return end
       suggestion.status = "dismissed"
@@ -2537,7 +2496,8 @@ function M.setup_keymaps(layout, state)
       local cursor = vim.api.nvim_win_get_cursor(layout.main_win)[1]
       local row_ai = state.scroll_mode and state.scroll_row_ai or (state.row_ai_cache[state.current_file] or {})
       local sel = state.row_selection[cursor]
-      local ai_idx = sel and sel.type == "ai" and sel.index or 1
+      if not sel or sel.type ~= "ai" then return end
+      local ai_idx = sel.index
       local suggestion = row_ai[cursor] and row_ai[cursor][ai_idx]
       if not suggestion then return end
 
@@ -2858,6 +2818,7 @@ function M.setup_keymaps(layout, state)
 
       state.view_mode = "diff"
       state.current_file = entry.idx
+      state.row_selection = {}
       vim.wo[layout.main_win].wrap = false
       vim.wo[layout.main_win].linebreak = false
 
@@ -2942,10 +2903,28 @@ function M.setup_keymaps(layout, state)
           -- Auto-select first item on entering a row with items
           state.row_selection = { [cursor_row] = items[1] }
           rerender_view()
-        elseif next(state.row_selection, next(state.row_selection)) or not state.row_selection[cursor_row] then
-          -- Clear selections on other rows
-          state.row_selection = { [cursor_row] = state.row_selection[cursor_row] }
-          rerender_view()
+        else
+          -- Validate prev_sel against current items (may be stale after dismiss/accept)
+          local valid = false
+          for _, item in ipairs(items) do
+            if item.type == prev_sel.type then
+              if item.type == "ai" and item.index == prev_sel.index then
+                valid = true; break
+              end
+              if item.type == "comment" and item.disc_id == prev_sel.disc_id
+                  and item.note_idx == prev_sel.note_idx then
+                valid = true; break
+              end
+            end
+          end
+          if not valid then
+            state.row_selection = { [cursor_row] = items[1] }
+            rerender_view()
+          elseif next(state.row_selection, next(state.row_selection)) or not state.row_selection[cursor_row] then
+            -- Clear selections on other rows
+            state.row_selection = { [cursor_row] = state.row_selection[cursor_row] }
+            rerender_view()
+          end
         end
       else
         local had = next(state.row_selection) ~= nil
