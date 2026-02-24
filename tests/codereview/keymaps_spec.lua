@@ -20,7 +20,7 @@ describe("keymaps", function()
   end)
 
   describe("defaults", function()
-    it("has all 30 actions", function()
+    it("has all 28 actions", function()
       keymaps.setup()
       local all = keymaps.get_all()
       assert.equals("]f", all.next_file.key)
@@ -31,7 +31,7 @@ describe("keymaps", function()
       assert.equals("Q", all.quit.key)
       local count = 0
       for _ in pairs(all) do count = count + 1 end
-      assert.equals(32, count)
+      assert.equals(28, count)
     end)
 
     it("has select_next_note default", function()
