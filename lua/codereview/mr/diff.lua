@@ -954,7 +954,10 @@ function M.render_summary(buf, state)
     end
   end)
   local detail = require("codereview.mr.detail")
-  local pane_width = math.floor(vim.api.nvim_win_get_width(state.layout.main_win) * 0.8)
+  local win_width = (state.layout and state.layout.main_win)
+    and vim.api.nvim_win_get_width(state.layout.main_win)
+    or tonumber(vim.o.columns) or 80
+  local pane_width = math.floor(win_width * 0.8)
 
   local header = detail.build_header_lines(state.review, pane_width)
   local lines = {}
@@ -1115,7 +1118,10 @@ local function build_footer(state, sess)
   local function k(action)
     local key = km.get(action)
     if not key or key == false then return nil end
-    return (key:gsub("<C%-(%a)>", function(c) return "⌃" .. c:upper() end))
+    return (key
+      :gsub("<C%-(%a)>", function(c) return "⌃" .. c:upper() end)
+      :gsub("<S%-Tab>", "S-Tab")
+      :gsub("<Tab>", "Tab"))
   end
 
   local function header(label)
@@ -1163,6 +1169,11 @@ local function build_footer(state, sess)
   if nf and pf then row(nf .. " " .. pf .. "  files")
   elseif nf then row(nf .. "  next file")
   elseif pf then row(pf .. "  prev file")
+  end
+  local nn, pn = k("select_next_note"), k("select_prev_note")
+  if nn and pn then row(nn .. " " .. pn .. "  notes")
+  elseif nn then row(nn .. "  next note")
+  elseif pn then row(pn .. "  prev note")
   end
 
   header("Comment")

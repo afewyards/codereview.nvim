@@ -179,20 +179,20 @@ describe("providers.github", function()
       assert.equal(42, r.id)
     end)
 
-    it("get_diffs calls client.get and normalizes files", function()
-      local called_path
+    it("get_diffs calls client.paginate_all_url and normalizes files", function()
+      local called_url
       local client = make_client({
-        get = function(_, path, _)
-          called_path = path
-          return { data = {
+        paginate_all_url = function(url, _)
+          called_url = url
+          return {
             { filename = "new.lua", status = "added", patch = "@@ ...", previous_filename = nil },
             { filename = "old.lua", previous_filename = "orig.lua", status = "renamed", patch = "" },
-          } }, nil
+          }
         end,
       })
       local diffs, err = github.get_diffs(client, ctx, review)
       assert.is_nil(err)
-      assert.equal("/repos/owner/repo/pulls/42/files", called_path)
+      assert.equal("https://api.github.com/repos/owner/repo/pulls/42/files", called_url)
       assert.equal(2, #diffs)
       assert.equal("new.lua", diffs[1].new_path)
       assert.is_true(diffs[1].new_file)
