@@ -311,6 +311,124 @@ local function flush_code_block(result, code_lines, code_lang)
   })
 end
 
+-- ─── Table rendering ─────────────────────────────────────────────────────────
+
+-- Split a pipe-table row into trimmed cell strings.
+-- The outer | delimiters are consumed; cells are trimmed of whitespace.
+-- e.g. "| A | B |" -> {"A", "B"}
+-- e.g. "| |"       -> {""}   (one empty cell)
+local function parse_table_row(line)
+  local cells = {}
+  -- Strip leading/trailing whitespace from the whole line
+  local s = line:match("^%s*(.-)%s*$") or line
+  -- Strip surrounding pipes if present
+  s = s:match("^|(.-)%s*|?$") or s
+  -- Split by |
+  for cell in (s .. "|"):gmatch("([^|]*)|") do
+    table.insert(cells, cell:match("^%s*(.-)%s*$"))
+  end
+  -- Drop only the single trailing empty string that the split pattern appends
+  if #cells > 1 and cells[#cells] == "" then
+    table.remove(cells)
+  end
+  return cells
+end
+
+-- Render a pipe table from raw lines.
+-- Returns { lines = {...}, highlights = {...} } with row indices starting at start_row.
+local function render_table(tbl_lines, base_hl, start_row, opts)
+  local result = { lines = {}, highlights = {} }
+  if #tbl_lines < 2 then return result end
+
+  -- Parse header row (first line)
+  local header_cells = parse_table_row(tbl_lines[1])
+  local num_cols = #header_cells
+  if num_cols == 0 then return result end
+
+  -- Parse data rows (remaining lines after separator)
+  local data_rows = {}
+  for li = 3, #tbl_lines do
+    local row_cells = parse_table_row(tbl_lines[li])
+    -- Pad short rows with empty cells; ignore extra cells
+    local padded = {}
+    for ci = 1, num_cols do
+      padded[ci] = row_cells[ci] or ""
+    end
+    table.insert(data_rows, padded)
+  end
+
+  -- Calculate max column widths
+  local col_widths = {}
+  for ci = 1, num_cols do
+    col_widths[ci] = math.max(3, #header_cells[ci])
+    for _, row in ipairs(data_rows) do
+      col_widths[ci] = math.max(col_widths[ci], #row[ci])
+    end
+  end
+
+  -- Helper: build a border line using box-drawing chars
+  local function make_border(left, mid, right, fill)
+    local parts = {}
+    for ci = 1, num_cols do
+      table.insert(parts, string.rep(fill, col_widths[ci] + 2))
+    end
+    return left .. table.concat(parts, mid) .. right
+  end
+
+  -- Helper: emit a line into result with a highlight
+  local function emit(line_text, hl_group)
+    local row = start_row + #result.lines
+    table.insert(result.lines, line_text)
+    if hl_group then
+      table.insert(result.highlights, { row, 0, #line_text, hl_group })
+    end
+  end
+
+  -- Helper: left-pad a cell value to col_widths[ci]
+  local function pad_left(text, width)
+    local len = #text
+    if len >= width then return text:sub(1, width) end
+    return text .. string.rep(" ", width - len)
+  end
+
+  -- Helper: build a data row string from cell values
+  local function make_data_line(cell_values)
+    local parts = {}
+    for ci = 1, num_cols do
+      local val = cell_values[ci] or string.rep(" ", col_widths[ci])
+      table.insert(parts, " " .. val .. " ")
+    end
+    return "│" .. table.concat(parts, "│") .. "│"
+  end
+
+  -- Emit top border
+  emit(make_border("┌", "┬", "┐", "─"), "CodeReviewMdTableBorder")
+
+  -- Emit header row (left-aligned)
+  local cell_values = {}
+  for ci = 1, num_cols do
+    cell_values[ci] = pad_left(header_cells[ci], col_widths[ci])
+  end
+  emit(make_data_line(cell_values), "CodeReviewMdTableHeader")
+
+  -- Emit separator
+  emit(make_border("├", "┼", "┤", "─"), "CodeReviewMdTableBorder")
+
+  -- Emit data rows (left-aligned)
+  for _, row_cells in ipairs(data_rows) do
+    local rv = {}
+    for ci = 1, num_cols do
+      rv[ci] = pad_left(row_cells[ci], col_widths[ci])
+    end
+    emit(make_data_line(rv), nil)
+  end
+
+  -- Emit bottom border
+  emit(make_border("└", "┴", "┘", "─"), "CodeReviewMdTableBorder")
+
+  return result
+end
+
 -- parse_blocks(text, base_hl, opts) -> { lines, highlights, code_blocks }
 -- State machine with goto continue so future block handlers can skip the paragraph fallback.
 function M.parse_blocks(text, base_hl, opts)
@@ -438,6 +556,29 @@ function M.parse_blocks(text, base_hl, opts)
         })
       end
       -- i already advanced past all bq lines; undo the ::continue:: increment
+      i = i - 1
+      goto continue
+    end
+
+    -- Table: line matching ^|.+|$ followed by separator ^|[-: |]+|$
+    if state == "normal"
+       and line:match("^|.+|%s*$")
+       and i + 1 <= #raw_lines
+       and raw_lines[i + 1]:match("^|[-:| ]+|%s*$") then
+      -- Collect all consecutive pipe-table lines
+      local tbl_lines = {}
+      while i <= #raw_lines and raw_lines[i]:match("^|.+|%s*$") do
+        table.insert(tbl_lines, raw_lines[i])
+        i = i + 1
+      end
+      local tbl_result = render_table(tbl_lines, base_hl, #result.lines, opts)
+      for _, l in ipairs(tbl_result.lines) do
+        table.insert(result.lines, l)
+      end
+      for _, h in ipairs(tbl_result.highlights) do
+        table.insert(result.highlights, h)
+      end
+      -- i already advanced; undo the ::continue:: increment
       i = i - 1
       goto continue
     end

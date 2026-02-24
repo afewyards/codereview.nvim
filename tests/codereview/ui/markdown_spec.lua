@@ -523,6 +523,65 @@ describe("parse_blocks blockquotes", function()
   end)
 end)
 
+describe("parse_blocks tables", function()
+  it("renders basic pipe table with box-drawing", function()
+    local text = "| Name | Age |\n| --- | --- |\n| Alice | 30 |"
+    local r = markdown.parse_blocks(text, "CodeReviewComment", {})
+    -- Should have: top border, header row, separator, data row, bottom border
+    assert.truthy(#r.lines >= 5)
+    -- Top border uses box-drawing
+    assert.truthy(r.lines[1]:find("┌"))
+    assert.truthy(r.lines[1]:find("┬"))
+    -- Header row uses │
+    assert.truthy(r.lines[2]:find("│"))
+    assert.truthy(r.lines[2]:find("Name"))
+    -- Separator
+    assert.truthy(r.lines[3]:find("├"))
+    -- Data row
+    assert.truthy(r.lines[4]:find("Alice"))
+    -- Bottom border
+    assert.truthy(r.lines[5]:find("└"))
+  end)
+
+  it("renders table header with CodeReviewMdTableHeader highlight", function()
+    local text = "| Col |\n| --- |\n| val |"
+    local r = markdown.parse_blocks(text, "CodeReviewComment", {})
+    local found_th = false
+    for _, h in ipairs(r.highlights) do
+      if h[4] == "CodeReviewMdTableHeader" then found_th = true end
+    end
+    assert.is_true(found_th)
+  end)
+
+  it("renders border lines with CodeReviewMdTableBorder highlight", function()
+    local text = "| Col |\n| --- |\n| val |"
+    local r = markdown.parse_blocks(text, "CodeReviewComment", {})
+    local found_border = false
+    for _, h in ipairs(r.highlights) do
+      if h[4] == "CodeReviewMdTableBorder" then found_border = true end
+    end
+    assert.is_true(found_border)
+  end)
+
+  it("handles empty table", function()
+    local text = "| |\n| --- |"
+    local r = markdown.parse_blocks(text, "CodeReviewComment", {})
+    assert.truthy(#r.lines > 0)
+  end)
+
+  it("pads short rows with empty cells", function()
+    local text = "| A | B | C |\n| --- | --- | --- |\n| 1 |"
+    local r = markdown.parse_blocks(text, "CodeReviewComment", {})
+    -- Should have: top, header, separator, data, bottom = 5 lines
+    assert.truthy(#r.lines >= 5)
+    -- Data row (line 4) should have 4 pipe chars (start + 2 internal seps + end)
+    local data_line = r.lines[4]
+    local pipe_count = 0
+    for _ in data_line:gmatch("│") do pipe_count = pipe_count + 1 end
+    assert.equals(4, pipe_count)
+  end)
+end)
+
 describe("ui.markdown", function()
   it("renders plain text lines", function()
     local lines = markdown.to_lines("Hello world\nSecond line")
