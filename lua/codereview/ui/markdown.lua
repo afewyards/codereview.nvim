@@ -292,6 +292,25 @@ function M.segments_to_extmarks(segments, row, base_hl)
   return text, highlights
 end
 
+-- Helper: flush collected code_lines into result (used by fenced code block handling)
+local function flush_code_block(result, code_lines, code_lang)
+  if #code_lines == 0 then return end
+  local code_start_row = #result.lines
+  for _, cl in ipairs(code_lines) do
+    local row = #result.lines
+    local padded = "  " .. cl
+    table.insert(result.lines, padded)
+    table.insert(result.highlights, { row, 0, #padded, "CodeReviewMdCodeBlock" })
+  end
+  table.insert(result.code_blocks, {
+    start_row = code_start_row,
+    end_row = code_start_row + #code_lines - 1,
+    lang = code_lang,
+    text = table.concat(code_lines, "\n"),
+    indent = 2,
+  })
+end
+
 -- parse_blocks(text, base_hl, opts) -> { lines, highlights, code_blocks }
 -- State machine with goto continue so future block handlers can skip the paragraph fallback.
 function M.parse_blocks(text, base_hl, opts)
@@ -301,11 +320,37 @@ function M.parse_blocks(text, base_hl, opts)
 
   local raw_lines = M.to_lines(text)
   local i = 1
-  local state = "normal" -- future states: "in_code_block", "in_table"
+  local state = "normal"
+  local code_lang = nil
+  local code_lines = nil
 
   while i <= #raw_lines do
     local line = raw_lines[i]
     local row = #result.lines
+
+    -- In code block: collect lines until closing fence
+    if state == "in_code_block" then
+      if line:match("^```$") then
+        flush_code_block(result, code_lines, code_lang)
+        state = "normal"
+        code_lang = nil
+        code_lines = nil
+      else
+        table.insert(code_lines, line)
+      end
+      goto continue
+    end
+
+    -- Code fence open: ```lang
+    if state == "normal" then
+      local fence_lang = line:match("^```(.*)")
+      if fence_lang ~= nil then
+        state = "in_code_block"
+        code_lang = fence_lang ~= "" and fence_lang or nil
+        code_lines = {}
+        goto continue
+      end
+    end
 
     -- Header: ^#{1,6} <content>
     if state == "normal" then
@@ -362,6 +407,11 @@ function M.parse_blocks(text, base_hl, opts)
 
     ::continue::
     i = i + 1
+  end
+
+  -- Flush unclosed code fence
+  if state == "in_code_block" and code_lines then
+    flush_code_block(result, code_lines, code_lang)
   end
 
   return result

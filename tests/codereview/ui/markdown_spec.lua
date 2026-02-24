@@ -396,6 +396,50 @@ describe("parse_blocks horizontal rules", function()
   end)
 end)
 
+describe("parse_blocks code blocks", function()
+  it("renders fenced code block with background", function()
+    local r = markdown.parse_blocks("```lua\nlocal x = 1\n```", "CodeReviewComment", {})
+    assert.equals(1, #r.lines)
+    assert.equals("  local x = 1", r.lines[1])  -- 2-space indent
+    -- Background highlight on code line
+    local found_cb = false
+    for _, h in ipairs(r.highlights) do
+      if h[4] == "CodeReviewMdCodeBlock" then found_cb = true end
+    end
+    assert.is_true(found_cb)
+  end)
+
+  it("captures language in code_blocks", function()
+    local r = markdown.parse_blocks("```python\nprint('hi')\n```", "CodeReviewComment", {})
+    assert.equals(1, #r.code_blocks)
+    assert.equals("python", r.code_blocks[1].lang)
+    assert.equals("print('hi')", r.code_blocks[1].text)
+  end)
+
+  it("handles multi-line code block", function()
+    local r = markdown.parse_blocks("```\na\nb\nc\n```", "CodeReviewComment", {})
+    assert.equals(3, #r.lines)
+    assert.equals("  a", r.lines[1])
+    assert.equals("  b", r.lines[2])
+    assert.equals("  c", r.lines[3])
+  end)
+
+  it("handles unclosed code fence", function()
+    local r = markdown.parse_blocks("```lua\nlocal x = 1", "CodeReviewComment", {})
+    assert.equals(1, #r.lines)
+    assert.equals("  local x = 1", r.lines[1])
+  end)
+
+  it("does not parse inline markdown inside code blocks", function()
+    local r = markdown.parse_blocks("```\n**not bold**\n```", "CodeReviewComment", {})
+    assert.equals("  **not bold**", r.lines[1])
+    -- Should NOT have a Bold highlight
+    for _, h in ipairs(r.highlights) do
+      assert.is_not.equals("CodeReviewCommentBold", h[4])
+    end
+  end)
+end)
+
 describe("ui.markdown", function()
   it("renders plain text lines", function()
     local lines = markdown.to_lines("Hello world\nSecond line")
