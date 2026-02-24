@@ -76,4 +76,43 @@ describe("api.client", function()
       assert.equals(0, #result)
     end)
   end)
+
+  describe("request error handling", function()
+    local orig_request
+
+    before_each(function()
+      orig_request = _G._plenary_curl_stub.request
+    end)
+
+    after_each(function()
+      _G._plenary_curl_stub.request = orig_request
+    end)
+
+    it("returns nil and error when curl.request throws", function()
+      _G._plenary_curl_stub.request = function()
+        error("Timeout was reached")
+      end
+      local result, err = client.request("get", "https://api.example.com", "/test", {
+        headers = { ["Authorization"] = "Bearer test" },
+      })
+      assert.is_nil(result)
+      assert.truthy(err:find("Timeout was reached"))
+    end)
+
+    it("returns nil and error when curl.request throws on rate-limit retry", function()
+      local call_count = 0
+      _G._plenary_curl_stub.request = function()
+        call_count = call_count + 1
+        if call_count == 1 then
+          return { status = 429, headers = { ["retry-after"] = "0" }, body = "" }
+        end
+        error("Connection refused")
+      end
+      local result, err = client.request("get", "https://api.example.com", "/test", {
+        headers = { ["Authorization"] = "Bearer test" },
+      })
+      assert.is_nil(result)
+      assert.truthy(err:find("Connection refused"))
+    end)
+  end)
 end)

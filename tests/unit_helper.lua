@@ -399,17 +399,22 @@ _G.vim = {
 }
 
 -- Stub plenary.curl to avoid LuaRocks dependency
+local _plenary_curl_stub = {
+  get = function() end,
+  post = function() end,
+  patch = function() end,
+  delete = function() end,
+  request = function()
+    return { status = 200, body = vim.json.encode({}) }
+  end,
+}
+
 package.preload["plenary.curl"] = function()
-  return {
-    get = function() end,
-    post = function() end,
-    patch = function() end,
-    delete = function() end,
-    request = function()
-      return { status = 200, body = vim.json.encode({}) }
-    end,
-  }
+  return _plenary_curl_stub
 end
+
+-- Expose for test overrides
+_G._plenary_curl_stub = _plenary_curl_stub
 
 -- Stub plenary.async and plenary.async.util
 package.preload["plenary.async"] = function()
