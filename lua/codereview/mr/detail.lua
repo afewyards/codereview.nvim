@@ -90,7 +90,7 @@ local function format_time_short(iso_str)
 end
 
 function M.build_activity_lines(discussions)
-  local result = { lines = {}, highlights = {}, row_map = {} }
+  local result = { lines = {}, highlights = {}, row_map = {}, code_blocks = {} }
 
   if not discussions or #discussions == 0 then
     return result
@@ -170,14 +170,25 @@ function M.build_activity_lines(discussions)
           table.insert(highlights, {thread_start_row, fill_start, fill_start + fill * 3, "CodeReviewThreadBorder"})
         end
 
-        -- Body lines parsed for inline markdown
-        for _, bl in ipairs(vim.split(first_note.body or "", "\n")) do
+        -- Body lines parsed for block-level markdown
+        local body_start = #lines
+        local body_result = markdown.parse_blocks(first_note.body or "", "CodeReviewComment", { width = 60 })
+        for _, bl in ipairs(body_result.lines) do
           local row = #lines
-          local segs = markdown.parse_inline(bl, "CodeReviewComment")
-          local stripped, hls = markdown.segments_to_extmarks(segs, row, "CodeReviewComment")
-          table.insert(lines, stripped)
-          for _, h in ipairs(hls) do table.insert(highlights, h) end
+          table.insert(lines, bl)
           row_map[row] = { type = "thread", discussion = disc }
+        end
+        for _, h in ipairs(body_result.highlights) do
+          table.insert(highlights, { body_start + h[1], h[2], h[3], h[4] })
+        end
+        for _, cb in ipairs(body_result.code_blocks) do
+          table.insert(result.code_blocks, {
+            start_row = body_start + cb.start_row,
+            end_row = body_start + cb.end_row,
+            lang = cb.lang,
+            text = cb.text,
+            indent = cb.indent,
+          })
         end
 
         -- Replies
@@ -202,13 +213,24 @@ function M.build_activity_lines(discussions)
               table.insert(highlights, {reply_header_row, 4 + rauthor_len, 4 + rauthor_len + #rmeta, "CodeReviewThreadMeta"})
             end
 
-            for _, rl in ipairs(vim.split(reply.body or "", "\n")) do
+            local reply_body_start = #lines
+            local reply_result = markdown.parse_blocks(reply.body or "", "CodeReviewComment", { width = 60 })
+            for _, rl in ipairs(reply_result.lines) do
               local rrow = #lines
-              local segs = markdown.parse_inline(rl, "CodeReviewComment")
-              local stripped, hls = markdown.segments_to_extmarks(segs, rrow, "CodeReviewComment")
-              table.insert(lines, stripped)
-              for _, h in ipairs(hls) do table.insert(highlights, h) end
+              table.insert(lines, rl)
               row_map[rrow] = { type = "thread", discussion = disc }
+            end
+            for _, h in ipairs(reply_result.highlights) do
+              table.insert(highlights, { reply_body_start + h[1], h[2], h[3], h[4] })
+            end
+            for _, cb in ipairs(reply_result.code_blocks) do
+              table.insert(result.code_blocks, {
+                start_row = reply_body_start + cb.start_row,
+                end_row = reply_body_start + cb.end_row,
+                lang = cb.lang,
+                text = cb.text,
+                indent = cb.indent,
+              })
             end
           end
         end

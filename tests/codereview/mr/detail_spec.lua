@@ -352,6 +352,31 @@ describe("mr.detail", function()
       assert.falsy(joined:find("`fix"))
     end)
 
+    it("renders code blocks in comment body", function()
+      local discussions = {
+        {
+          id = "cb",
+          notes = {
+            {
+              id = 1,
+              body = "```lua\nlocal x = 1\n```",
+              author = "jan",
+              created_at = "2026-02-20T10:00:00Z",
+              system = false,
+            },
+          },
+        },
+      }
+      local result = detail.build_activity_lines(discussions)
+      local joined = table.concat(result.lines, "\n")
+      assert.truthy(joined:find("local x = 1"))
+      local has_cb = false
+      for _, h in ipairs(result.highlights) do
+        if h[4] == "CodeReviewMdCodeBlock" then has_cb = true end
+      end
+      assert.is_true(has_cb)
+    end)
+
     it("still renders system notes as simple lines", function()
       local discussions = {
         {
