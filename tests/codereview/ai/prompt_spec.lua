@@ -115,6 +115,59 @@ describe("ai.prompt", function()
     end)
   end)
 
+  describe("build_file_review_prompt", function()
+    it("includes MR context, other file summaries, and target file diff", function()
+      local review = { title = "Fix auth", description = "Token fix" }
+      local file = { new_path = "src/auth.lua", diff = "@@ -1,2 +1,3 @@\n-old\n+new\n" }
+      local summaries = {
+        ["src/auth.lua"] = "Fixed token refresh",
+        ["src/config.lua"] = "Added timeout setting",
+      }
+      local result = prompt.build_file_review_prompt(review, file, summaries)
+      -- Contains MR context
+      assert.truthy(result:find("Fix auth"))
+      assert.truthy(result:find("Token fix"))
+      -- Contains other file summaries (not the target file itself)
+      assert.truthy(result:find("src/config.lua"))
+      assert.truthy(result:find("Added timeout setting"))
+      -- Contains the file's diff
+      assert.truthy(result:find("%-old"))
+      assert.truthy(result:find("%+new"))
+      -- Contains review instructions and JSON format
+      assert.truthy(result:find("JSON"))
+      assert.truthy(result:find("severity"))
+    end)
+
+    it("excludes target file from other files section", function()
+      local review = { title = "T", description = "D" }
+      local file = { new_path = "a.lua", diff = "diff" }
+      local summaries = {
+        ["a.lua"] = "Summary A",
+        ["b.lua"] = "Summary B",
+      }
+      local result = prompt.build_file_review_prompt(review, file, summaries)
+      -- Should contain b.lua summary but not a.lua in the "Other" section
+      assert.truthy(result:find("b.lua"))
+      assert.truthy(result:find("Summary B"))
+      -- The "Other Changed Files" section should not contain a.lua
+      local other_section = result:match("## Other Changed Files in This MR\n(.-)\n## File Under Review")
+      if other_section then
+        assert.falsy(other_section:find("a%.lua"), "Other files section should not contain the target file")
+      end
+    end)
+
+    it("handles empty summaries", function()
+      local review = { title = "T", description = "D" }
+      local file = { new_path = "a.lua", diff = "diff" }
+      local result = prompt.build_file_review_prompt(review, file, {})
+      assert.truthy(result:find("a.lua"))
+      -- Should still work, just no other files section
+      assert.truthy(result:find("JSON"))
+      -- Should NOT have "Other Changed Files" header
+      assert.falsy(result:find("Other Changed Files"))
+    end)
+  end)
+
   describe("build_mr_prompt", function()
     it("includes branch name and instructions", function()
       local result = prompt.build_mr_prompt("fix/auth-refresh", "diff content here")
@@ -191,6 +244,41 @@ describe("ai.prompt", function()
       -- a.lua section should not list itself as an other file
       local other_files_line = a_section:match("Other changed files: ([^\n]+)")
       assert.falsy(other_files_line and other_files_line:find("a%.lua"), "a.lua section should not list itself")
+    end)
+  end)
+
+  describe("build_summary_prompt", function()
+    it("includes MR context and all file diffs", function()
+      local review = { title = "Fix auth", description = "Token fix" }
+      local diffs = {
+        { new_path = "src/auth.lua", diff = "@@ -1,2 +1,3 @@\n-old\n+new\n" },
+        { new_path = "src/config.lua", diff = "@@ -5,1 +5,2 @@\n+added\n" },
+      }
+      local result = prompt.build_summary_prompt(review, diffs)
+      assert.truthy(result:find("Fix auth"))
+      assert.truthy(result:find("src/auth.lua"))
+      assert.truthy(result:find("src/config.lua"))
+      assert.truthy(result:find("JSON"))
+      assert.truthy(result:find("one%-sentence summary"))
+    end)
+  end)
+
+  describe("parse_summary_output", function()
+    it("extracts file-to-summary map from JSON block", function()
+      local output = '```json\n{"src/auth.lua": "Fixed token refresh logic", "src/config.lua": "Added timeout setting"}\n```'
+      local summaries = prompt.parse_summary_output(output)
+      assert.equals("Fixed token refresh logic", summaries["src/auth.lua"])
+      assert.equals("Added timeout setting", summaries["src/config.lua"])
+    end)
+
+    it("returns empty table on missing JSON", function()
+      local summaries = prompt.parse_summary_output("no json here")
+      assert.same({}, summaries)
+    end)
+
+    it("returns empty table on nil input", function()
+      local summaries = prompt.parse_summary_output(nil)
+      assert.same({}, summaries)
     end)
   end)
 end)

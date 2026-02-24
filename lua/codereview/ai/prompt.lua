@@ -113,6 +113,52 @@ function M.parse_mr_draft(output)
   return vim.trim(title), vim.trim(description)
 end
 
+function M.build_summary_prompt(review, diffs)
+  local parts = {
+    "You are summarizing changes in a merge request for context.",
+    "",
+    "## MR Title",
+    review.title or "",
+    "",
+    "## MR Description",
+    review.description or "(no description)",
+    "",
+    "## Changed Files",
+    "",
+  }
+
+  for _, file in ipairs(diffs) do
+    table.insert(parts, "### " .. (file.new_path or file.old_path))
+    table.insert(parts, "```diff")
+    table.insert(parts, file.diff or "")
+    table.insert(parts, "```")
+    table.insert(parts, "")
+  end
+
+  table.insert(parts, "## Instructions")
+  table.insert(parts, "")
+  table.insert(parts, "For each file, write a one-sentence summary of what changed.")
+  table.insert(parts, "Output a JSON object in a ```json code block:")
+  table.insert(parts, '{"path/to/file.lua": "Summary of changes", ...}')
+
+  return table.concat(parts, "\n")
+end
+
+function M.parse_summary_output(output)
+  if not output or output == "" then return {} end
+
+  local json_str = output:match("```json%s*\n(.+)\n```")
+  if not json_str then
+    json_str = output:match("%{.+%}")
+  end
+  if not json_str then return {} end
+
+  local ok, data = pcall(vim.json.decode, json_str)
+  if not ok or type(data) ~= "table" then return {} end
+
+  return data
+end
+
 function M.build_orchestrator_prompt(review, diffs)
   local file_list = {}
   for i, file in ipairs(diffs) do
