@@ -139,4 +139,58 @@ describe("ai.prompt", function()
       assert.equals("Fixes the bug.", desc)
     end)
   end)
+
+  describe("build_orchestrator_prompt", function()
+    it("includes MR context and per-file Task instructions", function()
+      local review = { title = "Fix auth refresh", description = "Fixes silent token expiry" }
+      local diffs = {
+        { new_path = "src/auth.lua", diff = "@@ -10,3 +10,4 @@\n-old\n+new\n" },
+        { new_path = "src/config.lua", diff = "@@ -1,2 +1,3 @@\n+added\n" },
+      }
+      local result = prompt.build_orchestrator_prompt(review, diffs)
+      -- Contains MR context
+      assert.truthy(result:find("Fix auth refresh"))
+      assert.truthy(result:find("Fixes silent token expiry"))
+      -- Lists all files
+      assert.truthy(result:find("src/auth.lua"))
+      assert.truthy(result:find("src/config.lua"))
+      -- Contains Task tool instruction
+      assert.truthy(result:find("Task tool"))
+      -- Contains subagent type instruction
+      assert.truthy(result:find("code%-review"))
+      -- Contains per-file diff content for embedding in subagent prompts
+      assert.truthy(result:find("%-old"))
+      assert.truthy(result:find("%+new"))
+      assert.truthy(result:find("%+added"))
+      -- Contains synthesis instruction
+      assert.truthy(result:find("[Ss]ynthesi"))
+      -- Contains JSON output format
+      assert.truthy(result:find("JSON"))
+    end)
+
+    it("includes other file names in each file section for cross-file context", function()
+      local review = { title = "Multi-file change", description = "desc" }
+      local diffs = {
+        { new_path = "a.lua", diff = "diff-a" },
+        { new_path = "b.lua", diff = "diff-b" },
+        { new_path = "c.lua", diff = "diff-c" },
+      }
+      local result = prompt.build_orchestrator_prompt(review, diffs)
+      -- Each file section should reference other files
+      assert.truthy(result:find("a.lua"))
+      assert.truthy(result:find("b.lua"))
+      assert.truthy(result:find("c.lua"))
+      -- Verify that the a.lua section lists b.lua and c.lua as other changed files
+      -- The section starts at "### File: `a.lua`"
+      local a_section_start = result:find("### File: `a%.lua`")
+      local a_section_end = result:find("### File: `b%.lua`") or #result
+      local a_section = result:sub(a_section_start, a_section_end)
+      assert.truthy(a_section:find("Other changed files:"), "a.lua section should have 'Other changed files' line")
+      assert.truthy(a_section:find("b%.lua"), "a.lua section should mention b.lua as other file")
+      assert.truthy(a_section:find("c%.lua"), "a.lua section should mention c.lua as other file")
+      -- a.lua section should not list itself as an other file
+      local other_files_line = a_section:match("Other changed files: ([^\n]+)")
+      assert.falsy(other_files_line and other_files_line:find("a%.lua"), "a.lua section should not list itself")
+    end)
+  end)
 end)
