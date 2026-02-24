@@ -618,6 +618,26 @@ describe("mr.diff", function()
     end)
   end)
 
+  describe("get_annotated_rows", function()
+    it("returns empty for no annotations", function()
+      assert.same({}, diff.get_annotated_rows({}, {}))
+    end)
+
+    it("merges and deduplicates comment + AI rows", function()
+      local row_disc = { [3] = true, [7] = true }
+      local row_ai = { [3] = true, [10] = true }
+      assert.same({ 3, 7, 10 }, diff.get_annotated_rows(row_disc, row_ai))
+    end)
+
+    it("returns sorted rows from AI only", function()
+      assert.same({ 2, 5 }, diff.get_annotated_rows({}, { [5] = true, [2] = true }))
+    end)
+
+    it("returns sorted rows from comments only", function()
+      assert.same({ 1, 4 }, diff.get_annotated_rows({ [4] = true, [1] = true }, {}))
+    end)
+  end)
+
   describe("load_diffs_into_state", function()
     it("sets state.files when not yet loaded", function()
       local state = {
@@ -751,6 +771,36 @@ describe("mr.diff", function()
       assert.equals(10, topline)
 
       vim.api.nvim_buf_delete(buf, { force = true })
+    end)
+  end)
+
+  describe("file_has_annotations", function()
+    it("returns false when no discussions or suggestions", function()
+      local state = { discussions = {}, ai_suggestions = {}, files = { { new_path = "a.lua", old_path = "a.lua" } } }
+      assert.is_false(diff.file_has_annotations(state, 1))
+    end)
+
+    it("returns true when file has matching discussion", function()
+      local state = {
+        discussions = { { notes = { { body = "x", position = { new_path = "a.lua" } } } } },
+        ai_suggestions = {},
+        files = { { new_path = "a.lua", old_path = "a.lua" } },
+      }
+      assert.is_true(diff.file_has_annotations(state, 1))
+    end)
+
+    it("returns true when file has matching AI suggestion", function()
+      local state = {
+        discussions = {},
+        ai_suggestions = { { file_path = "a.lua" } },
+        files = { { new_path = "a.lua", old_path = "a.lua" } },
+      }
+      assert.is_true(diff.file_has_annotations(state, 1))
+    end)
+
+    it("returns false for non-existent file index", function()
+      local state = { discussions = {}, ai_suggestions = {}, files = {} }
+      assert.is_false(diff.file_has_annotations(state, 99))
     end)
   end)
 end)

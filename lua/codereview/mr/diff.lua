@@ -1424,10 +1424,41 @@ local function get_comment_rows(state, file_idx)
   return rows
 end
 
+--- Merged sorted list of rows with any annotation (comments or AI).
+--- @param row_disc table map of row->discussions
+--- @param row_ai table map of row->AI suggestions
+--- @return number[] sorted unique row numbers
+function M.get_annotated_rows(row_disc, row_ai)
+  local seen = {}
+  for r in pairs(row_disc or {}) do seen[r] = true end
+  for r in pairs(row_ai or {}) do seen[r] = true end
+  local rows = {}
+  for r in pairs(seen) do table.insert(rows, r) end
+  table.sort(rows)
+  return rows
+end
+
 local function file_has_comments(state, file_idx)
   local files = state.files or {}
   for _, disc in ipairs(state.discussions or {}) do
     if discussion_matches_file(disc, files[file_idx]) then return true end
+  end
+  return false
+end
+
+--- Check if a file has any annotations (discussions or AI suggestions) without relying on cache.
+--- @param state table
+--- @param file_idx number
+--- @return boolean
+function M.file_has_annotations(state, file_idx)
+  local files = state.files or {}
+  local file = files[file_idx]
+  if not file then return false end
+  for _, disc in ipairs(state.discussions or {}) do
+    if discussion_matches_file(disc, file) then return true end
+  end
+  for _, sug in ipairs(state.ai_suggestions or {}) do
+    if sug.file_path == file.new_path or sug.file_path == file.old_path then return true end
   end
   return false
 end
