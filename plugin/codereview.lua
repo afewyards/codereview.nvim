@@ -30,3 +30,11 @@ end, { desc = "Create new review" })
 vim.api.nvim_create_user_command("CodeReviewStart", function()
   require("codereview").start_review()
 end, { desc = "Start manual review session (comments become drafts)" })
+
+vim.api.nvim_create_user_command("CodeReviewComments", function()
+  require("codereview").comments()
+end, { desc = "Browse comments and suggestions" })
+
+vim.api.nvim_create_user_command("CodeReviewFiles", function()
+  require("codereview").files()
+end, { desc = "Browse changed files" })

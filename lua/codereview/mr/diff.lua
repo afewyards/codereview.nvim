@@ -2570,6 +2570,12 @@ function M.setup_keymaps(layout, state)
       rerender_view()
     end,
 
+    pick_comments = function()
+      require("codereview.picker.comments").pick(state, layout)
+    end,
+    pick_files = function()
+      require("codereview.picker.files").pick(state, layout)
+    end,
     refresh = refresh,
     quit    = quit,
   }
@@ -2590,6 +2596,12 @@ function M.setup_keymaps(layout, state)
     toggle_scroll_mode = function()
       if state.view_mode ~= "diff" then return end
       toggle_scroll_mode(layout, state)
+    end,
+    pick_comments = function()
+      require("codereview.picker.comments").pick(state, layout)
+    end,
+    pick_files = function()
+      require("codereview.picker.files").pick(state, layout)
     end,
     refresh = refresh,
     quit    = quit,
