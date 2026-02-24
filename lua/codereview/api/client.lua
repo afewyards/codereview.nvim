@@ -81,6 +81,22 @@ local function process_response(response)
   }
 end
 
+local function safe_request(params)
+  local ok, response = pcall(curl.request, params)
+  if not ok then
+    return nil, tostring(response)
+  end
+  return response
+end
+
+local function safe_async_request(params)
+  local ok, response = pcall(async_util.wrap(curl.request, 2), params)
+  if not ok then
+    return nil, tostring(response)
+  end
+  return response
+end
+
 function M.request(method, base_url, path, opts)
   opts = opts or {}
 
@@ -97,7 +113,11 @@ function M.request(method, base_url, path, opts)
   local params = build_params(method, base_url, path, opts)
   log.debug(string.format("REQ %s %s", method:upper(), params.url))
 
-  local response = curl.request(params)
+  local response, curl_err = safe_request(params)
+  if not response and curl_err then
+    log.error(string.format("REQ %s %s — %s", method:upper(), params.url, curl_err))
+    return nil, "Request failed: " .. curl_err
+  end
   if not response then
     log.error(string.format("REQ %s %s — no response", method:upper(), params.url))
     return nil, "Request failed: no response"
@@ -110,7 +130,12 @@ function M.request(method, base_url, path, opts)
     log.warn(string.format("Rate limited on %s, retrying in %ds", params.url, retry_after))
     vim.notify(string.format("Rate limited. Retrying in %ds...", retry_after), vim.log.levels.WARN)
     vim.wait(retry_after * 1000)
-    response = curl.request(params)
+    local retry_err
+    response, retry_err = safe_request(params)
+    if not response and retry_err then
+      log.error(string.format("REQ %s %s — retry failed: %s", method:upper(), params.url, retry_err))
+      return nil, "Request failed: " .. retry_err
+    end
   end
 
   if response.status < 200 or response.status >= 300 then
@@ -138,7 +163,11 @@ function M.async_request(method, base_url, path, opts)
   local params = build_params(method, base_url, path, opts)
   log.debug(string.format("ASYNC REQ %s %s", method:upper(), params.url))
 
-  local response = async_util.wrap(curl.request, 2)(params)
+  local response, curl_err = safe_async_request(params)
+  if not response and curl_err then
+    log.error(string.format("ASYNC REQ %s %s — %s", method:upper(), params.url, curl_err))
+    return nil, "Request failed: " .. curl_err
+  end
   if not response then
     log.error(string.format("ASYNC REQ %s %s — no response", method:upper(), params.url))
     return nil, "Request failed: no response"
@@ -153,7 +182,12 @@ function M.async_request(method, base_url, path, opts)
       vim.notify(string.format("Rate limited. Retrying in %ds...", retry_after), vim.log.levels.WARN)
     end)
     async_util.sleep(retry_after * 1000)
-    response = async_util.wrap(curl.request, 2)(params)
+    local retry_err
+    response, retry_err = safe_async_request(params)
+    if not response and retry_err then
+      log.error(string.format("ASYNC REQ %s %s — retry failed: %s", method:upper(), params.url, retry_err))
+      return nil, "Request failed: " .. retry_err
+    end
   end
 
   if response.status < 200 or response.status >= 300 then
@@ -196,7 +230,10 @@ function M.get_url(full_url, opts)
     method = "get",
   }
 
-  local response = curl.request(params)
+  local response, curl_err = safe_request(params)
+  if not response and curl_err then
+    return nil, "Request failed: " .. curl_err
+  end
   if not response then
     return nil, "Request failed: no response"
   end
