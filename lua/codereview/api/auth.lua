@@ -92,12 +92,13 @@ function M.get_token(platform)
     return file_config.token, "pat"
   end
 
-  -- 3. Plugin config
+  -- 3. Plugin config (platform-specific)
   local config = require("codereview.config").get()
-  if config.token then
-    log.info("get_token: using plugin config token")
-    cached[platform] = { token = config.token, type = "pat" }
-    return config.token, "pat"
+  local config_key = platform == "github" and "github_token" or "gitlab_token"
+  if config[config_key] then
+    log.info("get_token: using plugin config " .. config_key)
+    cached[platform] = { token = config[config_key], type = "pat" }
+    return config[config_key], "pat"
   end
 
   log.warn("get_token: no token found for platform=" .. platform)
