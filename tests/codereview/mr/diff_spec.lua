@@ -567,4 +567,113 @@ describe("mr.diff", function()
       assert.equals("existing.lua", state.files[1].new_path)
     end)
   end)
+
+  describe("ensure_virt_lines_visible", function()
+    local DIFF_NS = vim.api.nvim_create_namespace("codereview_diff")
+
+    -- Per-window mock state: { [win] = { height=N, topline=N } }
+    local _win_state = {}
+    local _current_win = nil
+    local _orig_win_call, _orig_win_get_height, _orig_winsaveview, _orig_winrestview
+
+    before_each(function()
+      _win_state = {}
+      _current_win = nil
+      _orig_win_call = vim.api.nvim_win_call
+      _orig_win_get_height = vim.api.nvim_win_get_height
+      _orig_winsaveview = vim.fn.winsaveview
+      _orig_winrestview = vim.fn.winrestview
+
+      vim.api.nvim_win_call = function(win, fn)
+        local prev = _current_win
+        _current_win = win
+        local result = fn()
+        _current_win = prev
+        return result
+      end
+      vim.api.nvim_win_get_height = function(win)
+        return (_win_state[win] or {}).height or 10
+      end
+      vim.fn.winsaveview = function()
+        local win = _current_win or 1
+        return { topline = (_win_state[win] or {}).topline or 1 }
+      end
+      vim.fn.winrestview = function(view)
+        local win = _current_win or 1
+        if not _win_state[win] then _win_state[win] = {} end
+        if view.topline then _win_state[win].topline = view.topline end
+      end
+    end)
+
+    after_each(function()
+      vim.api.nvim_win_call = _orig_win_call
+      vim.api.nvim_win_get_height = _orig_win_get_height
+      vim.fn.winsaveview = _orig_winsaveview
+      vim.fn.winrestview = _orig_winrestview
+      _win_state = {}
+    end)
+
+    local function make_buf_with_lines(n)
+      local buf = vim.api.nvim_create_buf(false, true)
+      local lines = {}
+      for i = 1, n do lines[i] = "line " .. i end
+      vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+      return buf
+    end
+
+    local function make_win(buf, height, topline)
+      local win = vim.api.nvim_open_win(buf, true, {})
+      _win_state[win] = { height = height, topline = topline or 1 }
+      return win
+    end
+
+    local function get_topline(win)
+      return (_win_state[win] or {}).topline or 1
+    end
+
+    it("adjusts topline when virt_lines extend past viewport", function()
+      local buf = make_buf_with_lines(30)
+      local win = make_win(buf, 10, 1)
+      local virt_lines = {}
+      for _ = 1, 8 do table.insert(virt_lines, { { "thread line", "" } }) end
+      vim.api.nvim_buf_set_extmark(buf, DIFF_NS, 7, 0, { virt_lines = virt_lines })
+
+      diff.ensure_virt_lines_visible(win, buf, 8)
+
+      local topline = get_topline(win)
+      assert.truthy(topline > 1)
+      assert.truthy(topline <= 8)
+
+      vim.api.nvim_buf_delete(buf, { force = true })
+    end)
+
+    it("does nothing when thread already fits in viewport", function()
+      local buf = make_buf_with_lines(30)
+      local win = make_win(buf, 20, 1)
+      local virt_lines = { { { "line 1", "" } }, { { "line 2", "" } } }
+      vim.api.nvim_buf_set_extmark(buf, DIFF_NS, 2, 0, { virt_lines = virt_lines })
+
+      diff.ensure_virt_lines_visible(win, buf, 3)
+
+      local topline = get_topline(win)
+      assert.equals(1, topline)
+
+      vim.api.nvim_buf_delete(buf, { force = true })
+    end)
+
+    it("clamps topline so anchor row stays visible when thread taller than window", function()
+      local buf = make_buf_with_lines(30)
+      local win = make_win(buf, 5, 1)
+      local virt_lines = {}
+      for _ = 1, 20 do table.insert(virt_lines, { { "thread line", "" } }) end
+      vim.api.nvim_buf_set_extmark(buf, DIFF_NS, 9, 0, { virt_lines = virt_lines })
+
+      diff.ensure_virt_lines_visible(win, buf, 10)
+
+      local topline = get_topline(win)
+      assert.equals(10, topline)
+
+      vim.api.nvim_buf_delete(buf, { force = true })
+    end)
+  end)
 end)
