@@ -45,4 +45,24 @@ function M.pick_mr(entries, on_select)
   adapter.pick_mr(entries, on_select)
 end
 
+function M.pick_comments(entries, on_select, opts)
+  local name = M.detect()
+  if not name then
+    vim.notify("No picker found. Install telescope.nvim, fzf-lua, or snacks.nvim", vim.log.levels.ERROR)
+    return
+  end
+  local adapter = M.get_adapter(name)
+  adapter.pick_comments(entries, on_select, opts)
+end
+
+function M.pick_files(entries, on_select)
+  local name = M.detect()
+  if not name then
+    vim.notify("No picker found. Install telescope.nvim, fzf-lua, or snacks.nvim", vim.log.levels.ERROR)
+    return
+  end
+  local adapter = M.get_adapter(name)
+  adapter.pick_files(entries, on_select)
+end
+
 return M

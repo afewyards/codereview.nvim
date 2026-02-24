@@ -25,4 +25,51 @@ function M.pick_mr(entries, on_select)
   })
 end
 
+function M.pick_files(entries, on_select)
+  local fzf = require("fzf-lua")
+  local display_to_entry = {}
+  local display_list = {}
+  for _, entry in ipairs(entries) do
+    table.insert(display_list, entry.display)
+    display_to_entry[entry.display] = entry
+  end
+
+  fzf.fzf_exec(display_list, {
+    prompt = "Files> ",
+    actions = {
+      ["default"] = function(selected)
+        if selected and selected[1] then
+          local entry = display_to_entry[selected[1]]
+          if entry then on_select(entry) end
+        end
+      end,
+    },
+  })
+end
+
+function M.pick_comments(entries, on_select, _opts)
+  local fzf = require("fzf-lua")
+  local display_to_entry = {}
+  local display_list = {}
+  for _, entry in ipairs(entries) do
+    table.insert(display_list, entry.display)
+    display_to_entry[entry.display] = entry
+  end
+
+  fzf.fzf_exec(display_list, {
+    prompt = "Comments> ",
+    actions = {
+      ["default"] = function(selected)
+        if selected and selected[1] then
+          local entry = display_to_entry[selected[1]]
+          if entry then on_select(entry) end
+        end
+      end,
+      ["ctrl-r"] = function()
+        vim.notify("Use search to filter comments", vim.log.levels.INFO)
+      end,
+    },
+  })
+end
+
 return M
