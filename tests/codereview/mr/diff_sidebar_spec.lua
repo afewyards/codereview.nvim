@@ -88,10 +88,15 @@ describe("mr.diff_sidebar", function()
       package.loaded["codereview.mr.list"] = {
         pipeline_icon = function(_) return "[--]" end,
       }
+      -- Stub session so status component works cleanly
+      package.loaded["codereview.review.session"] = {
+        get = function() return { active = false } end,
+      }
     end)
 
     after_each(function()
       package.loaded["codereview.mr.list"] = nil
+      package.loaded["codereview.review.session"] = nil
     end)
 
     it("renders Summary button as first interactive row", function()
@@ -160,7 +165,7 @@ describe("mr.diff_sidebar", function()
       for row, entry in pairs(state.sidebar_row_map) do
         if entry.type == "file" then
           local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-          assert.truthy(lines[row]:match("^%s%s "))
+          assert.falsy(lines[row]:find("▸"), "file rows should not show ▸ in summary mode")
         end
       end
       vim.api.nvim_buf_delete(buf, { force = true })
