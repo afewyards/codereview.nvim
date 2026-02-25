@@ -90,6 +90,10 @@ function M.build_display(hunks, context_lines)
   local display = {}
 
   for hunk_idx, hunk in ipairs(hunks) do
+    if hunk_idx > 1 then
+      table.insert(display, { type = "hunk_boundary" })
+    end
+
     local change_indices = {}
     for i, line in ipairs(hunk.lines) do
       if line.type ~= "context" then

@@ -45,6 +45,41 @@ describe("diff_parser", function()
     end)
   end)
 
+  describe("build_display hunk boundaries", function()
+    it("inserts hunk_boundary between two hunks", function()
+      local diff_text = table.concat({
+        "@@ -1,3 +1,3 @@",
+        " ctx",
+        "-old",
+        "+new",
+        " ctx",
+        "@@ -20,3 +20,3 @@",
+        " ctx",
+        "-old2",
+        "+new2",
+        " ctx",
+      }, "\n")
+      local hunks = parser.parse_hunks(diff_text)
+      local display = parser.build_display(hunks, 99999)
+      local boundaries = {}
+      for i, item in ipairs(display) do
+        if item.type == "hunk_boundary" then
+          table.insert(boundaries, i)
+        end
+      end
+      assert.equals(1, #boundaries)
+    end)
+
+    it("does not insert hunk_boundary for single hunk", function()
+      local diff_text = "@@ -1,3 +1,3 @@\n ctx\n-old\n+new\n ctx\n"
+      local hunks = parser.parse_hunks(diff_text)
+      local display = parser.build_display(hunks, 99999)
+      for _, item in ipairs(display) do
+        assert.is_not.equals("hunk_boundary", item.type)
+      end
+    end)
+  end)
+
   describe("word_diff", function()
     it("finds changed segments between two lines", function()
       local old = "local resp = curl.post(url, { body = token })"
