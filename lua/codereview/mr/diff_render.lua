@@ -204,14 +204,54 @@ local function render_ai_suggestions_at_row(buf, row, sugs, row_selection)
   })
 end
 
+-- ─── Lookup map builders ──────────────────────────────────────────────────────
+
+--- Build a line_number -> row map from line_data (per-file mode).
+--- new_line takes priority; old_line indexed only if the row has no new_line.
+--- When the same integer appears as both a new_line on one row and an old_line on
+--- another, the new_line row wins (it will overwrite any earlier old_line entry).
+function M.build_line_to_row(line_data)
+  local map = {}
+  for row, data in ipairs(line_data) do
+    if data.item then
+      if data.item.new_line then
+        map[data.item.new_line] = row
+      elseif data.item.old_line and not map[data.item.old_line] then
+        map[data.item.old_line] = row
+      end
+    end
+  end
+  return map
+end
+
+--- Build a "file_idx:line_number" -> row map from all_line_data (scroll mode).
+--- Same priority rule: new_line wins over old_line for the same key.
+function M.build_line_to_row_scroll(all_line_data)
+  local map = {}
+  for row, data in ipairs(all_line_data) do
+    if data.item and data.file_idx then
+      if data.item.new_line then
+        map[data.file_idx .. ":" .. data.item.new_line] = row
+      elseif data.item.old_line then
+        local key = data.file_idx .. ":" .. data.item.old_line
+        if not map[key] then
+          map[key] = row
+        end
+      end
+    end
+  end
+  return map
+end
+
 -- ─── Comment sign placement ────────────────────────────────────────────────────
 
-function M.place_comment_signs(buf, line_data, discussions, file_diff, row_selection, current_user, review, editing_note)
+function M.place_comment_signs(buf, line_data, discussions, file_diff, row_selection, current_user, review, editing_note, line_to_row)
   -- Remove old signs for this buffer
   pcall(vim.fn.sign_unplace, "CodeReview", { buffer = buf })
 
   -- Track which rows have discussions (for keymap lookups)
   local row_discussions = {}
+  local map = line_to_row or M.build_line_to_row(line_data)
 
   for _, discussion in ipairs(discussions or {}) do
     if discussion_matches_file(discussion, file_diff, review) then
@@ -221,47 +261,41 @@ function M.place_comment_signs(buf, line_data, discussions, file_diff, row_selec
           or "CodeReviewUnresolvedSign"
         -- Place signs on all lines in the range (visual only; navigation uses target_line)
         if range_start and range_start ~= target_line then
-          for row, data in ipairs(line_data) do
-            local item = data.item
-            if item then
-              local ln = tonumber(item.new_line) or tonumber(item.old_line)
-              if ln and ln >= range_start and ln < target_line then
-                pcall(vim.fn.sign_place, 0, "CodeReview", sign_name, buf, { lnum = row })
-              end
+          for ln = range_start, target_line - 1 do
+            local row = map[ln]
+            if row then
+              pcall(vim.fn.sign_place, 0, "CodeReview", sign_name, buf, { lnum = row })
             end
           end
         end
-        -- Find the end-line row for the inline thread
-        for row, data in ipairs(line_data) do
-          local item = data.item
-          if item and (item.new_line == target_line or item.old_line == target_line) then
-            -- Place gutter sign (also covers single-line comments)
-            pcall(vim.fn.sign_place, 0, "CodeReview", sign_name, buf, { lnum = row })
+        -- Find the end-line row for the inline thread (O(1) lookup)
+        local row = map[target_line]
+        if row then
+          -- Place gutter sign (also covers single-line comments)
+          pcall(vim.fn.sign_place, 0, "CodeReview", sign_name, buf, { lnum = row })
 
-            -- Render full comment thread inline
-            local notes = discussion.notes
-            if notes and #notes > 0 then
-              local sel = row_selection and row_selection[row]
-              local sel_idx = sel and sel.type == "comment" and sel.disc_id == discussion.id and sel.note_idx or nil
-              local result = tvl.build(discussion, {
-                sel_idx = sel_idx,
-                current_user = current_user,
-                outdated = outdated,
-                editing_note = editing_note,
-                spacer_height = editing_note and editing_note.spacer_height or 0,
-                gutter = 4,
-              })
-              pcall(vim.api.nvim_buf_set_extmark, buf, DIFF_NS, row - 1, 0, {
-                virt_lines = result.virt_lines,
-                virt_lines_above = false,
-              })
-            end
-
-            -- Store discussion for this row
-            if not row_discussions[row] then row_discussions[row] = {} end
-            table.insert(row_discussions[row], discussion)
-            break
+          -- Render full comment thread inline
+          local notes = discussion.notes
+          if notes and #notes > 0 then
+            local sel = row_selection and row_selection[row]
+            local sel_idx = sel and sel.type == "comment" and sel.disc_id == discussion.id and sel.note_idx or nil
+            local result = tvl.build(discussion, {
+              sel_idx = sel_idx,
+              current_user = current_user,
+              outdated = outdated,
+              editing_note = editing_note,
+              spacer_height = editing_note and editing_note.spacer_height or 0,
+              gutter = 4,
+            })
+            pcall(vim.api.nvim_buf_set_extmark, buf, DIFF_NS, row - 1, 0, {
+              virt_lines = result.virt_lines,
+              virt_lines_above = false,
+            })
           end
+
+          -- Store discussion for this row
+          if not row_discussions[row] then row_discussions[row] = {} end
+          table.insert(row_discussions[row], discussion)
         end
       end
     end
@@ -272,25 +306,21 @@ end
 
 -- ─── AI suggestions placement ─────────────────────────────────────────────────
 
-function M.place_ai_suggestions(buf, line_data, suggestions, file_diff, row_selection)
+function M.place_ai_suggestions(buf, line_data, suggestions, file_diff, row_selection, line_to_row)
   -- Clear old AI signs and extmarks
   pcall(vim.fn.sign_unplace, "CodeReviewAI", { buffer = buf })
   vim.api.nvim_buf_clear_namespace(buf, AIDRAFT_NS, 0, -1)
 
   local row_ai_map = {}
+  local map = line_to_row or M.build_line_to_row(line_data)
 
   -- Pass 1: gather suggestions into row_ai_map (no rendering)
   for _, suggestion in ipairs(suggestions or {}) do
     if suggestion.status ~= "dismissed" then
       local path = file_diff.new_path or file_diff.old_path
       if suggestion.file == path then
-        local matched_row = nil
-        for row, data in ipairs(line_data) do
-          if data.item and data.item.new_line == suggestion.line then
-            matched_row = row
-            break
-          end
-        end
+        -- O(1) lookup by new_line
+        local matched_row = map[suggestion.line]
         -- Fuzzy fallback: if AI provided a code snippet, verify the matched line
         -- contains it. If not, search all lines for a better match.
         if suggestion.code and suggestion.code ~= "" then
@@ -329,12 +359,13 @@ function M.place_ai_suggestions(buf, line_data, suggestions, file_diff, row_sele
   return row_ai_map
 end
 
-function M.place_ai_suggestions_all(buf, all_line_data, file_sections, suggestions, row_selection)
+function M.place_ai_suggestions_all(buf, all_line_data, file_sections, suggestions, row_selection, scroll_map)
   -- Clear old AI signs and extmarks
   pcall(vim.fn.sign_unplace, "CodeReviewAI", { buffer = buf })
   vim.api.nvim_buf_clear_namespace(buf, AIDRAFT_NS, 0, -1)
 
   local scroll_row_ai = {}
+  local smap = scroll_map or M.build_line_to_row_scroll(all_line_data)
 
   -- Pass 1: gather suggestions into scroll_row_ai (no rendering)
   for _, suggestion in ipairs(suggestions or {}) do
@@ -342,15 +373,8 @@ function M.place_ai_suggestions_all(buf, all_line_data, file_sections, suggestio
       for _, section in ipairs(file_sections) do
         local fpath = section.file.new_path or section.file.old_path
         if suggestion.file == fpath then
-          local matched_row = nil
-          for i = section.start_line, section.end_line do
-            local data = all_line_data[i]
-            if data and data.item and data.item.new_line == suggestion.line
-              and data.file_idx == section.file_idx then
-              matched_row = i
-              break
-            end
-          end
+          -- O(1) lookup by file_idx:new_line
+          local matched_row = smap[section.file_idx .. ":" .. suggestion.line]
           -- Fuzzy fallback: verify code snippet matches, search if not
           if suggestion.code and suggestion.code ~= "" then
             local code = suggestion.code
@@ -709,6 +733,9 @@ function M.render_all_files(buf, files, review, discussions, context, file_conte
     end
   end)
 
+  -- Build scroll lookup map once for O(1) comment and suggestion placement
+  local scroll_map = M.build_line_to_row_scroll(all_line_data)
+
   -- Place comment signs and inline threads per file section
   local all_row_discussions = {}
   for _, section in ipairs(file_sections) do
@@ -718,46 +745,41 @@ function M.render_all_files(buf, files, review, discussions, context, file_conte
         if target_line then
           local sign_name = is_resolved(disc) and "CodeReviewCommentSign"
             or "CodeReviewUnresolvedSign"
-          -- Place signs on range lines (visual only; navigation uses target_line)
+          local file_prefix = section.file_idx .. ":"
+          -- Place signs on range lines using O(1) lookups
           if range_start and range_start ~= target_line then
-            for i = section.start_line, section.end_line do
-              local data = all_line_data[i]
-              if data.item then
-                local ln = tonumber(data.item.new_line) or tonumber(data.item.old_line)
-                if ln and ln >= range_start and ln < target_line then
-                  pcall(vim.fn.sign_place, 0, "CodeReview", sign_name, buf, { lnum = i })
-                end
+            for ln = range_start, target_line - 1 do
+              local i = scroll_map[file_prefix .. ln]
+              if i then
+                pcall(vim.fn.sign_place, 0, "CodeReview", sign_name, buf, { lnum = i })
               end
             end
           end
-          -- Find the end-line row for the inline thread
-          for i = section.start_line, section.end_line do
-            local data = all_line_data[i]
-            if data.item and (data.item.new_line == target_line or data.item.old_line == target_line) then
-              -- Place sign (also covers single-line comments)
-              pcall(vim.fn.sign_place, 0, "CodeReview", sign_name, buf, { lnum = i })
+          -- Find the end-line row for the inline thread (O(1) lookup)
+          local i = scroll_map[file_prefix .. target_line]
+          if i then
+            -- Place sign (also covers single-line comments)
+            pcall(vim.fn.sign_place, 0, "CodeReview", sign_name, buf, { lnum = i })
 
-              local notes = disc.notes
-              if notes and #notes > 0 then
-                local sel = row_selection and row_selection[i]
-                local sel_idx = sel and sel.type == "comment" and sel.disc_id == disc.id and sel.note_idx or nil
-                local result = tvl.build(disc, {
-                  sel_idx = sel_idx,
-                  current_user = current_user,
-                  outdated = disc_outdated,
-                  editing_note = editing_note,
-                  spacer_height = editing_note and editing_note.spacer_height or 0,
-                  gutter = 4,
-                })
-                pcall(vim.api.nvim_buf_set_extmark, buf, DIFF_NS, i - 1, 0, {
-                  virt_lines = result.virt_lines, virt_lines_above = false,
-                })
-              end
-
-              if not all_row_discussions[i] then all_row_discussions[i] = {} end
-              table.insert(all_row_discussions[i], disc)
-              break
+            local notes = disc.notes
+            if notes and #notes > 0 then
+              local sel = row_selection and row_selection[i]
+              local sel_idx = sel and sel.type == "comment" and sel.disc_id == disc.id and sel.note_idx or nil
+              local result = tvl.build(disc, {
+                sel_idx = sel_idx,
+                current_user = current_user,
+                outdated = disc_outdated,
+                editing_note = editing_note,
+                spacer_height = editing_note and editing_note.spacer_height or 0,
+                gutter = 4,
+              })
+              pcall(vim.api.nvim_buf_set_extmark, buf, DIFF_NS, i - 1, 0, {
+                virt_lines = result.virt_lines, virt_lines_above = false,
+              })
             end
+
+            if not all_row_discussions[i] then all_row_discussions[i] = {} end
+            table.insert(all_row_discussions[i], disc)
           end
         end
       end
@@ -766,7 +788,7 @@ function M.render_all_files(buf, files, review, discussions, context, file_conte
 
   local all_row_ai = {}
   if ai_suggestions then
-    all_row_ai = M.place_ai_suggestions_all(buf, all_line_data, file_sections, ai_suggestions, row_selection) or {}
+    all_row_ai = M.place_ai_suggestions_all(buf, all_line_data, file_sections, ai_suggestions, row_selection, scroll_map) or {}
   end
 
   return {
