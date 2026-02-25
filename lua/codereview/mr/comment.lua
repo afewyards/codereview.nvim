@@ -104,7 +104,7 @@ function M.open_input_popup(title, callback, opts)
       width = width - (opts.is_reply and 4 or 0),
       height = total_height,
       row = is_edit_overlay and (opts.spacer_offset + 1) or (opts.thread_height or 0) + 1,
-      col = opts.is_reply and 5 or 1,
+      col = opts.is_reply and 7 or 3,
       style = "minimal",
       border = ifloat.border(opts.action_type),
       title = styled_title,

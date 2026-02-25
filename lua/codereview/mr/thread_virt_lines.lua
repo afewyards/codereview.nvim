@@ -87,6 +87,7 @@ function M.build(disc, opts)
   local editing_note = opts.editing_note
   local spacer_height = opts.spacer_height or 0
   local comment_width = opts.comment_width or 60
+  local pad = string.rep(" ", opts.gutter or 0)
 
   local notes = disc.notes
   if not notes or #notes == 0 then return { virt_lines = {}, spacer_offset = nil } end
@@ -126,7 +127,7 @@ function M.build(disc, opts)
   local n1_body_hl = (sel_idx == 1) and "CodeReviewSelectedNote" or body_hl
 
   local header_chunks = {
-    { "  ┏ ", n1_bdr },
+    { pad .. "┏ ", n1_bdr },
     { header_text, n1_aut },
     { header_meta, n1_bdr },
   }
@@ -161,11 +162,11 @@ function M.build(disc, opts)
   if editing_note_idx == 1 then
     spacer_offset = #virt_lines
     for _ = 1, spacer_height do
-      table.insert(virt_lines, { { "  ┃" .. string.rep(" ", 61), bdr } })
+      table.insert(virt_lines, { { pad .. "┃" .. string.rep(" ", 61), bdr } })
     end
   else
     for _, bl in ipairs(wrap_text(first.body, comment_width)) do
-      table.insert(virt_lines, md_virt_line({ "  ┃ ", n1_bdr }, bl, n1_body_hl))
+      table.insert(virt_lines, md_virt_line({ pad .. "┃ ", n1_bdr }, bl, n1_body_hl))
     end
   end
 
@@ -181,17 +182,17 @@ function M.build(disc, opts)
       if editing_note_idx == i then
         spacer_offset = #virt_lines
         for _ = 1, spacer_height do
-          table.insert(virt_lines, { { "  ┃" .. string.rep(" ", 61), ri_bdr } })
+          table.insert(virt_lines, { { pad .. "┃" .. string.rep(" ", 61), ri_bdr } })
         end
       else
-        table.insert(virt_lines, { { "  ┃", ri_bdr } })
+        table.insert(virt_lines, { { pad .. "┃", ri_bdr } })
         table.insert(virt_lines, {
-          { "  ┃  ↪ ", ri_bdr },
+          { pad .. "┃  ↪ ", ri_bdr },
           { "@" .. reply.author, ri_aut },
           { rmeta, ri_bdr },
         })
         for _, rl in ipairs(wrap_text(reply.body, 58)) do
-          table.insert(virt_lines, md_virt_line({ "  ┃    ", ri_bdr }, rl, ri_body_hl))
+          table.insert(virt_lines, md_virt_line({ pad .. "┃    ", ri_bdr }, rl, ri_body_hl))
         end
       end
     end
@@ -215,12 +216,12 @@ function M.build(disc, opts)
   if footer_content then
     local footer_fill = math.max(0, 62 - #footer_content - 1)
     table.insert(virt_lines, {
-      { "  ┗ ", bdr },
+      { pad .. "┗ ", bdr },
       { footer_content, bdr },
       { " " .. string.rep("━", footer_fill), bdr },
     })
   else
-    table.insert(virt_lines, { { "  ┗━━", bdr } })
+    table.insert(virt_lines, { { pad .. "┗━━", bdr } })
   end
 
   return { virt_lines = virt_lines, spacer_offset = spacer_offset }

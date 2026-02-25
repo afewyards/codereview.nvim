@@ -8,6 +8,7 @@ local is_resolved = tvl.is_resolved
 
 -- LINE_NR_WIDTH: "%5d | %-5d " = 5+3+5+1 = 14 chars
 local LINE_NR_WIDTH = 14
+local COMMENT_PAD = string.rep(" ", 4)
 
 local DIFF_NS = vim.api.nvim_create_namespace("codereview_diff")
 local AIDRAFT_NS = vim.api.nvim_create_namespace("codereview_ai_draft")
@@ -182,6 +183,7 @@ function M.place_comment_signs(buf, line_data, discussions, file_diff, row_selec
                 outdated = outdated,
                 editing_note = editing_note,
                 spacer_height = editing_note and editing_note.spacer_height or 0,
+                gutter = 4,
               })
               pcall(vim.api.nvim_buf_set_extmark, buf, DIFF_NS, row - 1, 0, {
                 virt_lines = result.virt_lines,
@@ -262,13 +264,13 @@ local function render_ai_suggestions_at_row(buf, row, sugs, row_selection)
 
     -- Header line
     table.insert(virt_lines, {
-      { "  " .. top_l .. header_label, bdr },
+      { COMMENT_PAD .. top_l .. header_label, bdr },
       { string.rep(top_fill_c, header_fill), bdr },
     })
 
     -- Body (always heavy left bar)
     for _, bl in ipairs(wrap_text(suggestion.comment, config.get().diff.comment_width)) do
-      table.insert(virt_lines, md_virt_line({ "  ┃ ", bdr }, bl, body_hl))
+      table.insert(virt_lines, md_virt_line({ COMMENT_PAD .. "┃ ", bdr }, bl, body_hl))
     end
 
     -- Footer: keybinds + counter when selected; short cap otherwise
@@ -277,7 +279,7 @@ local function render_ai_suggestions_at_row(buf, row, sugs, row_selection)
       local footer_content = drafted and "x:dismiss" or "a:accept  x:dismiss  e:edit"
       local counter = sug_count > 1 and (" " .. i .. "/" .. sug_count) or ""
       local footer_fill = math.max(0, 62 - #footer_content - #counter - 1)
-      footer_parts[#footer_parts + 1] = { "  " .. bot_l .. " ", bdr }
+      footer_parts[#footer_parts + 1] = { COMMENT_PAD .. bot_l .. " ", bdr }
       footer_parts[#footer_parts + 1] = { footer_content, body_hl }
       if counter ~= "" then
         footer_parts[#footer_parts + 1] = { " " .. string.rep(bot_fill_c, footer_fill) .. counter, bdr }
@@ -285,7 +287,7 @@ local function render_ai_suggestions_at_row(buf, row, sugs, row_selection)
         footer_parts[#footer_parts + 1] = { " " .. string.rep(bot_fill_c, footer_fill), bdr }
       end
     else
-      footer_parts[#footer_parts + 1] = { "  " .. bot_l .. bot_fill_c .. bot_fill_c, bdr }
+      footer_parts[#footer_parts + 1] = { COMMENT_PAD .. bot_l .. bot_fill_c .. bot_fill_c, bdr }
     end
     table.insert(virt_lines, footer_parts)
   end
@@ -719,6 +721,7 @@ function M.render_all_files(buf, files, review, discussions, context, file_conte
                   outdated = disc_outdated,
                   editing_note = editing_note,
                   spacer_height = editing_note and editing_note.spacer_height or 0,
+                  gutter = 4,
                 })
                 pcall(vim.api.nvim_buf_set_extmark, buf, DIFF_NS, i - 1, 0, {
                   virt_lines = result.virt_lines, virt_lines_above = false,
@@ -2408,6 +2411,7 @@ function M.setup_keymaps(layout, state)
         current_user = state.current_user,
         editing_note = state.editing_note,
         spacer_height = state.editing_note.spacer_height,
+        gutter = 4,
       }).spacer_offset
 
       local comment = require("codereview.mr.comment")
