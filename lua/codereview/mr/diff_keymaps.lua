@@ -915,7 +915,33 @@ function M.setup_keymaps(state, layout, active_states)
     end,
 
     select_next_note = function()
-      if state.view_mode ~= "diff" then return end
+      if state.view_mode ~= "diff" then
+        if not state.files or #state.files == 0 then return end
+        -- Transition from summary to diff view
+        state.view_mode = "diff"
+        state.row_selection = {}
+        vim.wo[layout.main_win].wrap = false
+        vim.wo[layout.main_win].linebreak = false
+        if state.scroll_mode then
+          local result = diff_render.render_all_files(layout.main_buf, state.files, state.review, state.discussions, state.context, state.file_contexts, state.ai_suggestions, state.row_selection, state.current_user, state.git_diff_cache)
+          state.file_sections = result.file_sections
+          state.scroll_line_data = result.line_data
+          state.scroll_row_disc = result.row_discussions
+          state.scroll_row_ai = result.row_ai
+          diff_sidebar.render_sidebar(layout.sidebar_buf, state)
+        else
+          local target = state.current_file or 1
+          for idx = 1, #state.files do
+            if diff_state.file_has_annotations(state, idx) then
+              target = idx
+              break
+            end
+          end
+          diff_nav.switch_to_file(layout, state, target)
+        end
+        vim.api.nvim_win_set_cursor(layout.main_win, { 1, 0 })
+        -- Fall through to select first annotation
+      end
       local cursor_row = vim.api.nvim_win_get_cursor(layout.main_win)[1]
       local row_ai = state.scroll_mode and state.scroll_row_ai or (state.row_ai_cache[state.current_file] or {})
       local row_disc_map = state.scroll_mode and state.scroll_row_disc or (state.row_disc_cache[state.current_file] or {})
@@ -989,7 +1015,34 @@ function M.setup_keymaps(state, layout, active_states)
     end,
 
     select_prev_note = function()
-      if state.view_mode ~= "diff" then return end
+      if state.view_mode ~= "diff" then
+        if not state.files or #state.files == 0 then return end
+        -- Transition from summary to diff view
+        state.view_mode = "diff"
+        state.row_selection = {}
+        vim.wo[layout.main_win].wrap = false
+        vim.wo[layout.main_win].linebreak = false
+        if state.scroll_mode then
+          local result = diff_render.render_all_files(layout.main_buf, state.files, state.review, state.discussions, state.context, state.file_contexts, state.ai_suggestions, state.row_selection, state.current_user, state.git_diff_cache)
+          state.file_sections = result.file_sections
+          state.scroll_line_data = result.line_data
+          state.scroll_row_disc = result.row_discussions
+          state.scroll_row_ai = result.row_ai
+          diff_sidebar.render_sidebar(layout.sidebar_buf, state)
+        else
+          local target = state.current_file or 1
+          for idx = #state.files, 1, -1 do
+            if diff_state.file_has_annotations(state, idx) then
+              target = idx
+              break
+            end
+          end
+          diff_nav.switch_to_file(layout, state, target)
+        end
+        local max_line = vim.api.nvim_buf_line_count(layout.main_buf)
+        vim.api.nvim_win_set_cursor(layout.main_win, { max_line, 0 })
+        -- Fall through to select last annotation
+      end
       local cursor_row = vim.api.nvim_win_get_cursor(layout.main_win)[1]
       local row_ai = state.scroll_mode and state.scroll_row_ai or (state.row_ai_cache[state.current_file] or {})
       local row_disc_map = state.scroll_mode and state.scroll_row_disc or (state.row_disc_cache[state.current_file] or {})
