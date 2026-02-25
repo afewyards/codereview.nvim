@@ -15,19 +15,14 @@ end
 
 -- ─── Comment/annotation helpers (delegated to diff_comments) ────────────────
 
-M.build_row_items      = diff_comments.build_row_items
-M.cycle_row_selection  = diff_comments.cycle_row_selection
-M.create_comment_at_cursor = diff_comments.create_comment_at_cursor
-M.create_comment_range     = diff_comments.create_comment_range
+M.build_row_items     = diff_comments.build_row_items
+M.cycle_row_selection = diff_comments.cycle_row_selection
 
 -- ─── Render functions (delegated to diff_render) ────────────────────────────
 
-M.format_line_number = diff_render.format_line_number
 M.place_comment_signs = diff_render.place_comment_signs
-M.place_ai_suggestions = diff_render.place_ai_suggestions
-M.place_ai_suggestions_all = diff_render.place_ai_suggestions_all
-M.render_file_diff = diff_render.render_file_diff
-M.render_all_files = diff_render.render_all_files
+M.render_file_diff    = diff_render.render_file_diff
+M.render_all_files    = diff_render.render_all_files
 
 -- ─── Sidebar and summary rendering (delegated to diff_sidebar) ───────────────
 
@@ -36,32 +31,16 @@ M.render_summary = diff_sidebar.render_summary
 
 -- ─── Navigation helpers (delegated to diff_nav) ───────────────────────────────
 
-M.jump_to_file           = diff_nav.jump_to_file
-M.jump_to_comment        = diff_nav.jump_to_comment
-M.ensure_virt_lines_visible = diff_nav.ensure_virt_lines_visible
-M.find_anchor            = diff_nav.find_anchor
-M.find_row_for_anchor    = diff_nav.find_row_for_anchor
-M.get_annotated_rows     = diff_nav.get_annotated_rows
-
---- Check if a file has any annotations (discussions or AI suggestions) without relying on cache.
---- @param state table
---- @param file_idx number
---- @return boolean
-function M.file_has_annotations(state, file_idx)
-  return diff_state.file_has_annotations(state, file_idx)
-end
+M.jump_to_file       = diff_nav.jump_to_file
+M.jump_to_comment    = diff_nav.jump_to_comment
+M.find_anchor        = diff_nav.find_anchor
+M.find_row_for_anchor = diff_nav.find_row_for_anchor
 
 -- ─── Keymaps ─────────────────────────────────────────────────────────────────
 
 function M.setup_keymaps(layout, state)
   local diff_keymaps = require("codereview.mr.diff_keymaps")
   diff_keymaps.setup_keymaps(state, layout, active_states)
-end
-
--- ─── Lazy diff loading ──────────────────────────────────────────────────────
-
-function M.load_diffs_into_state(state, files)
-  diff_state.load_diffs_into_state(state, files)
 end
 
 -- ─── Main entry point ─────────────────────────────────────────────────────────
