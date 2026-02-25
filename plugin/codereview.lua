@@ -15,6 +15,10 @@ vim.api.nvim_create_user_command("CodeReviewAI", function()
   require("codereview").ai_review()
 end, { desc = "Run AI review on current review" })
 
+vim.api.nvim_create_user_command("CodeReviewAIFile", function()
+  require("codereview").ai_review_file()
+end, { desc = "Run AI review on current file" })
+
 vim.api.nvim_create_user_command("CodeReviewSubmit", function()
   require("codereview").submit()
 end, { desc = "Submit draft comments" })

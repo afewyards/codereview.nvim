@@ -1059,6 +1059,8 @@ local function build_footer(state, sess)
     pair_row(k("accept_suggestion"), "accept", "   ", k("dismiss_suggestion"), "dismiss")
     pair_row(k("edit_suggestion"), "edit", "     ", k("dismiss_all_suggestions"), "dismiss all")
     pair_row(k("submit"), "submit", "   ", k("ai_review"), "cancel AI")
+    local af_key = k("ai_review_file")
+    if af_key then row(af_key .. "     AI file") end
   end
 
   header("View")
@@ -2436,6 +2438,32 @@ function M.setup_keymaps(layout, state)
       end
       local review_mod = require("codereview.review")
       review_mod.start(state.review, state, layout)
+    end,
+
+    ai_review_file = function()
+      if state.view_mode ~= "diff" then return end
+      local session = require("codereview.review.session")
+      local s = session.get()
+      if s.ai_pending then
+        for _, jid in ipairs(s.ai_job_ids or {}) do
+          pcall(vim.fn.jobstop, jid)
+        end
+        session.ai_finish()
+        vim.notify("AI file review cancelled", vim.log.levels.INFO)
+        return
+      end
+      -- In scroll mode, update current_file from cursor position
+      if state.scroll_mode and state.file_sections then
+        local cursor = vim.api.nvim_win_get_cursor(layout.main_win)[1]
+        for i = #state.file_sections, 1, -1 do
+          if cursor >= state.file_sections[i].start_line then
+            state.current_file = state.file_sections[i].file_idx
+            break
+          end
+        end
+      end
+      local review_mod = require("codereview.review")
+      review_mod.start_file(state.review, state, layout)
     end,
 
     edit_note = function()

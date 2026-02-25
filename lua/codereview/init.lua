@@ -45,6 +45,21 @@ function M.ai_review()
   require("codereview.review").start(active.state.review, active.state, active.layout)
 end
 
+function M.ai_review_file()
+  local buf = vim.api.nvim_get_current_buf()
+  local diff_mod = require("codereview.mr.diff")
+  local active = diff_mod.get_state(buf)
+  if not active then
+    vim.notify("Open a diff view first with :CodeReview", vim.log.levels.WARN)
+    return
+  end
+  if active.state.view_mode ~= "diff" then
+    vim.notify("Navigate to a file diff first", vim.log.levels.WARN)
+    return
+  end
+  require("codereview.review").start_file(active.state.review, active.state, active.layout)
+end
+
 function M.submit()
   local session = require("codereview.review.session")
   local buf = vim.api.nvim_get_current_buf()
