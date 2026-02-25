@@ -1,5 +1,20 @@
 local M = {}
 
+local severity_levels = { "info", "suggestion", "warning", "error" }
+
+local function severity_instruction()
+  local cfg = require("codereview.config").get()
+  local level = cfg.ai.review_level or "info"
+  if level == "info" then return nil end
+  local allowed = {}
+  local found = false
+  for _, sev in ipairs(severity_levels) do
+    if sev == level then found = true end
+    if found then table.insert(allowed, '"' .. sev .. '"') end
+  end
+  return "Only report issues with severity " .. table.concat(allowed, ", ") .. ". Do NOT include lower-severity items."
+end
+
 --- Annotate diff text with explicit line numbers so an LLM can reference exact lines.
 ---
 --- For each line inside a hunk:
@@ -127,6 +142,10 @@ function M.build_review_prompt(review, diffs)
   table.insert(parts, "If no issues, output `[]`.")
   table.insert(parts, "Focus on: bugs, security, error handling, edge cases, naming, clarity.")
   table.insert(parts, "Do NOT comment on style or formatting.")
+  local sev_instr = severity_instruction()
+  if sev_instr then
+    table.insert(parts, sev_instr)
+  end
   table.insert(parts, "IMPORTANT: Find the L-prefix on the exact code line your comment applies to and use that number. Do NOT guess or count lines yourself.")
 
   return table.concat(parts, "\n")
@@ -271,6 +290,10 @@ function M.build_file_review_prompt(review, file, summaries)
   table.insert(parts, "If no issues, output `[]`.")
   table.insert(parts, "Focus on: bugs, security, error handling, edge cases, naming, clarity.")
   table.insert(parts, "Do NOT comment on style or formatting.")
+  local sev_instr = severity_instruction()
+  if sev_instr then
+    table.insert(parts, sev_instr)
+  end
   table.insert(parts, "IMPORTANT: Find the L-prefix on the exact code line your comment applies to and use that number. Do NOT guess or count lines yourself.")
 
   return table.concat(parts, "\n")

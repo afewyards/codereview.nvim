@@ -161,6 +161,27 @@ describe("ai.prompt", function()
       assert.truthy(result:match("L%s*5:"), "prompt should contain L5 annotation")
       assert.truthy(result:match("L%s*6:"), "prompt should contain L6 annotation")
     end)
+
+    it("adds severity filter instruction when review_level is warning", function()
+      local config = require("codereview.config")
+      config.setup({ ai = { review_level = "warning" } })
+      local review = { title = "T", description = "D" }
+      local diffs = { { new_path = "f.lua", diff = "@@ -1,1 +1,1 @@\n-old\n+new\n" } }
+      local result = prompt.build_review_prompt(review, diffs)
+      assert.truthy(result:find("Only report"), "should contain severity filter instruction")
+      assert.truthy(result:find("warning"), "should mention warning level")
+      config.reset()
+    end)
+
+    it("does not add severity filter instruction when review_level is info", function()
+      local config = require("codereview.config")
+      config.setup({ ai = { review_level = "info" } })
+      local review = { title = "T", description = "D" }
+      local diffs = { { new_path = "f.lua", diff = "@@ -1,1 +1,1 @@\n-old\n+new\n" } }
+      local result = prompt.build_review_prompt(review, diffs)
+      assert.falsy(result:find("Only report"), "should not contain severity filter at info level")
+      config.reset()
+    end)
   end)
 
   describe("parse_review_output", function()
@@ -278,6 +299,17 @@ describe("ai.prompt", function()
       assert.truthy(result:match("L%s*3:"), "prompt should contain L3 annotation")
       -- First added line at new line 4
       assert.truthy(result:match("L%s*4:"), "prompt should contain L4 annotation")
+    end)
+
+    it("adds severity filter instruction when review_level is error", function()
+      local config = require("codereview.config")
+      config.setup({ ai = { review_level = "error" } })
+      local review = { title = "T", description = "D" }
+      local file = { new_path = "f.lua", diff = "@@ -1,1 +1,1 @@\n-old\n+new\n" }
+      local result = prompt.build_file_review_prompt(review, file, {})
+      assert.truthy(result:find("Only report"), "should contain severity filter instruction")
+      assert.truthy(result:find("error"), "should mention error level")
+      config.reset()
     end)
   end)
 
