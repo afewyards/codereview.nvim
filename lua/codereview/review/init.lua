@@ -1,6 +1,7 @@
 -- lua/codereview/review/init.lua
 local ai_sub = require("codereview.ai.subprocess")
 local prompt_mod = require("codereview.ai.prompt")
+local diff_state_mod = require("codereview.mr.diff_state")
 local M = {}
 
 --- Render suggestions for a single file into the diff view.
@@ -22,10 +23,7 @@ local function render_file_suggestions(diff_state, layout, suggestions)
         diff_state.file_contexts, diff_state.ai_suggestions,
         diff_state.row_selection, diff_state.current_user
       )
-      diff_state.file_sections = result.file_sections
-      diff_state.scroll_line_data = result.line_data
-      diff_state.scroll_row_disc = result.row_discussions
-      diff_state.scroll_row_ai = result.row_ai
+      diff_state_mod.apply_scroll_result(diff_state, result)
     else
       local file = diff_state.files and diff_state.files[diff_state.current_file]
       if file then
@@ -35,9 +33,7 @@ local function render_file_suggestions(diff_state, layout, suggestions)
           diff_state.ai_suggestions,
           diff_state.row_selection, diff_state.current_user
         )
-        diff_state.line_data_cache[diff_state.current_file] = ld
-        diff_state.row_disc_cache[diff_state.current_file] = rd
-        diff_state.row_ai_cache[diff_state.current_file] = ra
+        diff_state_mod.apply_file_result(diff_state, diff_state.current_file, ld, rd, ra)
       end
     end
     diff_mod.render_sidebar(layout.sidebar_buf, diff_state)

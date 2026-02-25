@@ -1,32 +1,6 @@
 local diff = require("codereview.mr.diff")
 
 describe("mr.diff", function()
-  describe("scroll mode state", function()
-    it("defaults to scroll_mode=true when files <= threshold", function()
-      local config = require("codereview.config")
-      config.reset()
-      config.setup({ diff = { scroll_threshold = 50 } })
-      local files = {}
-      for i = 1, 20 do
-        table.insert(files, { new_path = "file" .. i .. ".lua" })
-      end
-      local threshold = config.get().diff.scroll_threshold
-      assert.truthy(#files <= threshold)
-    end)
-
-    it("defaults to scroll_mode=false when files > threshold", function()
-      local config = require("codereview.config")
-      config.reset()
-      config.setup({ diff = { scroll_threshold = 5 } })
-      local files = {}
-      for i = 1, 10 do
-        table.insert(files, { new_path = "file" .. i .. ".lua" })
-      end
-      local threshold = config.get().diff.scroll_threshold
-      assert.truthy(#files > threshold)
-    end)
-  end)
-
   describe("render_all_files", function()
     it("returns file_sections with correct boundaries", function()
       local buf = vim.api.nvim_create_buf(false, true)
@@ -638,33 +612,6 @@ describe("mr.diff", function()
     end)
   end)
 
-  describe("load_diffs_into_state", function()
-    it("sets state.files when not yet loaded", function()
-      local state = {
-        review = { id = 1 },
-        files = nil,
-        scroll_mode = nil,
-      }
-      local files = {
-        { new_path = "a.lua", old_path = "a.lua" },
-        { new_path = "b.lua", old_path = "b.lua" },
-      }
-      diff.load_diffs_into_state(state, files)
-      assert.equals(2, #state.files)
-      assert.truthy(state.scroll_mode ~= nil)
-    end)
-
-    it("is a no-op when files already loaded", function()
-      local state = {
-        review = { id = 1 },
-        files = { { new_path = "existing.lua" } },
-        scroll_mode = true,
-      }
-      diff.load_diffs_into_state(state, { { new_path = "other.lua" } })
-      assert.equals("existing.lua", state.files[1].new_path)
-    end)
-  end)
-
   describe("outdated comment remapping", function()
     local function make_line_data(new_lines)
       local ld = {}
@@ -958,33 +905,4 @@ describe("mr.diff", function()
     end)
   end)
 
-  describe("file_has_annotations", function()
-    it("returns false when no discussions or suggestions", function()
-      local state = { discussions = {}, ai_suggestions = {}, files = { { new_path = "a.lua", old_path = "a.lua" } } }
-      assert.is_false(diff.file_has_annotations(state, 1))
-    end)
-
-    it("returns true when file has matching discussion", function()
-      local state = {
-        discussions = { { notes = { { body = "x", position = { new_path = "a.lua" } } } } },
-        ai_suggestions = {},
-        files = { { new_path = "a.lua", old_path = "a.lua" } },
-      }
-      assert.is_true(diff.file_has_annotations(state, 1))
-    end)
-
-    it("returns true when file has matching AI suggestion", function()
-      local state = {
-        discussions = {},
-        ai_suggestions = { { file_path = "a.lua" } },
-        files = { { new_path = "a.lua", old_path = "a.lua" } },
-      }
-      assert.is_true(diff.file_has_annotations(state, 1))
-    end)
-
-    it("returns false for non-existent file index", function()
-      local state = { discussions = {}, ai_suggestions = {}, files = {} }
-      assert.is_false(diff.file_has_annotations(state, 99))
-    end)
-  end)
 end)

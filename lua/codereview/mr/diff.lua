@@ -2,6 +2,7 @@ local M = {}
 local config = require("codereview.config")
 local markdown = require("codereview.ui.markdown")
 local tvl = require("codereview.mr.thread_virt_lines")
+local diff_state = require("codereview.mr.diff_state")
 local wrap_text = tvl.wrap_text
 local md_virt_line = tvl.md_virt_line
 local is_resolved = tvl.is_resolved
@@ -1369,9 +1370,7 @@ local function nav_file(layout, state, delta)
   state.row_selection = {}
   M.render_sidebar(layout.sidebar_buf, state)
   local line_data, row_disc, row_ai = M.render_file_diff(layout.main_buf, files[next_idx], state.review, state.discussions, state.context, state.ai_suggestions, state.row_selection, state.current_user)
-  state.line_data_cache[next_idx] = line_data
-  state.row_disc_cache[next_idx] = row_disc
-  state.row_ai_cache[next_idx] = row_ai
+  diff_state.apply_file_result(state, next_idx, line_data, row_disc, row_ai)
   vim.api.nvim_win_set_cursor(layout.main_win, { 1, 0 })
 end
 
@@ -1394,16 +1393,7 @@ end
 --- @param file_idx number
 --- @return boolean
 function M.file_has_annotations(state, file_idx)
-  local files = state.files or {}
-  local file = files[file_idx]
-  if not file then return false end
-  for _, disc in ipairs(state.discussions or {}) do
-    if discussion_matches_file(disc, file) then return true end
-  end
-  for _, sug in ipairs(state.ai_suggestions or {}) do
-    if sug.file_path == file.new_path or sug.file_path == file.old_path then return true end
-  end
-  return false
+  return diff_state.file_has_annotations(state, file_idx)
 end
 
 local function switch_to_file(layout, state, idx)
@@ -1412,9 +1402,7 @@ local function switch_to_file(layout, state, idx)
   M.render_sidebar(layout.sidebar_buf, state)
   local ld, rd, ra = M.render_file_diff(
     layout.main_buf, state.files[idx], state.review, state.discussions, state.context, state.ai_suggestions, state.row_selection, state.current_user)
-  state.line_data_cache[idx] = ld
-  state.row_disc_cache[idx] = rd
-  state.row_ai_cache[idx] = ra
+  diff_state.apply_file_result(state, idx, ld, rd, ra)
 end
 
 function M.jump_to_file(layout, state, file_idx)
@@ -1428,10 +1416,7 @@ function M.jump_to_file(layout, state, file_idx)
     vim.wo[layout.main_win].linebreak = false
     if state.scroll_mode then
       local result = M.render_all_files(layout.main_buf, state.files, state.review, state.discussions, state.context, state.file_contexts, state.ai_suggestions)
-      state.file_sections = result.file_sections
-      state.scroll_line_data = result.line_data
-      state.scroll_row_disc = result.row_discussions
-      state.scroll_row_ai = result.row_ai
+      diff_state.apply_scroll_result(state, result)
       M.render_sidebar(layout.sidebar_buf, state)
       for _, sec in ipairs(state.file_sections) do
         if sec.file_idx == file_idx then
@@ -1443,9 +1428,7 @@ function M.jump_to_file(layout, state, file_idx)
       M.render_sidebar(layout.sidebar_buf, state)
       local ld, rd, ra = M.render_file_diff(
         layout.main_buf, state.files[file_idx], state.review, state.discussions, state.context, state.ai_suggestions)
-      state.line_data_cache[file_idx] = ld
-      state.row_disc_cache[file_idx] = rd
-      state.row_ai_cache[file_idx] = ra
+      diff_state.apply_file_result(state, file_idx, ld, rd, ra)
       vim.api.nvim_win_set_cursor(layout.main_win, { 1, 0 })
     end
     vim.api.nvim_set_current_win(layout.main_win)
@@ -1551,10 +1534,7 @@ local function adjust_context(layout, state, delta)
   if state.scroll_mode then
     local anchor = M.find_anchor(state.scroll_line_data, cursor_row)
     local result = M.render_all_files(layout.main_buf, state.files, state.review, state.discussions, state.context, state.file_contexts, state.ai_suggestions, state.row_selection, state.current_user)
-    state.file_sections = result.file_sections
-    state.scroll_line_data = result.line_data
-    state.scroll_row_disc = result.row_discussions
-    state.scroll_row_ai = result.row_ai
+    diff_state.apply_scroll_result(state, result)
     local row = M.find_row_for_anchor(state.scroll_line_data, anchor)
     vim.api.nvim_win_set_cursor(layout.main_win, { row, 0 })
   else
@@ -1564,9 +1544,7 @@ local function adjust_context(layout, state, delta)
     if not file then return end
     local ld, row_disc, row_ai = M.render_file_diff(
       layout.main_buf, file, state.review, state.discussions, state.context, state.ai_suggestions, state.row_selection, state.current_user)
-    state.line_data_cache[state.current_file] = ld
-    state.row_disc_cache[state.current_file] = row_disc
-    state.row_ai_cache[state.current_file] = row_ai
+    diff_state.apply_file_result(state, state.current_file, ld, row_disc, row_ai)
     local row = M.find_row_for_anchor(ld, anchor, state.current_file)
     vim.api.nvim_win_set_cursor(layout.main_win, { row, 0 })
   end
@@ -1664,9 +1642,7 @@ local function toggle_scroll_mode(layout, state)
     local file = state.files[state.current_file]
     if file then
       local ld, rd, ra = M.render_file_diff(layout.main_buf, file, state.review, state.discussions, state.context, state.ai_suggestions, state.row_selection, state.current_user)
-      state.line_data_cache[state.current_file] = ld
-      state.row_disc_cache[state.current_file] = rd
-      state.row_ai_cache[state.current_file] = ra
+      diff_state.apply_file_result(state, state.current_file, ld, rd, ra)
       local row = M.find_row_for_anchor(ld, anchor, state.current_file)
       vim.api.nvim_win_set_cursor(layout.main_win, { row, 0 })
     end
@@ -1677,10 +1653,7 @@ local function toggle_scroll_mode(layout, state)
     state.scroll_mode = true
 
     local result = M.render_all_files(layout.main_buf, state.files, state.review, state.discussions, state.context, state.file_contexts, state.ai_suggestions, state.row_selection, state.current_user)
-    state.file_sections = result.file_sections
-    state.scroll_line_data = result.line_data
-    state.scroll_row_disc = result.row_discussions
-    state.scroll_row_ai = result.row_ai
+    diff_state.apply_scroll_result(state, result)
     local row = M.find_row_for_anchor(state.scroll_line_data, anchor)
     vim.api.nvim_win_set_cursor(layout.main_win, { row, 0 })
   end
@@ -1715,17 +1688,12 @@ function M.setup_keymaps(layout, state)
 
     if state.scroll_mode then
       local result = M.render_all_files(layout.main_buf, state.files, state.review, state.discussions, state.context, state.file_contexts, state.ai_suggestions, state.row_selection, state.current_user, state.editing_note)
-      state.file_sections = result.file_sections
-      state.scroll_line_data = result.line_data
-      state.scroll_row_disc = result.row_discussions
-      state.scroll_row_ai = result.row_ai
+      diff_state.apply_scroll_result(state, result)
     else
       local file = state.files and state.files[state.current_file]
       if file then
         local ld, rd, ra = M.render_file_diff(layout.main_buf, file, state.review, state.discussions, state.context, state.ai_suggestions, state.row_selection, state.current_user, state.editing_note)
-        state.line_data_cache[state.current_file] = ld
-        state.row_disc_cache[state.current_file] = rd
-        state.row_ai_cache[state.current_file] = ra
+        diff_state.apply_file_result(state, state.current_file, ld, rd, ra)
       end
     end
 
@@ -1855,17 +1823,12 @@ function M.setup_keymaps(layout, state)
   local function rerender_ai()
     if state.scroll_mode then
       local result = M.render_all_files(layout.main_buf, state.files, state.review, state.discussions, state.context, state.file_contexts, state.ai_suggestions, state.row_selection, state.current_user)
-      state.file_sections = result.file_sections
-      state.scroll_line_data = result.line_data
-      state.scroll_row_disc = result.row_discussions
-      state.scroll_row_ai = result.row_ai
+      diff_state.apply_scroll_result(state, result)
     else
       local file = state.files and state.files[state.current_file]
       if not file then return end
       local ld, rd, ra = M.render_file_diff(layout.main_buf, file, state.review, state.discussions, state.context, state.ai_suggestions, state.row_selection, state.current_user)
-      state.line_data_cache[state.current_file] = ld
-      state.row_disc_cache[state.current_file] = rd
-      state.row_ai_cache[state.current_file] = ra
+      diff_state.apply_file_result(state, state.current_file, ld, rd, ra)
     end
     M.render_sidebar(layout.sidebar_buf, state)
   end
@@ -2240,10 +2203,7 @@ function M.setup_keymaps(layout, state)
           state.file_contexts[file_idx] = 99999
         end
         local result = M.render_all_files(layout.main_buf, state.files, state.review, state.discussions, state.context, state.file_contexts, state.ai_suggestions, state.row_selection, state.current_user)
-        state.file_sections = result.file_sections
-        state.scroll_line_data = result.line_data
-        state.scroll_row_disc = result.row_discussions
-        state.scroll_row_ai = result.row_ai
+        diff_state.apply_scroll_result(state, result)
         local row = M.find_row_for_anchor(state.scroll_line_data, anchor)
         vim.api.nvim_win_set_cursor(layout.main_win, { row, 0 })
       else
@@ -2257,9 +2217,7 @@ function M.setup_keymaps(layout, state)
         local file = state.files and state.files[state.current_file]
         if not file then return end
         local ld, rd, ra = M.render_file_diff(layout.main_buf, file, state.review, state.discussions, state.context, state.ai_suggestions, state.row_selection, state.current_user)
-        state.line_data_cache[state.current_file] = ld
-        state.row_disc_cache[state.current_file] = rd
-        state.row_ai_cache[state.current_file] = ra
+        diff_state.apply_file_result(state, state.current_file, ld, rd, ra)
         local row = M.find_row_for_anchor(ld, anchor, state.current_file)
         vim.api.nvim_win_set_cursor(layout.main_win, { row, 0 })
       end
@@ -2902,10 +2860,7 @@ function M.setup_keymaps(layout, state)
       if state.scroll_mode then
         -- Always re-render all files (buffer may have summary content)
         local result = M.render_all_files(layout.main_buf, state.files, state.review, state.discussions, state.context, state.file_contexts, state.ai_suggestions, state.row_selection, state.current_user)
-        state.file_sections = result.file_sections
-        state.scroll_line_data = result.line_data
-        state.scroll_row_disc = result.row_discussions
-        state.scroll_row_ai = result.row_ai
+        diff_state.apply_scroll_result(state, result)
         M.render_sidebar(layout.sidebar_buf, state)
         for _, sec in ipairs(state.file_sections) do
           if sec.file_idx == entry.idx then
@@ -2917,9 +2872,7 @@ function M.setup_keymaps(layout, state)
         M.render_sidebar(layout.sidebar_buf, state)
         local line_data, row_disc, row_ai = M.render_file_diff(
           layout.main_buf, state.files[entry.idx], state.review, state.discussions, state.context, state.ai_suggestions, state.row_selection, state.current_user)
-        state.line_data_cache[entry.idx] = line_data
-        state.row_disc_cache[entry.idx] = row_disc
-        state.row_ai_cache[entry.idx] = row_ai
+        diff_state.apply_file_result(state, entry.idx, line_data, row_disc, row_ai)
       end
       vim.api.nvim_set_current_win(layout.main_win)
     end
@@ -3024,22 +2977,7 @@ end
 -- ─── Lazy diff loading ──────────────────────────────────────────────────────
 
 function M.load_diffs_into_state(state, files)
-  if state.files then return end
-  local config = require("codereview.config")
-  local cfg = config.get()
-  state.files = files
-  state.scroll_mode = #files <= cfg.diff.scroll_threshold
-  state.line_data_cache = state.line_data_cache or {}
-  state.row_disc_cache = state.row_disc_cache or {}
-  state.file_sections = state.file_sections or {}
-  state.scroll_line_data = state.scroll_line_data or {}
-  state.scroll_row_disc = state.scroll_row_disc or {}
-  state.file_contexts = state.file_contexts or {}
-  state.row_ai_cache = state.row_ai_cache or {}
-  state.scroll_row_ai = state.scroll_row_ai or {}
-  state.local_drafts = state.local_drafts or {}
-  state.row_selection = state.row_selection or {}
-  state.current_file = 1
+  diff_state.load_diffs_into_state(state, files)
 end
 
 -- ─── Main entry point ─────────────────────────────────────────────────────────
@@ -3063,33 +3001,15 @@ function M.open(review, discussions)
 
   local layout = split.create()
 
-  local cfg = config.get()
-  local state = {
+  local state = diff_state.create_state({
     view_mode = "diff",
     review = review,
     provider = provider,
     ctx = ctx,
     files = files,
-    current_file = 1,
     layout = layout,
-    discussions = discussions or {},
-    line_data_cache = {},
-    row_disc_cache = {},
-    sidebar_row_map = {},
-    collapsed_dirs = {},
-    context = cfg.diff.context,
-    scroll_mode = #files <= cfg.diff.scroll_threshold,
-    file_sections = {},
-    scroll_line_data = {},
-    scroll_row_disc = {},
-    file_contexts = {},
-    ai_suggestions = nil,
-    row_ai_cache = {},
-    scroll_row_ai = {},
-    local_drafts = {},
-    row_selection = {},
-    current_user = nil,
-  }
+    discussions = discussions,
+  })
 
   M.render_sidebar(layout.sidebar_buf, state)
 
@@ -3100,15 +3020,10 @@ function M.open(review, discussions)
   if #files > 0 then
     if state.scroll_mode then
       local render_result = M.render_all_files(layout.main_buf, files, review, state.discussions, state.context, state.file_contexts, state.ai_suggestions, state.row_selection, state.current_user)
-      state.file_sections = render_result.file_sections
-      state.scroll_line_data = render_result.line_data
-      state.scroll_row_disc = render_result.row_discussions
-      state.scroll_row_ai = render_result.row_ai
+      diff_state.apply_scroll_result(state, render_result)
     else
       local line_data, row_disc, row_ai = M.render_file_diff(layout.main_buf, files[1], review, state.discussions, state.context, state.ai_suggestions, state.row_selection, state.current_user)
-      state.line_data_cache[1] = line_data
-      state.row_disc_cache[1] = row_disc
-      state.row_ai_cache[1] = row_ai
+      diff_state.apply_file_result(state, 1, line_data, row_disc, row_ai)
     end
   else
     vim.bo[layout.main_buf].modifiable = true
@@ -3133,10 +3048,7 @@ function M.open(review, discussions)
       M.render_sidebar(layout.sidebar_buf, state)
       if state.scroll_mode then
         local render_result = M.render_all_files(layout.main_buf, state.files, review, state.discussions, state.context, state.file_contexts, state.ai_suggestions, state.row_selection, state.current_user)
-        state.file_sections = render_result.file_sections
-        state.scroll_line_data = render_result.line_data
-        state.scroll_row_disc = render_result.row_discussions
-        state.scroll_row_ai = render_result.row_ai
+        diff_state.apply_scroll_result(state, render_result)
       else
         M.render_file_diff(layout.main_buf, state.files[state.current_file], review, state.discussions, state.context, state.ai_suggestions, state.row_selection, state.current_user)
       end

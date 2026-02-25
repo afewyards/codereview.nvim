@@ -3,6 +3,7 @@ local client = require("codereview.api.client")
 local markdown = require("codereview.ui.markdown")
 local list_mod = require("codereview.mr.list")
 local tvl = require("codereview.mr.thread_virt_lines")
+local diff_state_mod = require("codereview.mr.diff_state")
 
 local M = {}
 
@@ -315,39 +316,19 @@ function M.open(entry)
 
   local diff = require("codereview.mr.diff")
   local split = require("codereview.ui.split")
-  local config = require("codereview.config")
-  local cfg = config.get()
 
   local layout = split.create()
 
-  local state = {
+  local state = diff_state_mod.create_state({
     view_mode = "summary",
     review = review,
     provider = provider,
     ctx = ctx,
     entry = entry,
     files = files,
-    discussions = discussions,
-    current_file = 1,
     layout = layout,
-    line_data_cache = {},
-    row_disc_cache = {},
-    sidebar_row_map = {},
-    collapsed_dirs = {},
-    context = cfg.diff.context,
-    scroll_mode = #files <= cfg.diff.scroll_threshold,
-    file_sections = {},
-    scroll_line_data = {},
-    scroll_row_disc = {},
-    file_contexts = {},
-    ai_suggestions = nil,
-    row_ai_cache = {},
-    scroll_row_ai = {},
-    local_drafts = {},
-    summary_row_map = {},
-    row_selection = {},
-    current_user = nil,
-  }
+    discussions = discussions,
+  })
 
   -- Fetch current user for note authorship checks (edit/delete guards)
   local client_mod = require("codereview.api.client")
