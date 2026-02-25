@@ -77,6 +77,11 @@ describe("mr.diff_state", function()
       assert.equals(entry, state.entry)
     end)
 
+    it("initialises file_review_status as empty table", function()
+      local state = diff_state.create_state({})
+      assert.same({}, state.file_review_status)
+    end)
+
     it("sets scroll_mode based on file count vs threshold", function()
       local config = require("codereview.config")
       config.reset()

@@ -50,6 +50,7 @@ function M.create_state(opts)
     row_selection = {},
     current_user = nil,
     git_diff_cache = {},
+    file_review_status = {},
   }
 end
 
