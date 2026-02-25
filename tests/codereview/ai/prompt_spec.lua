@@ -67,6 +67,78 @@ end
 local prompt = require("codereview.ai.prompt")
 
 describe("ai.prompt", function()
+  describe("annotate_diff_with_lines", function()
+    it("annotates added and context lines with new line numbers", function()
+      local diff = "@@ -10,3 +10,4 @@\n context\n-old\n+new\n+added\n"
+      local result = prompt.annotate_diff_with_lines(diff)
+      local lines = {}
+      for l in (result .. "\n"):gmatch("(.-)\n") do table.insert(lines, l) end
+      -- hunk header unchanged
+      assert.equals("@@ -10,3 +10,4 @@", lines[1])
+      -- context line gets new line number (10)
+      assert.truthy(lines[2]:match("L%s*10:"), "context line should have L10")
+      assert.truthy(lines[2]:find(" context"), "context line should preserve content")
+      -- deleted line gets padding only (no number)
+      assert.falsy(lines[3]:match("L%s*%d+:"), "deleted line should have no line number")
+      assert.truthy(lines[3]:find("-old"), "deleted line should preserve content")
+      -- first added line gets new line number (11)
+      assert.truthy(lines[4]:match("L%s*11:"), "first added line should have L11")
+      assert.truthy(lines[4]:find("%+new"), "added line should preserve content")
+      -- second added line gets new line number (12)
+      assert.truthy(lines[5]:match("L%s*12:"), "second added line should have L12")
+      assert.truthy(lines[5]:find("%+added"), "added line should preserve content")
+    end)
+
+    it("keeps diff header lines outside hunks unchanged", function()
+      local diff = "diff --git a/foo.lua b/foo.lua\n--- a/foo.lua\n+++ b/foo.lua\n@@ -1,1 +1,1 @@\n-old\n+new\n"
+      local result = prompt.annotate_diff_with_lines(diff)
+      -- Use plain find (4th arg = true) with the actual strings to search for
+      assert.truthy(result:find("diff --git a/foo.lua", 1, true), "diff --git header should be present")
+      assert.truthy(result:find("--- a/foo.lua", 1, true), "--- header should be present")
+      assert.truthy(result:find("+++ b/foo.lua", 1, true), "'+++ header should be present")
+    end)
+
+    it("pads numbers so lines align", function()
+      -- Hunk starting at line 99 with 3 added lines reaches line 101
+      local diff = "@@ -99,2 +99,4 @@\n context\n+a\n+b\n+c\n"
+      local result = prompt.annotate_diff_with_lines(diff)
+      -- All annotated lines should start with "L" followed by a 3-digit-wide number
+      for line in (result .. "\n"):gmatch("(.-)\n") do
+        if line:sub(1,1) == "L" then
+          -- "L" then digits/spaces then ":"
+          assert.truthy(line:match("^L%s*%d+:"), "expected Lnnn: prefix, got: " .. line)
+        end
+      end
+    end)
+
+    it("handles multiple hunks with correct line numbers", function()
+      local diff = "@@ -1,2 +1,2 @@\n context\n-old1\n+new1\n@@ -10,2 +10,2 @@\n context2\n-old2\n+new2\n"
+      local result = prompt.annotate_diff_with_lines(diff)
+      -- Second hunk's context line should be L10
+      assert.truthy(result:find("L%s*10:.*context2") or result:find("L10: context2"))
+    end)
+
+    it("returns empty string for empty input", function()
+      assert.equals("", prompt.annotate_diff_with_lines(""))
+    end)
+
+    it("returns nil-safe result for nil input", function()
+      assert.equals("", prompt.annotate_diff_with_lines(nil))
+    end)
+
+    it("preserves trailing newline", function()
+      local diff = "@@ -1,1 +1,1 @@\n-old\n+new\n"
+      local result = prompt.annotate_diff_with_lines(diff)
+      assert.equals("\n", result:sub(-1), "result should end with newline")
+    end)
+
+    it("does not add trailing newline when input has none", function()
+      local diff = "@@ -1,1 +1,1 @@\n-old\n+new"
+      local result = prompt.annotate_diff_with_lines(diff)
+      assert.not_equals("\n", result:sub(-1), "result should not end with newline")
+    end)
+  end)
+
   describe("build_review_prompt", function()
     it("includes MR title, file path, and JSON instruction", function()
       local review = { title = "Fix auth refresh", description = "Fixes silent token expiry" }
@@ -77,6 +149,17 @@ describe("ai.prompt", function()
       assert.truthy(result:find("Fix auth refresh"))
       assert.truthy(result:find("src/auth.lua"))
       assert.truthy(result:find("JSON"))
+    end)
+
+    it("annotates diff lines with line numbers in the prompt", function()
+      local review = { title = "T", description = "D" }
+      local diffs = {
+        { new_path = "src/foo.lua", diff = "@@ -5,2 +5,3 @@\n context\n-old\n+new\n+extra\n" },
+      }
+      local result = prompt.build_review_prompt(review, diffs)
+      -- Should contain annotated line numbers
+      assert.truthy(result:match("L%s*5:"), "prompt should contain L5 annotation")
+      assert.truthy(result:match("L%s*6:"), "prompt should contain L6 annotation")
     end)
   end)
 
@@ -165,6 +248,16 @@ describe("ai.prompt", function()
       assert.truthy(result:find("JSON"))
       -- Should NOT have "Other Changed Files" header
       assert.falsy(result:find("Other Changed Files"))
+    end)
+
+    it("annotates diff lines with line numbers in the file review prompt", function()
+      local review = { title = "T", description = "D" }
+      local file = { new_path = "src/foo.lua", diff = "@@ -3,2 +3,3 @@\n context\n-old\n+new\n+extra\n" }
+      local result = prompt.build_file_review_prompt(review, file, {})
+      -- Annotated context line at new line 3
+      assert.truthy(result:match("L%s*3:"), "prompt should contain L3 annotation")
+      -- First added line at new line 4
+      assert.truthy(result:match("L%s*4:"), "prompt should contain L4 annotation")
     end)
   end)
 

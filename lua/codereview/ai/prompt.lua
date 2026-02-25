@@ -1,5 +1,100 @@
 local M = {}
 
+--- Annotate diff text with explicit line numbers so an LLM can reference exact lines.
+---
+--- For each line inside a hunk:
+---   - context/added lines get a prefix like `L 38: ` (new file line number)
+---   - deleted lines get a prefix like `   : ` (no new line number)
+--- Lines outside hunks (diff headers) are kept as-is.
+---
+--- @param diff_text string  Raw unified diff text
+--- @return string           Annotated diff text
+function M.annotate_diff_with_lines(diff_text)
+  if not diff_text or diff_text == "" then return diff_text or "" end
+
+  -- Split into lines, preserving trailing newline by tracking it separately
+  local trailing_newline = diff_text:sub(-1) == "\n"
+  local text = trailing_newline and diff_text:sub(1, -2) or diff_text
+  local lines = {}
+  for line in (text .. "\n"):gmatch("(.-)\n") do
+    table.insert(lines, line)
+  end
+
+  -- First pass: find the maximum new_line number to compute padding width
+  local max_new_line = 0
+  local in_hunk = false
+  local tmp_new_line = 0
+
+  for _, line in ipairs(lines) do
+    local ns = line:match("^@@ %-[%d,]+ %+(%d+)[,%d]* @@")
+    if ns then
+      in_hunk = true
+      tmp_new_line = tonumber(ns)
+    elseif in_hunk then
+      local prefix = line:sub(1, 1)
+      if prefix == "+" then
+        if tmp_new_line > max_new_line then max_new_line = tmp_new_line end
+        tmp_new_line = tmp_new_line + 1
+      elseif prefix == " " or line == "" then
+        if tmp_new_line > max_new_line then max_new_line = tmp_new_line end
+        tmp_new_line = tmp_new_line + 1
+      end
+      -- "-" and "\" lines don't increment new_line
+    end
+  end
+
+  -- Build format strings with consistent padding width
+  local num_width = math.max(1, #tostring(max_new_line))
+  -- e.g. for width 3: "L%3d: " produces "L 38: " / "L138: "
+  local fmt_num = string.format("L%%%dd: ", num_width)
+  -- Deleted-line padding: "L" replaced by spaces, same total prefix width
+  -- "L" (1) + num_width + ": " (2) = num_width + 3 chars
+  local fmt_pad = string.rep(" ", num_width + 3)
+
+  -- Second pass: annotate lines
+  local result = {}
+  in_hunk = false
+  local old_line = 0
+  local new_line = 0
+
+  for _, line in ipairs(lines) do
+    local os, ns = line:match("^@@ %-(%d+)[,%d]* %+(%d+)[,%d]* @@")
+    if os then
+      in_hunk = true
+      old_line = tonumber(os)
+      new_line = tonumber(ns)
+      table.insert(result, line)
+    elseif in_hunk then
+      local prefix = line:sub(1, 1)
+      if prefix == "-" then
+        table.insert(result, fmt_pad .. line)
+        old_line = old_line + 1
+      elseif prefix == "+" then
+        table.insert(result, string.format(fmt_num, new_line) .. line)
+        new_line = new_line + 1
+      elseif prefix == " " then
+        table.insert(result, string.format(fmt_num, new_line) .. line)
+        old_line = old_line + 1
+        new_line = new_line + 1
+      elseif line == "" then
+        -- Empty context line (diff may omit the space prefix for blank lines)
+        table.insert(result, string.format(fmt_num, new_line) .. line)
+        old_line = old_line + 1
+        new_line = new_line + 1
+      else
+        -- "\ No newline at end of file" and similar markers — keep as-is
+        table.insert(result, line)
+      end
+    else
+      table.insert(result, line)
+    end
+  end
+
+  local out = table.concat(result, "\n")
+  if trailing_newline then out = out .. "\n" end
+  return out
+end
+
 function M.build_review_prompt(review, diffs)
   local parts = {
     "You are reviewing a merge request.",
@@ -17,19 +112,21 @@ function M.build_review_prompt(review, diffs)
   for _, file in ipairs(diffs) do
     table.insert(parts, "### " .. (file.new_path or file.old_path))
     table.insert(parts, "```diff")
-    table.insert(parts, file.diff or "")
+    table.insert(parts, M.annotate_diff_with_lines(file.diff or ""))
     table.insert(parts, "```")
     table.insert(parts, "")
   end
 
   table.insert(parts, "## Instructions")
   table.insert(parts, "")
+  table.insert(parts, "Each diff line is prefixed with its line number (e.g., L38:). Use this number for the line field.")
   table.insert(parts, "Review this MR. Output a JSON array in a ```json code block.")
-  table.insert(parts, 'Each item: {"file": "path", "line": <new_line_number>, "severity": "error"|"warning"|"info"|"suggestion", "comment": "text"}')
+  table.insert(parts, 'Each item: {"file": "path", "line": <number from L-prefix>, "severity": "error"|"warning"|"info"|"suggestion", "comment": "text"}')
   table.insert(parts, 'Use \\n inside "comment" strings for line breaks (e.g. "Problem.\\n\\nSuggested fix:").')
   table.insert(parts, "If no issues, output `[]`.")
   table.insert(parts, "Focus on: bugs, security, error handling, edge cases, naming, clarity.")
   table.insert(parts, "Do NOT comment on style or formatting.")
+  table.insert(parts, "IMPORTANT: The line number must reference the exact code line the comment applies to, not a nearby comment or section header.")
 
   return table.concat(parts, "\n")
 end
@@ -143,17 +240,19 @@ function M.build_file_review_prompt(review, file, summaries)
 
   table.insert(parts, "## File Under Review: " .. path)
   table.insert(parts, "```diff")
-  table.insert(parts, file.diff or "")
+  table.insert(parts, M.annotate_diff_with_lines(file.diff or ""))
   table.insert(parts, "```")
   table.insert(parts, "")
   table.insert(parts, "## Instructions")
   table.insert(parts, "")
+  table.insert(parts, "Each diff line is prefixed with its line number (e.g., L38:). Use this number for the line field.")
   table.insert(parts, "Review this file. Output a JSON array in a ```json code block.")
-  table.insert(parts, 'Each item: {"file": "' .. path .. '", "line": <new_line_number>, "severity": "error"|"warning"|"info"|"suggestion", "comment": "text"}')
+  table.insert(parts, 'Each item: {"file": "' .. path .. '", "line": <number from L-prefix>, "severity": "error"|"warning"|"info"|"suggestion", "comment": "text"}')
   table.insert(parts, 'Use \\n inside "comment" strings for line breaks.')
   table.insert(parts, "If no issues, output `[]`.")
   table.insert(parts, "Focus on: bugs, security, error handling, edge cases, naming, clarity.")
   table.insert(parts, "Do NOT comment on style or formatting.")
+  table.insert(parts, "IMPORTANT: The line number must reference the exact code line the comment applies to, not a nearby comment or section header.")
 
   return table.concat(parts, "\n")
 end
