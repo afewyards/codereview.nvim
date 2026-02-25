@@ -208,7 +208,22 @@ end
 --- @param sugs table[] array of suggestion objects at this row
 --- @param row_selection table|nil current row_selection state
 local function render_ai_suggestions_at_row(buf, row, sugs, row_selection)
-  pcall(vim.fn.sign_place, 0, "CodeReviewAI", "CodeReviewAISign", buf, { lnum = row })
+  -- Determine highest severity for sign placement
+  local severity_rank = { info = 1, warning = 2, error = 3 }
+  local max_severity = "info"
+  for _, sug in ipairs(sugs) do
+    local sev = sug.severity or "info"
+    if (severity_rank[sev] or 1) > (severity_rank[max_severity] or 1) then
+      max_severity = sev
+    end
+  end
+  local sign_by_sev = {
+    info = "CodeReviewAISign",
+    warning = "CodeReviewAIWarningSign",
+    error = "CodeReviewAIErrorSign",
+  }
+  pcall(vim.fn.sign_place, 0, "CodeReviewAI", sign_by_sev[max_severity] or "CodeReviewAISign", buf, { lnum = row })
+
   local sel = row_selection and row_selection[row]
   local sel_ai_idx = sel and sel.type == "ai" and sel.index or nil
   local sug_count = #sugs
@@ -217,54 +232,60 @@ local function render_ai_suggestions_at_row(buf, row, sugs, row_selection)
   for i, suggestion in ipairs(sugs) do
     local is_selected = (sel_ai_idx == i)
     local drafted = suggestion.status == "accepted" or suggestion.status == "edited"
-    local bdr = is_selected and "CodeReviewSelectedNote"
-      or drafted and "CodeReviewCommentBorder" or "CodeReviewAIDraftBorder"
-    local body_hl = is_selected and "CodeReviewSelectedNote"
-      or drafted and "CodeReviewComment" or "CodeReviewAIDraft"
     local severity = suggestion.severity or "info"
-    local header_label = drafted and (" AI [" .. severity .. "] ✓ drafted ")
-      or (" AI [" .. severity .. "] ")
+    local is_error = severity == "error"
+
+    -- Border chars by severity: dashed for info/warning, solid for error
+    local top_l = is_error and "┏" or "┌"
+    local top_fill_c = is_error and "━" or "╌"
+    local bot_l = is_error and "┗" or "└"
+    local bot_fill_c = is_error and "━" or "╌"
+
+    -- Highlights by severity
+    local sev_bdr = is_error and "CodeReviewAIErrorBorder"
+      or severity == "warning" and "CodeReviewAIWarningBorder"
+      or "CodeReviewAIDraftBorder"
+    local sev_body = is_error and "CodeReviewAIError"
+      or severity == "warning" and "CodeReviewAIWarning"
+      or "CodeReviewAIDraft"
+
+    local bdr = is_selected and "CodeReviewSelectedNote"
+      or drafted and "CodeReviewCommentBorder" or sev_bdr
+    local body_hl = is_selected and "CodeReviewSelectedNote"
+      or drafted and "CodeReviewComment" or sev_body
+
+    -- Header: ◆ AI · {severity} [✓ drafted]
+    local header_label = drafted
+      and (" ◆ AI · " .. severity .. " ✓ drafted ")
+      or (" ◆ AI · " .. severity .. " ")
     local header_fill = math.max(0, 62 - #header_label)
 
-    -- Footer: actions + counter when multiple
-    local footer_content = ""
-    if is_selected then
-      footer_content = drafted and "x:dismiss" or "a:accept  x:dismiss  e:edit"
-    end
-    local counter = ""
-    if sug_count > 1 then
-      counter = " " .. i .. "/" .. sug_count
-    end
-    local footer_fill = math.max(0, 62 - #footer_content - #counter - (footer_content ~= "" and 1 or 0))
-
-    -- Header
+    -- Header line
     table.insert(virt_lines, {
-      { "  ┌" .. header_label, bdr },
-      { string.rep("─", header_fill), bdr },
+      { "  " .. top_l .. header_label, bdr },
+      { string.rep(top_fill_c, header_fill), bdr },
     })
 
-    -- Body
+    -- Body (always heavy left bar)
     for _, bl in ipairs(wrap_text(suggestion.comment, config.get().diff.comment_width)) do
-      table.insert(virt_lines, md_virt_line({ "  │ ", bdr }, bl, body_hl))
+      table.insert(virt_lines, md_virt_line({ "  ┃ ", bdr }, bl, body_hl))
     end
 
-    -- Footer
+    -- Footer: keybinds + counter when selected; short cap otherwise
     local footer_parts = {}
-    if footer_content ~= "" then
-      footer_parts[#footer_parts + 1] = { "  └ ", bdr }
+    if is_selected then
+      local footer_content = drafted and "x:dismiss" or "a:accept  x:dismiss  e:edit"
+      local counter = sug_count > 1 and (" " .. i .. "/" .. sug_count) or ""
+      local footer_fill = math.max(0, 62 - #footer_content - #counter - 1)
+      footer_parts[#footer_parts + 1] = { "  " .. bot_l .. " ", bdr }
       footer_parts[#footer_parts + 1] = { footer_content, body_hl }
       if counter ~= "" then
-        footer_parts[#footer_parts + 1] = { " " .. string.rep("─", footer_fill) .. counter, bdr }
+        footer_parts[#footer_parts + 1] = { " " .. string.rep(bot_fill_c, footer_fill) .. counter, bdr }
       else
-        footer_parts[#footer_parts + 1] = { " " .. string.rep("─", footer_fill), bdr }
+        footer_parts[#footer_parts + 1] = { " " .. string.rep(bot_fill_c, footer_fill), bdr }
       end
     else
-      if counter ~= "" then
-        local plain_fill = math.max(0, 62 - #counter)
-        footer_parts[#footer_parts + 1] = { "  └" .. string.rep("─", plain_fill) .. counter, bdr }
-      else
-        footer_parts[#footer_parts + 1] = { "  └" .. string.rep("─", 63), bdr }
-      end
+      footer_parts[#footer_parts + 1] = { "  " .. bot_l .. bot_fill_c .. bot_fill_c, bdr }
     end
     table.insert(virt_lines, footer_parts)
   end

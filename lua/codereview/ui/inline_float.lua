@@ -85,10 +85,10 @@ end
 function M.border(action_type)
   local hl = M.border_hl(action_type)
   return {
-    { "╭", hl }, { "─", hl }, { "╮", hl },
-    { "│", hl },
-    { "╯", hl }, { "─", hl }, { "╰", hl },
-    { "│", hl },
+    { "┏", hl }, { "━", hl }, { "┓", hl },
+    { "┃", hl },
+    { "┛", hl }, { "━", hl }, { "┗", hl },
+    { "┃", hl },
   }
 end
 

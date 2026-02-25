@@ -27,6 +27,9 @@ local _extmark_counter = 0
 local _ns_store = {}
 local _ns_counter = 0
 
+-- Sign store
+local _sign_store = {}
+
 -- Create minimal vim global for testing
 _G.vim = {
   fn = {
@@ -92,7 +95,21 @@ _G.vim = {
       end
       return result
     end,
-    sign_define = function() return 1 end,
+    sign_define = function(name, opts)
+      _sign_store[name] = vim.tbl_extend("force", { name = name }, opts or {})
+      return 1
+    end,
+    sign_getdefined = function(name)
+      if name then
+        local s = _sign_store[name]
+        return s and { s } or {}
+      end
+      local result = {}
+      for _, s in pairs(_sign_store) do
+        table.insert(result, s)
+      end
+      return result
+    end,
     sign_place = function() return 1 end,
     sign_unplace = function() return 0 end,
     timer_start = function() return 1 end,

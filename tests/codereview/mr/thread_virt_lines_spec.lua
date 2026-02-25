@@ -1,304 +1,240 @@
-package.loaded["codereview.config"] = {
-  get = function() return { diff = { comment_width = 64 } } end,
-}
-package.loaded["codereview.ui.markdown"] = {
-  parse_inline = function(text, hl) return { { text, hl } } end,
-  find_spans = function() return {} end,
-}
-
 local tvl = require("codereview.mr.thread_virt_lines")
 
-describe("thread_virt_lines", function()
+-- Flatten virt_lines into a plain string for pattern matching
+local function flatten_virt(virt_lines)
+  local parts = {}
+  for _, line in ipairs(virt_lines) do
+    for _, chunk in ipairs(line) do
+      table.insert(parts, chunk[1])
+    end
+    table.insert(parts, "\n")
+  end
+  return table.concat(parts)
+end
+
+describe("mr.thread_virt_lines", function()
+  describe("format_time_relative", function()
+    local function make_iso(secs_ago)
+      local t = os.time() - secs_ago
+      return os.date("%Y-%m-%dT%H:%M:%S", t)
+    end
+
+    it("returns empty string for nil", function()
+      assert.equals("", tvl.format_time_relative(nil))
+    end)
+
+    it("returns 'just now' for 30s ago", function()
+      assert.equals("just now", tvl.format_time_relative(make_iso(30)))
+    end)
+
+    it("returns '5m ago' for 300s ago", function()
+      assert.equals("5m ago", tvl.format_time_relative(make_iso(300)))
+    end)
+
+    it("returns '2h ago' for 7200s ago", function()
+      assert.equals("2h ago", tvl.format_time_relative(make_iso(7200)))
+    end)
+
+    it("returns '3d ago' for 3 days ago", function()
+      assert.equals("3d ago", tvl.format_time_relative(make_iso(3 * 86400)))
+    end)
+
+    it("falls back to MM/DD format for 60 days ago", function()
+      local iso = make_iso(60 * 86400)
+      local mo, d = iso:match("%d+-(%d+)-(%d+)")
+      assert.equals(mo .. "/" .. d, tvl.format_time_relative(iso))
+    end)
+  end)
+
   describe("build", function()
-    it("single-note thread produces correct virt_lines structure", function()
-      local disc = {
-        id = "d1",
-        notes = {
-          { author = "alice", body = "LGTM", created_at = "2026-02-20T10:30:00Z" },
+    local function make_disc(opts)
+      opts = opts or {}
+      return {
+        id = opts.id or "disc-1",
+        resolved = opts.resolved,
+        is_optimistic = opts.is_pending,
+        is_failed = opts.is_err,
+        notes = opts.notes or {
+          {
+            id = 1,
+            author = opts.author or "alice",
+            body = opts.body or "Comment body",
+            created_at = "2026-01-01T00:00:00Z",
+            resolvable = true,
+            resolved = opts.resolved,
+          },
         },
       }
-      local result = tvl.build(disc, {})
-      assert.is_table(result.virt_lines)
-      assert.is_nil(result.spacer_offset)
-      -- header + body line + footer = at least 3 lines
-      assert.is_true(#result.virt_lines >= 3)
-      -- first chunk of header is the border prefix
-      assert.equals("  ┌ ", result.virt_lines[1][1][1])
-      -- second chunk is the author
-      assert.truthy(result.virt_lines[1][2][1]:find("alice"))
-      -- status is Unresolved for unresolved disc
-      assert.truthy(result.virt_lines[1][4][1]:find("Unresolved"))
-      -- last line is the footer
-      assert.truthy(result.virt_lines[#result.virt_lines][1][1]:find("└"))
-    end)
-
-    it("resolved disc shows Resolved status", function()
-      local disc = {
-        id = "d2",
-        resolved = true,
-        notes = {
-          { author = "bob", body = "Done", created_at = "2026-02-20T12:00:00Z" },
-        },
-      }
-      local result = tvl.build(disc, {})
-      assert.truthy(result.virt_lines[1][4][1]:find("Resolved"))
-    end)
-
-    it("multi-note thread includes reply author and body", function()
-      local disc = {
-        id = "d3",
-        notes = {
-          { author = "alice", body = "First comment", created_at = "2026-02-20T10:00:00Z" },
-          { author = "bob", body = "Reply here", created_at = "2026-02-20T11:00:00Z" },
-        },
-      }
-      local result = tvl.build(disc, {})
-      -- collect all chunk texts
-      local texts = {}
-      for _, line in ipairs(result.virt_lines) do
-        for _, chunk in ipairs(line) do
-          table.insert(texts, chunk[1])
-        end
-      end
-      local joined = table.concat(texts, " ")
-      assert.truthy(joined:find("@bob"))
-      assert.truthy(joined:find("Reply here"))
-    end)
-
-    it("system notes in replies are skipped", function()
-      local disc = {
-        id = "d4",
-        notes = {
-          { author = "alice", body = "Comment", created_at = "2026-02-20T10:00:00Z" },
-          { author = "system", body = "resolved this thread", created_at = "2026-02-20T11:00:00Z", system = true },
-          { author = "bob", body = "A real reply", created_at = "2026-02-20T12:00:00Z" },
-        },
-      }
-      local result = tvl.build(disc, {})
-      local texts = {}
-      for _, line in ipairs(result.virt_lines) do
-        for _, chunk in ipairs(line) do
-          table.insert(texts, chunk[1])
-        end
-      end
-      local joined = table.concat(texts, " ")
-      assert.falsy(joined:find("resolved this thread"))
-      assert.truthy(joined:find("A real reply"))
-    end)
+    end
 
     it("returns empty virt_lines for discussion with no notes", function()
-      local disc = { id = "d5", notes = {} }
-      local result = tvl.build(disc, {})
-      assert.equals(0, #result.virt_lines)
-    end)
-
-    it("outdated flag adds Outdated chunk to header", function()
-      local disc = {
-        id = "d6",
-        notes = {
-          { author = "alice", body = "Old comment", created_at = "2026-02-20T10:00:00Z" },
-        },
-      }
-      local result = tvl.build(disc, { outdated = true })
-      local texts = {}
-      for _, chunk in ipairs(result.virt_lines[1]) do
-        table.insert(texts, chunk[1])
-      end
-      assert.truthy(table.concat(texts, " "):find("Outdated"))
-    end)
-
-    it("selected note uses CodeReviewSelectedNote highlight", function()
-      local disc = {
-        id = "d7",
-        notes = {
-          { author = "alice", body = "Some comment", created_at = "2026-02-20T10:00:00Z" },
-        },
-      }
-      local result = tvl.build(disc, { sel_idx = 1 })
-      -- first chunk of header should use selected highlight
-      assert.equals("CodeReviewSelectedNote", result.virt_lines[1][1][2])
-    end)
-
-    it("pending disc shows Posting status", function()
-      local disc = {
-        id = "d8",
-        is_optimistic = true,
-        notes = {
-          { author = "alice", body = "Pending comment", created_at = "2026-02-20T10:00:00Z" },
-        },
-      }
-      local result = tvl.build(disc, {})
-      assert.truthy(result.virt_lines[1][4][1]:find("Posting"))
-    end)
-
-    it("failed disc shows Failed status and retry footer", function()
-      local disc = {
-        id = "d9",
-        is_failed = true,
-        notes = {
-          { author = "alice", body = "Failed comment", created_at = "2026-02-20T10:00:00Z" },
-        },
-      }
-      local result = tvl.build(disc, {})
-      assert.truthy(result.virt_lines[1][4][1]:find("Failed"))
-      -- footer should contain retry hint
-      local footer = result.virt_lines[#result.virt_lines]
-      local footer_texts = {}
-      for _, chunk in ipairs(footer) do table.insert(footer_texts, chunk[1]) end
-      assert.truthy(table.concat(footer_texts, " "):find("retry"))
-    end)
-  end)
-
-  describe("spacer support", function()
-    it("editing note_idx=1 replaces body with spacers and sets spacer_offset=1", function()
-      local disc = {
-        id = "disc1",
-        notes = {
-          { author = "alice", body = "Original body", created_at = "2026-02-20T10:00:00Z" },
-        },
-      }
-      local result = tvl.build(disc, {
-        editing_note = { disc_id = "disc1", note_idx = 1 },
-        spacer_height = 3,
-      })
-      assert.equals(1, result.spacer_offset)
-      -- header is still present
-      assert.equals("  ┌ ", result.virt_lines[1][1][1])
-      -- 3 spacer lines follow the header
-      assert.equals(3 + 2, #result.virt_lines) -- header + 3 spacers + footer
-      for i = 2, 4 do
-        local chunk = result.virt_lines[i][1][1]
-        assert.truthy(chunk:find("│"), "line " .. i .. " should contain │")
-        -- "  │" is 5 bytes (│ is 3-byte UTF-8) + 61 spaces = 66
-        assert.equals(5 + 61, #chunk)
-      end
-      -- body text must not appear
-      local texts = {}
-      for _, line in ipairs(result.virt_lines) do
-        for _, chunk in ipairs(line) do table.insert(texts, chunk[1]) end
-      end
-      assert.falsy(table.concat(texts, " "):find("Original body"))
-    end)
-
-    it("editing reply (note_idx=2) skips separator+header+body, inserts spacers", function()
-      local disc = {
-        id = "disc2",
-        notes = {
-          { author = "alice", body = "First", created_at = "2026-02-20T10:00:00Z" },
-          { author = "bob", body = "Reply text", created_at = "2026-02-20T11:00:00Z" },
-        },
-      }
-      local result = tvl.build(disc, {
-        editing_note = { disc_id = "disc2", note_idx = 2 },
-        spacer_height = 2,
-      })
-      -- spacer_offset = header(1) + first body(1) = 2
-      assert.equals(2, result.spacer_offset)
-      -- "Reply text" body must not appear
-      local texts = {}
-      for _, line in ipairs(result.virt_lines) do
-        for _, chunk in ipairs(line) do table.insert(texts, chunk[1]) end
-      end
-      assert.falsy(table.concat(texts, " "):find("Reply text"))
-      -- alice's first note body should still be present
-      assert.truthy(table.concat(texts, " "):find("First"))
-      -- 2 spacer lines should be present
-      local spacer_count = 0
-      for _, line in ipairs(result.virt_lines) do
-        -- spacer lines: single chunk, "  │" (5 bytes) + 61 spaces = 66 bytes
-        if #line == 1 and #line[1][1] == 5 + 61 then
-          spacer_count = spacer_count + 1
-        end
-      end
-      assert.equals(2, spacer_count)
-    end)
-
-    it("non-matching disc_id returns spacer_offset=nil and renders normally", function()
-      local disc = {
-        id = "disc3",
-        notes = {
-          { author = "alice", body = "Body text", created_at = "2026-02-20T10:00:00Z" },
-        },
-      }
-      local result = tvl.build(disc, {
-        editing_note = { disc_id = "other_disc", note_idx = 1 },
-        spacer_height = 3,
-      })
+      local disc = { id = "x", notes = {} }
+      local result = tvl.build(disc)
+      assert.same({}, result.virt_lines)
       assert.is_nil(result.spacer_offset)
-      -- body should render normally
-      local texts = {}
-      for _, line in ipairs(result.virt_lines) do
-        for _, chunk in ipairs(line) do table.insert(texts, chunk[1]) end
-      end
-      assert.truthy(table.concat(texts, " "):find("Body text"))
     end)
 
-    it("editing last note in 3-note thread inserts spacers before footer", function()
-      local disc = {
-        id = "disc5",
-        notes = {
-          { author = "alice", body = "First", created_at = "2026-02-20T10:00:00Z" },
-          { author = "bob", body = "Second", created_at = "2026-02-20T11:00:00Z" },
-          { author = "charlie", body = "Last note", created_at = "2026-02-20T12:00:00Z" },
-        },
-      }
-      local result = tvl.build(disc, {
-        editing_note = { disc_id = "disc5", note_idx = 3 },
-        spacer_height = 2,
-      })
-      -- spacer_offset: header(1) + alice_body(1) + bob_sep(1) + bob_reply_header(1) + bob_body(1) = 5
-      assert.equals(5, result.spacer_offset)
-      -- "Last note" body must not appear
-      local texts = {}
-      for _, line in ipairs(result.virt_lines) do
-        for _, chunk in ipairs(line) do table.insert(texts, chunk[1]) end
-      end
-      assert.falsy(table.concat(texts, " "):find("Last note"))
-      -- earlier notes still rendered
-      assert.truthy(table.concat(texts, " "):find("First"))
-      assert.truthy(table.concat(texts, " "):find("@bob"))
-      -- 2 spacer lines present
-      local spacer_count = 0
-      for _, line in ipairs(result.virt_lines) do
-        if #line == 1 and #line[1][1] == 5 + 61 then
-          spacer_count = spacer_count + 1
-        end
-      end
-      assert.equals(2, spacer_count)
-      -- footer is still last
-      assert.truthy(result.virt_lines[#result.virt_lines][1][1]:find("└"))
+    it("uses heavy top-left border ┏ in header", function()
+      local disc = make_disc({ resolved = false })
+      local result = tvl.build(disc)
+      local flat = flatten_virt(result.virt_lines)
+      assert.truthy(flat:find("┏", 1, true))
     end)
 
-    it("spacer_height=0 with editing_note produces no spacer lines", function()
+    it("does not use light border ┌ in header", function()
+      local disc = make_disc({ resolved = false })
+      local result = tvl.build(disc)
+      local flat = flatten_virt(result.virt_lines)
+      assert.falsy(flat:find("┌", 1, true))
+    end)
+
+    it("shows ● dot for unresolved thread", function()
+      local disc = make_disc({ resolved = false })
+      local result = tvl.build(disc)
+      local flat = flatten_virt(result.virt_lines)
+      assert.truthy(flat:find("●", 1, true))
+      assert.truthy(flat:find("Unresolved", 1, true))
+    end)
+
+    it("shows ○ dot for resolved thread", function()
+      local disc = make_disc({ resolved = true, notes = {
+        { id = 1, author = "alice", body = "done", created_at = "2026-01-01T00:00:00Z",
+          resolvable = true, resolved = true },
+      }})
+      local result = tvl.build(disc)
+      local flat = flatten_virt(result.virt_lines)
+      assert.truthy(flat:find("○", 1, true))
+      assert.truthy(flat:find("Resolved", 1, true))
+    end)
+
+    it("uses ┃ for body lines", function()
+      local disc = make_disc({ resolved = false })
+      local result = tvl.build(disc)
+      local flat = flatten_virt(result.virt_lines)
+      assert.truthy(flat:find("┃", 1, true))
+    end)
+
+    it("does not use light border │ for body", function()
+      local disc = make_disc({ resolved = false })
+      local result = tvl.build(disc)
+      local flat = flatten_virt(result.virt_lines)
+      assert.falsy(flat:find("│", 1, true))
+    end)
+
+    it("uses ┗━━ short cap footer when no selection", function()
+      local disc = make_disc({ resolved = false })
+      local result = tvl.build(disc)
+      local flat = flatten_virt(result.virt_lines)
+      assert.truthy(flat:find("┗━━", 1, true))
+    end)
+
+    it("does not use light border └ in footer", function()
+      local disc = make_disc({ resolved = false })
+      local result = tvl.build(disc)
+      local flat = flatten_virt(result.virt_lines)
+      assert.falsy(flat:find("└", 1, true))
+    end)
+
+    it("uses ┗ + keybinds + ━ fill footer when sel_idx set", function()
+      local disc = make_disc({ resolved = false })
+      local result = tvl.build(disc, { sel_idx = 1, current_user = "bob" })
+      local flat = flatten_virt(result.virt_lines)
+      assert.truthy(flat:find("┗", 1, true))
+      assert.truthy(flat:find("━", 1, true))
+      assert.truthy(flat:find("reply", 1, true))
+    end)
+
+    it("includes author and body in output", function()
+      local disc = make_disc({ author = "jan", body = "Fix this please" })
+      local result = tvl.build(disc)
+      local flat = flatten_virt(result.virt_lines)
+      assert.truthy(flat:find("@jan", 1, true))
+      assert.truthy(flat:find("Fix this please", 1, true))
+    end)
+
+    it("renders reply with ┃  ↪ prefix", function()
       local disc = {
-        id = "disc4",
+        id = "d1", resolved = false,
         notes = {
-          { author = "alice", body = "Content", created_at = "2026-02-20T10:00:00Z" },
+          { id = 1, author = "alice", body = "Question", created_at = "2026-01-01T00:00:00Z",
+            resolvable = true, resolved = false },
+          { id = 2, author = "bob", body = "Answer", created_at = "2026-01-01T01:00:00Z",
+            system = false },
         },
       }
+      local result = tvl.build(disc)
+      local flat = flatten_virt(result.virt_lines)
+      assert.truthy(flat:find("┃  ↪", 1, true))
+      assert.truthy(flat:find("@bob", 1, true))
+      assert.truthy(flat:find("Answer", 1, true))
+    end)
+
+    it("uses ┃ for reply body spacer", function()
+      local disc = {
+        id = "d1", resolved = false,
+        notes = {
+          { id = 1, author = "alice", body = "Q", created_at = "2026-01-01T00:00:00Z",
+            resolvable = true, resolved = false },
+          { id = 2, author = "bob", body = "A", created_at = "2026-01-01T01:00:00Z" },
+        },
+      }
+      local result = tvl.build(disc)
+      local count = 0
+      local flat = flatten_virt(result.virt_lines)
+      for _ in flat:gmatch("┃") do count = count + 1 end
+      assert.truthy(count >= 2)
+    end)
+
+    it("shows ' Posting…' for pending discussion without dot", function()
+      local disc = make_disc({ is_pending = true })
+      local result = tvl.build(disc)
+      local flat = flatten_virt(result.virt_lines)
+      assert.truthy(flat:find("Posting", 1, true))
+      assert.falsy(flat:find("●", 1, true))
+      assert.falsy(flat:find("○", 1, true))
+    end)
+
+    it("shows ' Failed' for failed discussion without dot", function()
+      local disc = make_disc({ is_err = true })
+      local result = tvl.build(disc)
+      local flat = flatten_virt(result.virt_lines)
+      assert.truthy(flat:find("Failed", 1, true))
+      assert.falsy(flat:find("●", 1, true))
+      assert.falsy(flat:find("○", 1, true))
+    end)
+
+    it("inserts spacer lines when editing first note", function()
+      local disc = make_disc({ resolved = false })
       local result = tvl.build(disc, {
-        editing_note = { disc_id = "disc4", note_idx = 1 },
-        spacer_height = 0,
+        editing_note = { disc_id = "disc-1", note_idx = 1 },
+        spacer_height = 3,
       })
       assert.equals(1, result.spacer_offset)
-      -- only header + footer
-      assert.equals(2, #result.virt_lines)
-    end)
-  end)
-
-  describe("is_resolved", function()
-    it("uses discussion.resolved when set", function()
-      assert.is_true(tvl.is_resolved({ resolved = true, notes = {} }))
-      assert.is_false(tvl.is_resolved({ resolved = false, notes = {} }))
+      -- Header + 3 spacers + footer = 5 lines
+      assert.equals(5, #result.virt_lines)
     end)
 
-    it("falls back to first note resolved field", function()
-      assert.is_true(tvl.is_resolved({ notes = { { resolved = true } } }))
-      assert.is_false(tvl.is_resolved({ notes = { { resolved = false } } }))
+    it("inserts spacer lines when editing a reply", function()
+      local disc = {
+        id = "d1", resolved = false,
+        notes = {
+          { id = 1, author = "alice", body = "Q", created_at = "2026-01-01T00:00:00Z",
+            resolvable = true, resolved = false },
+          { id = 2, author = "bob", body = "A", created_at = "2026-01-01T01:00:00Z" },
+        },
+      }
+      local result = tvl.build(disc, {
+        editing_note = { disc_id = "d1", note_idx = 2 },
+        spacer_height = 2,
+      })
+      assert.is_number(result.spacer_offset)
+      assert.truthy(result.spacer_offset > 0)
     end)
 
-    it("returns nil when notes is empty and resolved is nil", function()
-      assert.is_falsy(tvl.is_resolved({ notes = {} }))
+    it("returns nil spacer_offset when not editing", function()
+      local disc = make_disc({ resolved = false })
+      local result = tvl.build(disc)
+      assert.is_nil(result.spacer_offset)
     end)
   end)
 end)

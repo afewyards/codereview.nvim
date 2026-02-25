@@ -2,6 +2,7 @@ local providers = require("codereview.providers")
 local client = require("codereview.api.client")
 local markdown = require("codereview.ui.markdown")
 local list_mod = require("codereview.mr.list")
+local tvl = require("codereview.mr.thread_virt_lines")
 
 local M = {}
 
@@ -83,12 +84,7 @@ local function wrap_text(text, width)
   return result
 end
 
-local function format_time_short(iso_str)
-  if not iso_str then return "" end
-  local mo, d, h, mi = iso_str:match("%d+-(%d+)-(%d+)T(%d+):(%d+)")
-  if not mo then return "" end
-  return string.format("%s/%s %s:%s", mo, d, h, mi)
-end
+local format_time_short = tvl.format_time_relative
 
 function M.build_activity_lines(discussions, width)
   width = width or 60
