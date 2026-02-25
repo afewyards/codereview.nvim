@@ -40,8 +40,9 @@ describe("inline_float", function()
       assert.equals(3, inline_float.compute_height(0, 1))
     end)
 
-    it("clamps to max 15", function()
-      assert.equals(15, inline_float.compute_height(20, 1))
+    it("clamps to dynamic max (80% of window height)", function()
+      -- mock nvim_win_get_height returns 10, so max = floor(10 * 0.8) = 8
+      assert.equals(8, inline_float.compute_height(20, 1))
     end)
 
     it("adds header lines to content lines", function()
