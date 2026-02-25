@@ -31,7 +31,7 @@ describe("keymaps", function()
       assert.equals("Q", all.quit.key)
       local count = 0
       for _ in pairs(all) do count = count + 1 end
-      assert.equals(28, count)
+      assert.equals(29, count)
     end)
 
     it("has select_next_note default", function()
@@ -66,6 +66,13 @@ describe("keymaps", function()
       km.reset()
       km.setup()
       assert.equals("<leader>ff", km.get("pick_files"))
+    end)
+
+    it("includes ai_review_file default", function()
+      local km = require("codereview.keymaps")
+      km.reset()
+      km.setup()
+      assert.equals("af", km.get("ai_review_file"))
     end)
   end)
 
