@@ -17,6 +17,7 @@ local COMMENT_PAD = string.rep(" ", 4)
 -- in multiple modules.
 local DIFF_NS = vim.api.nvim_create_namespace("codereview_diff")
 local AIDRAFT_NS = vim.api.nvim_create_namespace("codereview_ai_draft")
+local SEPARATOR_NS = vim.api.nvim_create_namespace("codereview_separator")
 
 -- ─── Formatting helpers ───────────────────────────────────────────────────────
 
@@ -43,6 +44,48 @@ end
 -- Export for use in diff.lua (sidebar renderer needs these)
 M.apply_line_hl = apply_line_hl
 M.apply_word_hl = apply_word_hl
+
+-- ─── Hunk separator placement ─────────────────────────────────────────────────
+
+local function place_hunk_separators(buf, data_list, file_scoped)
+  vim.api.nvim_buf_clear_namespace(buf, SEPARATOR_NS, 0, -1)
+  local cfg = config.get().diff
+  if cfg.separator_lines <= 0 or cfg.separator_char == "" then return end
+  local win_width = 80
+  if vim.api.nvim_list_wins then
+    for _, w in ipairs(vim.api.nvim_list_wins()) do
+      if vim.api.nvim_win_get_buf(w) == buf then
+        win_width = vim.api.nvim_win_get_width(w)
+        break
+      end
+    end
+  end
+  local sep_line = string.rep(cfg.separator_char, win_width)
+  local sep_virt = {}
+  for _ = 1, cfg.separator_lines do
+    table.insert(sep_virt, { { sep_line, "CodeReviewHunkSeparator" } })
+  end
+  local prev_hunk, prev_file = nil, nil
+  for i, data in ipairs(data_list) do
+    local cur_hunk = data.item and data.item.hunk_idx
+    local cur_file = data.file_idx
+    if cur_hunk and prev_hunk and cur_hunk ~= prev_hunk then
+      if not file_scoped or cur_file == prev_file then
+        local anchor_row = i - 2
+        if anchor_row >= 0 then
+          vim.api.nvim_buf_set_extmark(buf, SEPARATOR_NS, anchor_row, 0, {
+            virt_lines = sep_virt,
+            virt_lines_above = false,
+          })
+        end
+      end
+    end
+    if cur_hunk then
+      prev_hunk = cur_hunk
+      prev_file = cur_file
+    end
+  end
+end
 
 -- ─── Discussion helpers ───────────────────────────────────────────────────────
 
@@ -541,8 +584,10 @@ function M.render_file_diff(buf, file_diff, review, discussions, context, ai_sug
   end
 
   for _, item in ipairs(display) do
-    table.insert(lines, item.text or "")
-    table.insert(line_data, { type = item.type, item = item })
+    if item.type ~= "hunk_boundary" then
+      table.insert(lines, item.text or "")
+      table.insert(line_data, { type = item.type, item = item })
+    end
   end
 
   -- "Load more below" — only if last displayed line doesn't reach EOF
@@ -615,6 +660,8 @@ function M.render_file_diff(buf, file_diff, review, discussions, context, ai_sug
       prev_delete_text = nil
     end
   end
+
+  place_hunk_separators(buf, line_data, false)
 
   local row_discussions = {}
   if discussions then
@@ -690,8 +737,10 @@ function M.render_all_files(buf, files, review, discussions, context, file_conte
       table.insert(all_line_data, { type = "empty", file_idx = file_idx })
     else
       for _, item in ipairs(display) do
-        table.insert(all_lines, item.text or "")
-        table.insert(all_line_data, { type = item.type, item = item, file_idx = file_idx })
+        if item.type ~= "hunk_boundary" then
+          table.insert(all_lines, item.text or "")
+          table.insert(all_line_data, { type = item.type, item = item, file_idx = file_idx })
+        end
       end
       -- trim trailing empty-text context lines (parser artifact from trailing \n)
       while #all_lines > section_start and all_lines[#all_lines] == "" do
@@ -815,6 +864,8 @@ function M.render_all_files(buf, files, review, discussions, context, file_conte
       end
     end
   end)
+
+  place_hunk_separators(buf, all_line_data, true)
 
   -- Build scroll lookup map once for O(1) comment and suggestion placement
   local scroll_map = M.build_line_to_row_scroll(all_line_data)
