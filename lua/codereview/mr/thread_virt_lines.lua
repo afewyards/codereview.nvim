@@ -92,7 +92,7 @@ function M.build(disc, opts)
   local outdated = opts.outdated
   local editing_note = opts.editing_note
   local spacer_height = opts.spacer_height or 0
-  local comment_width = opts.comment_width or 60
+  local comment_width = opts.comment_width or require("codereview.config").get().diff.comment_width
   local gutter = opts.gutter or 0
   local pad = string.rep(" ", gutter)
 
@@ -160,19 +160,19 @@ function M.build(disc, opts)
 
   if is_err then
     local status_text = " Failed"
-    local fill = math.max(0, 62 - #header_text - #header_meta - #outdated_str - #status_text)
+    local fill = math.max(0, comment_width + 2 - #header_text - #header_meta - #outdated_str - #status_text)
     table.insert(header_chunks, { string.rep(" ", fill), bdr })
     table.insert(header_chunks, { status_text, bdr })
   elseif is_pending then
     local status_text = " Posting…"
-    local fill = math.max(0, 62 - #header_text - #header_meta - #outdated_str - #status_text)
+    local fill = math.max(0, comment_width + 2 - #header_text - #header_meta - #outdated_str - #status_text)
     table.insert(header_chunks, { string.rep(" ", fill), bdr })
     table.insert(header_chunks, { status_text, bdr })
   else
     local dot = resolved and "○ " or "● "
     local dot_hl = resolved and "CodeReviewStatusResolved" or "CodeReviewStatusUnresolved"
     local label = resolved and "Resolved" or "Unresolved"
-    local fill = math.max(0, 62 - #header_text - #header_meta - #outdated_str - #dot - #label)
+    local fill = math.max(0, comment_width + 2 - #header_text - #header_meta - #outdated_str - #dot - #label)
     table.insert(header_chunks, { string.rep(" ", fill), bdr })
     table.insert(header_chunks, { dot, dot_hl })
     table.insert(header_chunks, { label, status_hl })
@@ -185,9 +185,9 @@ function M.build(disc, opts)
     spacer_offset = #virt_lines
     for _ = 1, spacer_height do
       if n1_sel then
-        table.insert(virt_lines, { { "██", status_hl }, { string.rep(" ", math.max(0, gutter - 2)) .. "┃" .. string.rep(" ", 61), bdr } })
+        table.insert(virt_lines, { { "██", status_hl }, { string.rep(" ", math.max(0, gutter - 2)) .. "┃" .. string.rep(" ", comment_width + 1), bdr } })
       else
-        table.insert(virt_lines, { { pad .. "┃" .. string.rep(" ", 61), bdr } })
+        table.insert(virt_lines, { { pad .. "┃" .. string.rep(" ", comment_width + 1), bdr } })
       end
     end
   else
@@ -208,9 +208,9 @@ function M.build(disc, opts)
         spacer_offset = #virt_lines
         for _ = 1, spacer_height do
           if ri_sel then
-            table.insert(virt_lines, { { "██", status_hl }, { string.rep(" ", math.max(0, gutter - 2)) .. "┃" .. string.rep(" ", 61), bdr } })
+            table.insert(virt_lines, { { "██", status_hl }, { string.rep(" ", math.max(0, gutter - 2)) .. "┃" .. string.rep(" ", comment_width + 1), bdr } })
           else
-            table.insert(virt_lines, { { pad .. "┃" .. string.rep(" ", 61), bdr } })
+            table.insert(virt_lines, { { pad .. "┃" .. string.rep(" ", comment_width + 1), bdr } })
           end
         end
       else
@@ -228,7 +228,7 @@ function M.build(disc, opts)
         table.insert(reply_header, { rmeta, bdr })
         table.insert(virt_lines, reply_header)
         -- Reply body
-        for _, rl in ipairs(wrap_text(reply.body, 58)) do
+        for _, rl in ipairs(wrap_text(reply.body, comment_width - 2)) do
           local prefix = sel_prefix(ri_sel, "┃    ", bdr)
           table.insert(virt_lines, md_virt_line(prefix, rl, body_hl))
         end
@@ -252,7 +252,7 @@ function M.build(disc, opts)
   end
 
   if footer_content then
-    local footer_fill = math.max(0, 62 - #footer_content - 1)
+    local footer_fill = math.max(0, comment_width + 2 - #footer_content - 1)
     table.insert(virt_lines, {
       { pad .. "┗ ", bdr },
       { footer_content, bdr },

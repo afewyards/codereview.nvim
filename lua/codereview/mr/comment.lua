@@ -34,7 +34,7 @@ function M.open_input_popup(title, callback, opts)
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, init_lines)
 
   local content_count = #init_lines - header_count
-  local total_height = ifloat.compute_height(content_count, header_count)
+  local total_height = opts.height or ifloat.compute_height(content_count, header_count)
 
   local styled_title = ifloat.title(title)
   local styled_footer = ifloat.footer()
@@ -59,7 +59,7 @@ function M.open_input_popup(title, callback, opts)
     line_hl_ids = ifloat.highlight_lines(diff_buf, hl_start, opts.anchor_line)
     local cfg = require("codereview.config").get()
     local win_width = vim.api.nvim_win_get_width(opts.win_id)
-    local max_w = cfg.diff.comment_width + 8  -- match rendered comment width + border/padding
+    local max_w = opts.width or (cfg.diff.comment_width + 8)  -- match rendered comment width + border/padding
     local width = math.min(win_width - 4, max_w)
 
     if not is_edit_overlay then

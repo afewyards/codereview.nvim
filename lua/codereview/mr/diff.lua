@@ -2454,10 +2454,15 @@ function M.setup_keymaps(layout, state)
         return
       end
 
-      -- Compute initial popup height from the prefill line count
+      -- Compute initial popup height using display width (matches Neovim's visual wrap)
       local ifloat = require("codereview.ui.inline_float")
-      local init_lines = vim.split(note.body or "", "\n")
-      local initial_height = ifloat.compute_height(#init_lines, 0)
+      local cw = require("codereview.config").get().diff.comment_width
+      local popup_w = sel_idx > 1 and (cw - 2) or cw
+      local display_lines = 0
+      for _, l in ipairs(vim.split(note.body or "", "\n")) do
+        display_lines = display_lines + math.max(1, math.ceil(vim.fn.strdisplaywidth(l) / popup_w))
+      end
+      local initial_height = ifloat.compute_height(display_lines, 0)
 
       -- Set editing_note state so rerender_view() draws spacer virt_lines
       state.editing_note = {
@@ -2484,6 +2489,8 @@ function M.setup_keymaps(layout, state)
         anchor_line = cursor_row,
         spacer_offset = spacer_offset,
         is_reply = sel_idx > 1,
+        height = initial_height,
+        width = sel_idx > 1 and (cw - 2) or cw,
         on_close = function()
           state.editing_note = nil
           rerender_view()
