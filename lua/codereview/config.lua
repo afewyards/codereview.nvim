@@ -10,7 +10,7 @@ local defaults = {
   picker = nil,
   debug = false,      -- write request/auth logs to .codereview.log
   diff = { context = 8, scroll_threshold = 50, comment_width = 64 },
-  ai = { enabled = true, claude_cmd = "claude", agent = "code-review" },
+  ai = { enabled = true, claude_cmd = "claude", agent = "code-review", review_level = "info" },
   keymaps = {},
 }
 
@@ -30,6 +30,10 @@ end
 
 local function validate(c)
   c.diff.context = math.max(0, math.min(20, c.diff.context))
+  local valid_levels = { info = true, suggestion = true, warning = true, error = true }
+  if not valid_levels[c.ai.review_level] then
+    c.ai.review_level = "info"
+  end
   return c
 end
 

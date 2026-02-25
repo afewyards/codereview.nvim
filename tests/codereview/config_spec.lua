@@ -68,4 +68,23 @@ describe("config", function()
     vim.notify = orig
     assert.is_true(warned)
   end)
+
+  it("defaults ai.review_level to info", function()
+    config.setup({})
+    local c = config.get()
+    assert.equals("info", c.ai.review_level)
+  end)
+
+  it("accepts valid review_level values", function()
+    for _, level in ipairs({ "info", "suggestion", "warning", "error" }) do
+      config.reset()
+      config.setup({ ai = { review_level = level } })
+      assert.equals(level, config.get().ai.review_level)
+    end
+  end)
+
+  it("rejects invalid review_level and defaults to info", function()
+    config.setup({ ai = { review_level = "critical" } })
+    assert.equals("info", config.get().ai.review_level)
+  end)
 end)
