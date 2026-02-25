@@ -1,7 +1,6 @@
 local M = {}
 
 local MIN_HEIGHT = 3
-local MAX_HEIGHT = 15
 local NS = vim.api.nvim_create_namespace("codereview_inline_float")
 
 --- Build context header lines for the float.
@@ -24,8 +23,9 @@ end
 --- @param header_lines number
 --- @return number
 function M.compute_height(content_lines, header_lines)
+  local max_height = math.floor(vim.api.nvim_win_get_height(0) * 0.8)
   local h = content_lines + header_lines
-  return math.max(MIN_HEIGHT, math.min(MAX_HEIGHT, h))
+  return math.max(MIN_HEIGHT, math.min(max_height, h))
 end
 
 --- Create virt_lines extmark to reserve space in the diff buffer.
