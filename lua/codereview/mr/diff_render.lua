@@ -417,17 +417,26 @@ end
 
 -- ─── Diff rendering ───────────────────────────────────────────────────────────
 
-function M.render_file_diff(buf, file_diff, review, discussions, context, ai_suggestions, row_selection, current_user, editing_note)
+function M.render_file_diff(buf, file_diff, review, discussions, context, ai_suggestions, row_selection, current_user, editing_note, diff_cache)
   local parser = require("codereview.mr.diff_parser")
   if not context then
     context = config.get().diff.context
   end
 
-  -- Try local git diff with more context lines; fall back to API diff
-  local diff_text = file_diff.diff or ""
-  if review.base_sha and review.head_sha then
-    local path = file_diff.new_path or file_diff.old_path
-    if path then
+  local path = file_diff.new_path or file_diff.old_path
+  local cache_key = path and (path .. ":" .. context) or nil
+  local cached = diff_cache and cache_key and diff_cache[cache_key]
+
+  local hunks, display, file_line_count
+
+  if cached then
+    hunks = cached.hunks
+    display = cached.display
+    file_line_count = cached.file_line_count
+  else
+    -- Try local git diff with more context lines; fall back to API diff
+    local diff_text = file_diff.diff or ""
+    if review.base_sha and review.head_sha and path then
       local result = vim.fn.system({
         "git", "diff",
         "-U" .. context,
@@ -439,20 +448,26 @@ function M.render_file_diff(buf, file_diff, review, discussions, context, ai_sug
         diff_text = result
       end
     end
-  end
 
-  local hunks = parser.parse_hunks(diff_text)
-  local display = parser.build_display(hunks, 99999)
+    hunks = parser.parse_hunks(diff_text)
+    display = parser.build_display(hunks, 99999)
 
-  -- Get file line count for BOF/EOF detection
-  local file_line_count
-  local file_path = file_diff.new_path or file_diff.old_path
-  if file_path and review.head_sha then
-    local wc = vim.fn.system({
-      "git", "show", review.head_sha .. ":" .. file_path,
-    })
-    if vim.v.shell_error == 0 then
-      file_line_count = select(2, wc:gsub("\n", "\n"))
+    -- Get file line count for BOF/EOF detection
+    if path and review.head_sha then
+      local wc = vim.fn.system({
+        "git", "show", review.head_sha .. ":" .. path,
+      })
+      if vim.v.shell_error == 0 then
+        file_line_count = select(2, wc:gsub("\n", "\n"))
+      end
+    end
+
+    if diff_cache and cache_key then
+      diff_cache[cache_key] = {
+        hunks = hunks,
+        display = display,
+        file_line_count = file_line_count,
+      }
     end
   end
 
