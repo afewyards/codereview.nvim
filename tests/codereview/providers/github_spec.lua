@@ -379,15 +379,94 @@ describe("providers.github", function()
   end)
 
   describe("create_draft_comment", function()
-    it("accumulates comments in _pending_comments", function()
-      github._pending_comments = {} -- reset
-      local review = { id = 1, sha = "abc123" }
-      github.create_draft_comment(nil, nil, review, { body = "Fix this", path = "foo.lua", line = 10 })
-      github.create_draft_comment(nil, nil, review, { body = "And this", path = "bar.lua", line = 20 })
-      assert.equals(2, #github._pending_comments)
-      assert.equals("Fix this", github._pending_comments[1].body)
-      assert.equals("foo.lua", github._pending_comments[1].path)
-      github._pending_comments = {} -- cleanup
+    before_each(function()
+      package.loaded["codereview.api.auth"] = {
+        get_token = function() return "ghp_test", "pat" end,
+      }
+      github._pending_review_id = nil
+      github._pending_review_node_id = nil
+    end)
+    after_each(function()
+      package.loaded["codereview.api.auth"] = nil
+      github._pending_review_id = nil
+      github._pending_review_node_id = nil
+    end)
+
+    it("creates a PENDING review then adds a comment on first call", function()
+      local posted_paths = {}
+      local posted_bodies = {}
+      local mock_client = {
+        post = function(_, path, opts)
+          table.insert(posted_paths, path)
+          table.insert(posted_bodies, opts.body)
+          if path:find("/reviews$") then
+            return { data = { id = 300, node_id = "PRR_abc" } }, nil
+          end
+          return { data = { id = 1 } }, nil
+        end,
+      }
+      local ctx = { base_url = "https://api.github.com", project = "owner/repo" }
+      local review = { id = 42, sha = "abc123" }
+      local result, err = github.create_draft_comment(mock_client, ctx, review, { body = "Fix this", path = "foo.lua", line = 10 })
+      assert.is_nil(err)
+      -- Only ONE POST (to /reviews), with comments array in the body
+      assert.equal(1, #posted_paths)
+      assert.truthy(posted_paths[1]:find("/reviews$"))
+      assert.equal("abc123", posted_bodies[1].commit_id)
+      assert.equal("Fix this", posted_bodies[1].comments[1].body)
+      assert.equal(300, github._pending_review_id)
+      assert.equal("PRR_abc", github._pending_review_node_id)
+    end)
+
+    it("reuses existing _pending_review_id on second call via GraphQL", function()
+      github._pending_review_id = 300
+      github._pending_review_node_id = "PRR_abc"
+      local client_post_calls = 0
+      local mock_client = {
+        post = function(_, _, _)
+          client_post_calls = client_post_calls + 1
+          return { data = { id = 2 } }, nil
+        end,
+      }
+      local gql_body
+      package.loaded["plenary.curl"] = {
+        request = function(params)
+          gql_body = vim.json.decode(params.body)
+          return {
+            status = 200,
+            body = vim.json.encode({ data = { addPullRequestReviewThread = { thread = { id = "PRRT_1" } } } }),
+          }
+        end,
+      }
+      local ctx = { base_url = "https://api.github.com", project = "owner/repo" }
+      local review = { id = 42, sha = "abc123" }
+      local result, err = github.create_draft_comment(mock_client, ctx, review, { body = "And this", path = "bar.lua", line = 20 })
+      assert.is_nil(err)
+      -- NO client.post calls (GraphQL goes through plenary.curl, not the client)
+      assert.equal(0, client_post_calls)
+      assert.truthy(gql_body.query:find("addPullRequestReviewThread"))
+      assert.equal("PRR_abc", gql_body.variables.reviewId)
+      assert.equal("And this", gql_body.variables.body)
+      assert.equal("bar.lua", gql_body.variables.path)
+      assert.equal(20, gql_body.variables.line)
+      assert.equal(300, github._pending_review_id)
+    end)
+
+    it("returns nil and error when review creation fails", function()
+      local mock_client = {
+        post = function(_, path, _)
+          if path:find("/reviews$") then
+            return nil, "network error"
+          end
+          return { data = { id = 1 } }, nil
+        end,
+      }
+      local ctx = { base_url = "https://api.github.com", project = "owner/repo" }
+      local review = { id = 42, sha = "abc123" }
+      local result, err = github.create_draft_comment(mock_client, ctx, review, { body = "Fix", path = "x.lua", line = 1 })
+      assert.is_nil(result)
+      assert.equal("network error", err)
+      assert.is_nil(github._pending_review_id)
     end)
   end)
 
@@ -464,10 +543,12 @@ describe("get_pending_review_drafts", function()
       get_token = function() return "ghp_test", "pat" end,
     }
     github._pending_review_id = nil
+    github._pending_review_node_id = nil
   end)
   after_each(function()
     package.loaded["codereview.api.auth"] = nil
     github._pending_review_id = nil
+    github._pending_review_node_id = nil
   end)
 
   it("finds PENDING review and normalizes its comments", function()
@@ -476,7 +557,7 @@ describe("get_pending_review_drafts", function()
         if path:find("/reviews$") then
           return { data = {
             { id = 100, state = "APPROVED", user = { login = "bob" } },
-            { id = 200, state = "PENDING", user = { login = "alice" } },
+            { id = 200, state = "PENDING", node_id = "PRR_abc", user = { login = "alice" } },
           } }
         elseif path:find("/reviews/200/comments") then
           return { data = {
@@ -495,6 +576,7 @@ describe("get_pending_review_drafts", function()
     assert.equal("You (draft)", drafts[1].notes[1].author)
     assert.equal("fix this", drafts[1].notes[1].body)
     assert.equal(200, github._pending_review_id)
+    assert.equal("PRR_abc", github._pending_review_node_id)
   end)
 
   it("returns empty when no PENDING review exists", function()
@@ -509,13 +591,14 @@ describe("get_pending_review_drafts", function()
     local drafts = github.get_pending_review_drafts(mock_client, ctx, { id = 1 })
     assert.equal(0, #drafts)
     assert.is_nil(github._pending_review_id)
+    assert.is_nil(github._pending_review_node_id)
   end)
 
-  it("does not set _pending_review_id when PENDING review has zero comments", function()
+  it("sets _pending_review_id even when PENDING review has zero comments", function()
     local mock_client = {
       get = function(_, path, _)
         if path:find("/reviews$") then
-          return { data = { { id = 200, state = "PENDING" } } }
+          return { data = { { id = 200, state = "PENDING", node_id = "PRR_empty" } } }
         elseif path:find("/reviews/200/comments") then
           return { data = {} }
         end
@@ -524,7 +607,8 @@ describe("get_pending_review_drafts", function()
     local ctx = { base_url = "https://api.github.com", project = "owner/repo" }
     local drafts = github.get_pending_review_drafts(mock_client, ctx, { id = 1 })
     assert.equal(0, #drafts)
-    assert.is_nil(github._pending_review_id)
+    assert.equal(200, github._pending_review_id)
+    assert.equal("PRR_empty", github._pending_review_node_id)
   end)
 end)
 
@@ -534,10 +618,12 @@ describe("discard_pending_review", function()
       get_token = function() return "ghp_test", "pat" end,
     }
     github._pending_review_id = 200
+    github._pending_review_node_id = "PRR_abc"
   end)
   after_each(function()
     package.loaded["codereview.api.auth"] = nil
     github._pending_review_id = nil
+    github._pending_review_node_id = nil
   end)
 
   it("DELETEs the pending review and clears _pending_review_id", function()
@@ -552,6 +638,7 @@ describe("discard_pending_review", function()
     github.discard_pending_review(mock_client, ctx, { id = 42 })
     assert.truthy(deleted_url:find("/reviews/200"))
     assert.is_nil(github._pending_review_id)
+    assert.is_nil(github._pending_review_node_id)
   end)
 
   it("returns nil when no pending review", function()
@@ -568,46 +655,42 @@ describe("publish_review with pending review", function()
     package.loaded["codereview.api.auth"] = {
       get_token = function() return "ghp_test", "pat" end,
     }
-    github._pending_comments = {}
     github._pending_review_id = nil
+    github._pending_review_node_id = nil
   end)
   after_each(function()
     package.loaded["codereview.api.auth"] = nil
-    github._pending_comments = {}
     github._pending_review_id = nil
+    github._pending_review_node_id = nil
   end)
 
-  it("submits existing pending review before publishing new comments", function()
+  it("submits the pending review with COMMENT event and clears _pending_review_id", function()
     github._pending_review_id = 200
-    github._pending_comments = { { body = "new", path = "bar.lua", line = 5, side = "RIGHT" } }
     local posted_paths = {}
+    local posted_bodies = {}
     local mock_client = {
       post = function(_, path, opts)
         table.insert(posted_paths, path)
+        table.insert(posted_bodies, opts.body)
         return { data = {} }, nil
       end,
     }
     local ctx = { base_url = "https://api.github.com", project = "owner/repo" }
-    github.publish_review(mock_client, ctx, { id = 42, sha = "abc" })
-    -- Should have two POSTs: submit existing review, then new review
-    assert.equal(2, #posted_paths)
+    local result, err = github.publish_review(mock_client, ctx, { id = 42, sha = "abc" })
+    assert.is_nil(err)
+    assert.equal(1, #posted_paths)
     assert.truthy(posted_paths[1]:find("/reviews/200/events"))
-    assert.truthy(posted_paths[2]:find("/reviews$"))
+    assert.equal("COMMENT", posted_bodies[1].event)
     assert.is_nil(github._pending_review_id)
   end)
 
-  it("submits only existing pending review when no new comments", function()
-    github._pending_review_id = 200
-    local posted_paths = {}
+  it("returns { data = true } without API calls when _pending_review_id is nil", function()
     local mock_client = {
-      post = function(_, path, _)
-        table.insert(posted_paths, path)
-        return { data = {} }, nil
-      end,
+      post = function() error("should not be called") end,
     }
     local ctx = { base_url = "https://api.github.com", project = "owner/repo" }
-    github.publish_review(mock_client, ctx, { id = 42, sha = "abc" })
-    assert.equal(1, #posted_paths)
-    assert.truthy(posted_paths[1]:find("/reviews/200/events"))
+    local result, err = github.publish_review(mock_client, ctx, { id = 42, sha = "abc" })
+    assert.is_nil(err)
+    assert.is_true(result.data)
   end)
 end)

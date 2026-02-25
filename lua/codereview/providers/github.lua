@@ -480,22 +480,62 @@ function M.approved_by()
   return {}
 end
 
--- Accumulator for pending review comments (GitHub batches on publish)
-M._pending_comments = {}
-
 -- ID of an existing PENDING review on the server (set when resuming drafts)
 M._pending_review_id = nil
+M._pending_review_node_id = nil
 
---- Stage a draft comment for the next review submission.
---- GitHub doesn't have individual draft notes — comments are batched into a single review.
+--- Stage a draft comment server-side inside a PENDING review.
+--- Creates the PENDING review on first call (REST); adds to it on subsequent calls (GraphQL).
 --- @param params table { body, path, line }
-function M.create_draft_comment(client, ctx, review, params) -- luacheck: ignore client ctx
-  table.insert(M._pending_comments, {
+function M.create_draft_comment(client, ctx, review, params)
+  local headers, err = get_headers()
+  if not headers then return nil, err end
+  local owner, repo = parse_owner_repo(ctx)
+
+  -- First draft: create PENDING review with the comment included
+  if not M._pending_review_id then
+    local reviews_path = string.format("/repos/%s/%s/pulls/%d/reviews", owner, repo, review.id)
+    local resp, rev_err = client.post(ctx.base_url, reviews_path, {
+      body = {
+        commit_id = review.sha,
+        comments = {{
+          body = params.body,
+          path = params.path,
+          line = params.line,
+          side = "RIGHT",
+        }},
+      },
+      headers = headers,
+    })
+    if not resp then return nil, rev_err end
+    M._pending_review_id = resp.data.id
+    M._pending_review_node_id = resp.data.node_id
+    return resp, nil
+  end
+
+  -- Subsequent drafts: add comment via GraphQL
+  local mutation = [[
+    mutation($reviewId: ID!, $body: String!, $path: String!, $line: Int!, $side: DiffSide!) {
+      addPullRequestReviewThread(input: {
+        pullRequestReviewId: $reviewId
+        body: $body
+        path: $path
+        line: $line
+        side: $side
+      }) {
+        thread { id }
+      }
+    }
+  ]]
+  local data, gql_err = graphql(ctx.base_url, headers, mutation, {
+    reviewId = M._pending_review_node_id,
     body = params.body,
     path = params.path,
     line = params.line,
     side = "RIGHT",
   })
+  if not data then return nil, gql_err end
+  return { data = data }, nil
 end
 
 --- Fetch draft comments from an existing PENDING review.
@@ -511,9 +551,11 @@ function M.get_pending_review_drafts(client, ctx, review)
   if not resp then return nil, rev_err end
 
   local pending_id = nil
+  local pending_node_id = nil
   for _, r in ipairs(resp.data or {}) do
     if r.state == "PENDING" then
       pending_id = r.id
+      pending_node_id = r.node_id
       break
     end
   end
@@ -543,11 +585,10 @@ function M.get_pending_review_drafts(client, ctx, review)
     })
   end
 
-  -- Only set _pending_review_id if there are actual comments
-  -- (avoids submitting an empty review on publish)
-  if #drafts > 0 then
-    M._pending_review_id = pending_id
-  end
+  -- Always track the pending review so create_draft_comment reuses it
+  -- (avoids "User can only have one pending review" 422 errors)
+  M._pending_review_id = pending_id
+  M._pending_review_node_id = pending_node_id
 
   return drafts
 end
@@ -561,37 +602,24 @@ function M.discard_pending_review(client, ctx, review)
   local path = string.format("/repos/%s/%s/pulls/%d/reviews/%d", owner, repo, review.id, M._pending_review_id)
   local result, del_err = client.delete(ctx.base_url, path, { headers = headers })
   M._pending_review_id = nil
+  M._pending_review_node_id = nil
   return result, del_err
 end
 
---- Publish all accumulated draft comments as a single PR review.
---- If a server-side pending review exists (_pending_review_id), submit it first.
+--- Publish all server-side draft comments by submitting the PENDING review.
 function M.publish_review(client, ctx, review)
   local headers, err = get_headers()
   if not headers then return nil, err end
   local owner, repo = parse_owner_repo(ctx)
 
-  -- Submit existing pending review if resuming one
-  if M._pending_review_id then
-    local submit_path = string.format("/repos/%s/%s/pulls/%d/reviews/%d/events", owner, repo, review.id, M._pending_review_id)
-    client.post(ctx.base_url, submit_path, { body = { event = "COMMENT" }, headers = headers })
-    M._pending_review_id = nil
-  end
-
-  -- Publish new in-session comments (if any)
-  if #M._pending_comments == 0 then
+  if not M._pending_review_id then
     return { data = true }, nil
   end
 
-  local path_url = string.format("/repos/%s/%s/pulls/%d/reviews", owner, repo, review.id)
-  local payload = {
-    commit_id = review.sha,
-    event = "COMMENT",
-    comments = M._pending_comments,
-  }
-
-  local result, post_err = client.post(ctx.base_url, path_url, { body = payload, headers = headers })
-  M._pending_comments = {} -- clear regardless of success
+  local submit_path = string.format("/repos/%s/%s/pulls/%d/reviews/%d/events", owner, repo, review.id, M._pending_review_id)
+  local result, post_err = client.post(ctx.base_url, submit_path, { body = { event = "COMMENT" }, headers = headers })
+  M._pending_review_id = nil
+  M._pending_review_node_id = nil
   return result, post_err
 end
 
