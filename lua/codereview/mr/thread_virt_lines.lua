@@ -59,10 +59,16 @@ local function wrap_text(text, width)
   return result
 end
 
-local function md_virt_line(prefix_chunk, text, base_hl)
+local function md_virt_line(prefix, text, base_hl)
   local markdown = require("codereview.ui.markdown")
   local segs = markdown.parse_inline(text, base_hl)
-  local line = { prefix_chunk }
+  local line = {}
+  -- Support single chunk {"text","hl"} or multiple {{"text","hl"},{"text","hl"}}
+  if type(prefix[1]) == "string" then
+    line[1] = prefix
+  else
+    vim.list_extend(line, prefix)
+  end
   vim.list_extend(line, segs)
   return line
 end
@@ -87,7 +93,8 @@ function M.build(disc, opts)
   local editing_note = opts.editing_note
   local spacer_height = opts.spacer_height or 0
   local comment_width = opts.comment_width or 60
-  local pad = string.rep(" ", opts.gutter or 0)
+  local gutter = opts.gutter or 0
+  local pad = string.rep(" ", gutter)
 
   local notes = disc.notes
   if not notes or #notes == 0 then return { virt_lines = {}, spacer_offset = nil } end
@@ -121,16 +128,31 @@ function M.build(disc, opts)
   local virt_lines = {}
   local spacer_offset = nil
 
-  -- Header: ┏ @author · 2h ago                       ● Unresolved
-  local n1_bdr = (sel_idx == 1) and "CodeReviewSelectedNote" or bdr
-  local n1_aut = (sel_idx == 1) and "CodeReviewSelectedNote" or aut
-  local n1_body_hl = (sel_idx == 1) and "CodeReviewSelectedNote" or body_hl
+  -- Helper: build prefix chunks for a line. When selected, prepend ██ in status_hl
+  -- then remaining pad + suffix in suffix_hl. When not selected, pad + suffix in suffix_hl.
+  local function sel_prefix(is_sel, suffix, suffix_hl)
+    if is_sel then
+      return {
+        { "██", status_hl },
+        { string.rep(" ", math.max(0, gutter - 2)) .. suffix, suffix_hl },
+      }
+    else
+      return { pad .. suffix, suffix_hl }
+    end
+  end
 
-  local header_chunks = {
-    { pad .. "┏ ", n1_bdr },
-    { header_text, n1_aut },
-    { header_meta, n1_bdr },
-  }
+  -- Header: ┏ @author · 2h ago                       ● Unresolved
+  local n1_sel = (sel_idx == 1)
+
+  local header_chunks = {}
+  if n1_sel then
+    table.insert(header_chunks, { "██", status_hl })
+    table.insert(header_chunks, { string.rep(" ", math.max(0, gutter - 2)) .. "┏ ", bdr })
+  else
+    table.insert(header_chunks, { pad .. "┏ ", bdr })
+  end
+  table.insert(header_chunks, { header_text, aut })
+  table.insert(header_chunks, { header_meta, bdr })
 
   if outdated_str ~= "" then
     table.insert(header_chunks, { outdated_str, "CodeReviewCommentOutdated" })
@@ -139,19 +161,19 @@ function M.build(disc, opts)
   if is_err then
     local status_text = " Failed"
     local fill = math.max(0, 62 - #header_text - #header_meta - #outdated_str - #status_text)
-    table.insert(header_chunks, { string.rep(" ", fill), n1_bdr })
-    table.insert(header_chunks, { status_text, n1_bdr })
+    table.insert(header_chunks, { string.rep(" ", fill), bdr })
+    table.insert(header_chunks, { status_text, bdr })
   elseif is_pending then
     local status_text = " Posting…"
     local fill = math.max(0, 62 - #header_text - #header_meta - #outdated_str - #status_text)
-    table.insert(header_chunks, { string.rep(" ", fill), n1_bdr })
-    table.insert(header_chunks, { status_text, n1_bdr })
+    table.insert(header_chunks, { string.rep(" ", fill), bdr })
+    table.insert(header_chunks, { status_text, bdr })
   else
     local dot = resolved and "○ " or "● "
     local dot_hl = resolved and "CodeReviewStatusResolved" or "CodeReviewStatusUnresolved"
     local label = resolved and "Resolved" or "Unresolved"
     local fill = math.max(0, 62 - #header_text - #header_meta - #outdated_str - #dot - #label)
-    table.insert(header_chunks, { string.rep(" ", fill), n1_bdr })
+    table.insert(header_chunks, { string.rep(" ", fill), bdr })
     table.insert(header_chunks, { dot, dot_hl })
     table.insert(header_chunks, { label, status_hl })
   end
@@ -162,11 +184,16 @@ function M.build(disc, opts)
   if editing_note_idx == 1 then
     spacer_offset = #virt_lines
     for _ = 1, spacer_height do
-      table.insert(virt_lines, { { pad .. "┃" .. string.rep(" ", 61), bdr } })
+      if n1_sel then
+        table.insert(virt_lines, { { "██", status_hl }, { string.rep(" ", math.max(0, gutter - 2)) .. "┃" .. string.rep(" ", 61), bdr } })
+      else
+        table.insert(virt_lines, { { pad .. "┃" .. string.rep(" ", 61), bdr } })
+      end
     end
   else
     for _, bl in ipairs(wrap_text(first.body, comment_width)) do
-      table.insert(virt_lines, md_virt_line({ pad .. "┃ ", n1_bdr }, bl, n1_body_hl))
+      local prefix = sel_prefix(n1_sel, "┃ ", bdr)
+      table.insert(virt_lines, md_virt_line(prefix, bl, body_hl))
     end
   end
 
@@ -176,23 +203,38 @@ function M.build(disc, opts)
     if not reply.system then
       local rt = format_time_relative(reply.created_at)
       local rmeta = rt ~= "" and (" · " .. rt) or ""
-      local ri_bdr = (sel_idx == i) and "CodeReviewSelectedNote" or bdr
-      local ri_aut = (sel_idx == i) and "CodeReviewSelectedNote" or aut
-      local ri_body_hl = (sel_idx == i) and "CodeReviewSelectedNote" or body_hl
+      local ri_sel = (sel_idx == i)
       if editing_note_idx == i then
         spacer_offset = #virt_lines
         for _ = 1, spacer_height do
-          table.insert(virt_lines, { { pad .. "┃" .. string.rep(" ", 61), ri_bdr } })
+          if ri_sel then
+            table.insert(virt_lines, { { "██", status_hl }, { string.rep(" ", math.max(0, gutter - 2)) .. "┃" .. string.rep(" ", 61), bdr } })
+          else
+            table.insert(virt_lines, { { pad .. "┃" .. string.rep(" ", 61), bdr } })
+          end
         end
       else
-        table.insert(virt_lines, { { pad .. "┃", ri_bdr } })
-        table.insert(virt_lines, {
-          { pad .. "┃  ↪ ", ri_bdr },
-          { "@" .. reply.author, ri_aut },
-          { rmeta, ri_bdr },
-        })
+        -- Separator line
+        if ri_sel then
+          table.insert(virt_lines, { { "██", status_hl }, { string.rep(" ", math.max(0, gutter - 2)) .. "┃", bdr } })
+        else
+          table.insert(virt_lines, { { pad .. "┃", bdr } })
+        end
+        -- Reply header
+        local reply_header = {}
+        if ri_sel then
+          table.insert(reply_header, { "██", status_hl })
+          table.insert(reply_header, { string.rep(" ", math.max(0, gutter - 2)) .. "┃  ↪ ", bdr })
+        else
+          table.insert(reply_header, { pad .. "┃  ↪ ", bdr })
+        end
+        table.insert(reply_header, { "@" .. reply.author, aut })
+        table.insert(reply_header, { rmeta, bdr })
+        table.insert(virt_lines, reply_header)
+        -- Reply body
         for _, rl in ipairs(wrap_text(reply.body, 58)) do
-          table.insert(virt_lines, md_virt_line({ pad .. "┃    ", ri_bdr }, rl, ri_body_hl))
+          local prefix = sel_prefix(ri_sel, "┃    ", bdr)
+          table.insert(virt_lines, md_virt_line(prefix, rl, body_hl))
         end
       end
     end

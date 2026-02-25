@@ -251,10 +251,11 @@ local function render_ai_suggestions_at_row(buf, row, sugs, row_selection)
       or severity == "warning" and "CodeReviewAIWarning"
       or "CodeReviewAIDraft"
 
-    local bdr = is_selected and "CodeReviewSelectedNote"
-      or drafted and "CodeReviewCommentBorder" or sev_bdr
-    local body_hl = is_selected and "CodeReviewSelectedNote"
-      or drafted and "CodeReviewComment" or sev_body
+    local ai_status_hl = is_error and "CodeReviewAIErrorBorder"
+      or severity == "warning" and "CodeReviewAIWarningBorder"
+      or "CodeReviewAIDraftBorder"
+    local bdr = drafted and "CodeReviewCommentBorder" or sev_bdr
+    local body_hl = drafted and "CodeReviewComment" or sev_body
 
     -- Header: ◆ AI · {severity} [✓ drafted]
     local header_label = drafted
@@ -262,15 +263,23 @@ local function render_ai_suggestions_at_row(buf, row, sugs, row_selection)
       or (" ◆ AI · " .. severity .. " ")
     local header_fill = math.max(0, 62 - #header_label)
 
+    local sel_pre = is_selected and "██  " or COMMENT_PAD
+    local sel_blk = is_selected and { "██", ai_status_hl } or nil
+
     -- Header line
-    table.insert(virt_lines, {
-      { COMMENT_PAD .. top_l .. header_label, bdr },
-      { string.rep(top_fill_c, header_fill), bdr },
-    })
+    local header_line = {}
+    if sel_blk then table.insert(header_line, sel_blk) end
+    table.insert(header_line, { (is_selected and "  " or COMMENT_PAD) .. top_l .. header_label, bdr })
+    table.insert(header_line, { string.rep(top_fill_c, header_fill), bdr })
+    table.insert(virt_lines, header_line)
 
     -- Body (always heavy left bar)
     for _, bl in ipairs(wrap_text(suggestion.comment, config.get().diff.comment_width)) do
-      table.insert(virt_lines, md_virt_line({ COMMENT_PAD .. "┃ ", bdr }, bl, body_hl))
+      if sel_blk then
+        table.insert(virt_lines, md_virt_line({ sel_blk, { "  ┃ ", bdr } }, bl, body_hl))
+      else
+        table.insert(virt_lines, md_virt_line({ COMMENT_PAD .. "┃ ", bdr }, bl, body_hl))
+      end
     end
 
     -- Footer: keybinds + counter when selected; short cap otherwise
@@ -279,7 +288,8 @@ local function render_ai_suggestions_at_row(buf, row, sugs, row_selection)
       local footer_content = drafted and "x:dismiss" or "a:accept  x:dismiss  e:edit"
       local counter = sug_count > 1 and (" " .. i .. "/" .. sug_count) or ""
       local footer_fill = math.max(0, 62 - #footer_content - #counter - 1)
-      footer_parts[#footer_parts + 1] = { COMMENT_PAD .. bot_l .. " ", bdr }
+      footer_parts[#footer_parts + 1] = sel_blk
+      footer_parts[#footer_parts + 1] = { "  " .. bot_l .. " ", bdr }
       footer_parts[#footer_parts + 1] = { footer_content, body_hl }
       if counter ~= "" then
         footer_parts[#footer_parts + 1] = { " " .. string.rep(bot_fill_c, footer_fill) .. counter, bdr }
