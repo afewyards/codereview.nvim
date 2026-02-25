@@ -211,7 +211,7 @@ end
 --- @param row_selection table|nil current row_selection state
 local function render_ai_suggestions_at_row(buf, row, sugs, row_selection)
   -- Determine highest severity for sign placement
-  local severity_rank = { info = 1, warning = 2, error = 3 }
+  local severity_rank = { info = 1, suggestion = 2, warning = 3, error = 4 }
   local max_severity = "info"
   for _, sug in ipairs(sugs) do
     local sev = sug.severity or "info"
