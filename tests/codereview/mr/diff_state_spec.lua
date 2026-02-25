@@ -177,6 +177,46 @@ describe("mr.diff_state", function()
     end)
   end)
 
+  describe("git_diff_cache", function()
+    before_each(function()
+      local config = require("codereview.config")
+      config.reset()
+    end)
+
+    it("initialises git_diff_cache as empty table in create_state", function()
+      local state = diff_state.create_state({})
+      assert.same({}, state.git_diff_cache)
+    end)
+
+    describe("clear_diff_cache", function()
+      it("clears all entries when no path given", function()
+        local state = diff_state.create_state({})
+        state.git_diff_cache["foo.lua:abc..def"] = { "line1" }
+        state.git_diff_cache["bar.lua:abc..def"] = { "line2" }
+        diff_state.clear_diff_cache(state)
+        assert.same({}, state.git_diff_cache)
+      end)
+
+      it("clears only entries matching path prefix", function()
+        local state = diff_state.create_state({})
+        state.git_diff_cache["foo.lua:abc..def"] = { "line1" }
+        state.git_diff_cache["bar.lua:abc..def"] = { "line2" }
+        diff_state.clear_diff_cache(state, "foo.lua")
+        assert.is_nil(state.git_diff_cache["foo.lua:abc..def"])
+        assert.same({ "line2" }, state.git_diff_cache["bar.lua:abc..def"])
+      end)
+
+      it("handles special pattern characters in path", function()
+        local state = diff_state.create_state({})
+        state.git_diff_cache["src/foo.lua:abc..def"] = { "line1" }
+        state.git_diff_cache["src/bar.lua:abc..def"] = { "line2" }
+        diff_state.clear_diff_cache(state, "src/foo.lua")
+        assert.is_nil(state.git_diff_cache["src/foo.lua:abc..def"])
+        assert.same({ "line2" }, state.git_diff_cache["src/bar.lua:abc..def"])
+      end)
+    end)
+  end)
+
   describe("file_has_annotations", function()
     it("returns false when no discussions or suggestions", function()
       local state = { discussions = {}, ai_suggestions = {}, files = { { new_path = "a.lua", old_path = "a.lua" } } }

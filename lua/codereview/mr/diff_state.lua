@@ -49,6 +49,7 @@ function M.create_state(opts)
     summary_row_map = {},
     row_selection = {},
     current_user = nil,
+    git_diff_cache = {},
   }
 end
 
@@ -113,6 +114,23 @@ function M.file_has_annotations(state, file_idx)
     end
   end
   return false
+end
+
+--- Clear git diff cache entries, optionally scoped to a path prefix.
+--- @param state table
+--- @param path string? If provided, only entries whose keys start with this path are removed.
+function M.clear_diff_cache(state, path)
+  if not path then
+    state.git_diff_cache = {}
+    return
+  end
+  -- Escape special Lua pattern characters (vim.pesc unavailable in unit tests)
+  local escaped = path:gsub("[%(%)%.%%%+%-%*%?%[%]%^%$]", "%%%1")
+  for key in pairs(state.git_diff_cache) do
+    if key:match("^" .. escaped) then
+      state.git_diff_cache[key] = nil
+    end
+  end
 end
 
 --- Populate files into state when not yet loaded (lazy-load helper).
