@@ -186,7 +186,6 @@ The AI is instructed to skip items below the configured level, saving tokens and
 
 | Key | Action |
 |-----|--------|
-| `+` / `-` | Increase / decrease context lines |
 | `<C-f>` | Toggle full file view |
 | `<C-a>` | Toggle scroll / per-file mode |
 
