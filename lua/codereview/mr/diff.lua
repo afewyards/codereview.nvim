@@ -2417,6 +2417,7 @@ function M.setup_keymaps(layout, state)
         win_id = layout.main_win,
         anchor_line = cursor_row,
         spacer_offset = spacer_offset,
+        is_reply = sel_idx > 1,
         on_close = function()
           state.editing_note = nil
           rerender_view()

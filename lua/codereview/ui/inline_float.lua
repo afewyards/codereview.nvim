@@ -73,13 +73,11 @@ end
 --- Determine border highlight based on action type.
 --- @param action_type string|nil
 --- @return string
-function M.border_hl(action_type)
-  if action_type == "reply" then return "CodeReviewReplyBorder" end
-  if action_type == "edit" then return "CodeReviewEditBorder" end
+function M.border_hl(_action_type)
   return "CodeReviewCommentBorder"
 end
 
---- Build rounded border with highlight group as {char, hl} tuples.
+--- Build border with highlight group as {char, hl} tuples.
 --- @param action_type string|nil
 --- @return table[]
 function M.border(action_type)

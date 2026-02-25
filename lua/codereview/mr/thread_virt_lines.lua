@@ -203,7 +203,7 @@ function M.build(disc, opts)
     footer_content = "gR:retry  D:discard"
   elseif is_pending then
     footer_content = "posting…"
-  elseif sel_idx then
+  elseif sel_idx and not editing_this then
     local sel_note = notes[sel_idx]
     if sel_note and current_user and sel_note.author == current_user then
       footer_content = "r:reply  gt:un/resolve  e:edit  x:delete"
@@ -216,7 +216,7 @@ function M.build(disc, opts)
     local footer_fill = math.max(0, 62 - #footer_content - 1)
     table.insert(virt_lines, {
       { "  ┗ ", bdr },
-      { footer_content, body_hl },
+      { footer_content, bdr },
       { " " .. string.rep("━", footer_fill), bdr },
     })
   else

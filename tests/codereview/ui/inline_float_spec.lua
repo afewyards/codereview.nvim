@@ -50,12 +50,12 @@ describe("inline_float", function()
   end)
 
   describe("border_hl", function()
-    it("returns reply border for reply type", function()
-      assert.equals("CodeReviewReplyBorder", inline_float.border_hl("reply"))
+    it("returns comment border for reply type", function()
+      assert.equals("CodeReviewCommentBorder", inline_float.border_hl("reply"))
     end)
 
-    it("returns edit border for edit type", function()
-      assert.equals("CodeReviewEditBorder", inline_float.border_hl("edit"))
+    it("returns comment border for edit type", function()
+      assert.equals("CodeReviewCommentBorder", inline_float.border_hl("edit"))
     end)
 
     it("returns comment border for nil", function()

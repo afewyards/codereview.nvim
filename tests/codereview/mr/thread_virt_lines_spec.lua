@@ -231,6 +231,19 @@ describe("mr.thread_virt_lines", function()
       assert.truthy(result.spacer_offset > 0)
     end)
 
+    it("hides keybind footer when editing a note", function()
+      local disc = make_disc({ resolved = false })
+      local result = tvl.build(disc, {
+        sel_idx = 1,
+        current_user = "alice",
+        editing_note = { disc_id = "disc-1", note_idx = 1 },
+        spacer_height = 3,
+      })
+      local flat = flatten_virt(result.virt_lines)
+      assert.falsy(flat:find("reply", 1, true))
+      assert.truthy(flat:find("┗━━", 1, true))
+    end)
+
     it("returns nil spacer_offset when not editing", function()
       local disc = make_disc({ resolved = false })
       local result = tvl.build(disc)
