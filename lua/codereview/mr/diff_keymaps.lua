@@ -1256,6 +1256,7 @@ function M.setup_keymaps(state, layout, active_states)
 
   -- Sync sidebar highlight with current file as cursor moves in scroll mode;
   -- also manage row_selection when cursor moves.
+  local prev_selection_row = nil
   vim.api.nvim_create_autocmd("CursorMoved", {
     buffer = main_buf,
     callback = function()
@@ -1272,8 +1273,14 @@ function M.setup_keymaps(state, layout, active_states)
         local prev_sel = state.row_selection[cursor_row]
         if not prev_sel then
           -- Auto-select first item on entering a row with items
+          local old_row = prev_selection_row
           state.row_selection = { [cursor_row] = items[1] }
-          rerender_view()
+          prev_selection_row = cursor_row
+          -- Clear old row's indicator, set new row's indicator
+          if old_row and old_row ~= cursor_row then
+            diff_render.update_selection_at_row(main_buf, old_row, state.row_selection, row_ai, row_disc_map, state.current_user, state.review, state.editing_note)
+          end
+          diff_render.update_selection_at_row(main_buf, cursor_row, state.row_selection, row_ai, row_disc_map, state.current_user, state.review, state.editing_note)
         else
           -- Validate prev_sel against current items (may be stale after dismiss/accept)
           local valid = false
@@ -1289,18 +1296,34 @@ function M.setup_keymaps(state, layout, active_states)
             end
           end
           if not valid then
+            -- Data changed (item dismissed/accepted): full rerender
             state.row_selection = { [cursor_row] = items[1] }
+            prev_selection_row = cursor_row
             rerender_view()
           elseif next(state.row_selection, next(state.row_selection)) or not state.row_selection[cursor_row] then
-            -- Clear selections on other rows
+            -- Clear selections on other rows — purely cosmetic
+            local old_row = prev_selection_row
             state.row_selection = { [cursor_row] = state.row_selection[cursor_row] }
-            rerender_view()
+            prev_selection_row = cursor_row
+            if old_row and old_row ~= cursor_row then
+              diff_render.update_selection_at_row(main_buf, old_row, state.row_selection, row_ai, row_disc_map, state.current_user, state.review, state.editing_note)
+            end
+            diff_render.update_selection_at_row(main_buf, cursor_row, state.row_selection, row_ai, row_disc_map, state.current_user, state.review, state.editing_note)
+          else
+            prev_selection_row = cursor_row
           end
         end
       else
         local had = next(state.row_selection) ~= nil
+        local old_row = prev_selection_row
         state.row_selection = {}
-        if had then rerender_view() end
+        prev_selection_row = nil
+        if had then
+          -- Clear old row's indicator only
+          if old_row then
+            diff_render.update_selection_at_row(main_buf, old_row, state.row_selection, row_ai, row_disc_map, state.current_user, state.review, state.editing_note)
+          end
+        end
       end
 
       -- Sync sidebar file highlight in scroll mode

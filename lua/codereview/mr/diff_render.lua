@@ -204,6 +204,65 @@ local function render_ai_suggestions_at_row(buf, row, sugs, row_selection)
   })
 end
 
+M.render_ai_suggestions_at_row = render_ai_suggestions_at_row
+
+--- Selective per-row extmark update when only the selection indicator changes.
+--- Clears AIDRAFT_NS and DIFF_NS virt_lines extmarks on the target row, then
+--- re-renders AI suggestions and comment threads for that row only.
+--- @param buf number buffer handle
+--- @param row number 1-indexed row
+--- @param row_selection table current row_selection state
+--- @param row_ai table row → suggestions list map
+--- @param row_disc table row → discussions list map
+--- @param current_user string
+--- @param review table
+--- @param editing_note table|nil
+function M.update_selection_at_row(buf, row, row_selection, row_ai, row_disc, current_user, review, editing_note)
+  -- Clear AIDRAFT_NS extmarks on this row only
+  local ai_marks = vim.api.nvim_buf_get_extmarks(buf, AIDRAFT_NS, { row - 1, 0 }, { row - 1, -1 }, {})
+  for _, mark in ipairs(ai_marks) do
+    pcall(vim.api.nvim_buf_del_extmark, buf, AIDRAFT_NS, mark[1])
+  end
+
+  -- Clear DIFF_NS virt_lines extmarks on this row only (not line_hl or virt_text)
+  local diff_marks = vim.api.nvim_buf_get_extmarks(buf, DIFF_NS, { row - 1, 0 }, { row - 1, -1 }, { details = true })
+  for _, mark in ipairs(diff_marks) do
+    local details = mark[4]
+    if details and details.virt_lines then
+      pcall(vim.api.nvim_buf_del_extmark, buf, DIFF_NS, mark[1])
+    end
+  end
+
+  -- Re-render AI suggestions at row
+  if row_ai and row_ai[row] then
+    render_ai_suggestions_at_row(buf, row, row_ai[row], row_selection)
+  end
+
+  -- Re-render comment threads at row
+  if row_disc and row_disc[row] then
+    for _, disc in ipairs(row_disc[row]) do
+      local notes = disc.notes
+      if notes and #notes > 0 then
+        local sel = row_selection and row_selection[row]
+        local sel_idx = sel and sel.type == "comment" and sel.disc_id == disc.id and sel.note_idx or nil
+        local _, _, outdated = discussion_line(disc, review)
+        local result = tvl.build(disc, {
+          sel_idx = sel_idx,
+          current_user = current_user,
+          outdated = outdated,
+          editing_note = editing_note,
+          spacer_height = editing_note and editing_note.spacer_height or 0,
+          gutter = 4,
+        })
+        pcall(vim.api.nvim_buf_set_extmark, buf, DIFF_NS, row - 1, 0, {
+          virt_lines = result.virt_lines,
+          virt_lines_above = false,
+        })
+      end
+    end
+  end
+end
+
 -- ─── Lookup map builders ──────────────────────────────────────────────────────
 
 --- Build a line_number -> row map from line_data (per-file mode).

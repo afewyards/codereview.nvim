@@ -393,6 +393,79 @@ describe("mr.diff_render", function()
     end)
   end)
 
+  describe("update_selection_at_row", function()
+    it("clears AIDRAFT_NS extmarks on target row only", function()
+      local buf = vim.api.nvim_create_buf(false, true)
+      local aidraft_ns = vim.api.nvim_create_namespace("codereview_ai_draft")
+      local diff_ns = vim.api.nvim_create_namespace("codereview_diff")
+
+      -- Place extmarks on rows 2 (target) and 4 (other)
+      vim.api.nvim_buf_set_extmark(buf, aidraft_ns, 1, 0, { virt_lines = { { { "AI", "hl" } } } })  -- row=2, 0-indexed=1
+      vim.api.nvim_buf_set_extmark(buf, aidraft_ns, 3, 0, { virt_lines = { { { "AI2", "hl" } } } }) -- row=4, 0-indexed=3
+
+      -- Also place a virt_lines extmark on target row in DIFF_NS
+      vim.api.nvim_buf_set_extmark(buf, diff_ns, 1, 0, { virt_lines = { { { "comment", "hl" } } } })
+      -- And a line_hl extmark on target row in DIFF_NS (should NOT be deleted)
+      vim.api.nvim_buf_set_extmark(buf, diff_ns, 1, 0, { line_hl_group = "CodeReviewDiffAdd" })
+
+      diff_render.update_selection_at_row(buf, 2, {}, {}, {}, nil, {}, nil)
+
+      -- AIDRAFT_NS: target row (row=2, 0-indexed=1) should be cleared
+      local ai_marks_target = vim.api.nvim_buf_get_extmarks(buf, aidraft_ns, { 1, 0 }, { 1, -1 }, {})
+      assert.equals(0, #ai_marks_target, "AIDRAFT_NS extmarks on target row should be cleared")
+
+      -- AIDRAFT_NS: other row (row=4, 0-indexed=3) should remain
+      local ai_marks_other = vim.api.nvim_buf_get_extmarks(buf, aidraft_ns, { 3, 0 }, { 3, -1 }, {})
+      assert.equals(1, #ai_marks_other, "AIDRAFT_NS extmarks on other row should remain")
+
+      -- DIFF_NS: virt_lines extmark should be cleared
+      local diff_marks = vim.api.nvim_buf_get_extmarks(buf, diff_ns, { 1, 0 }, { 1, -1 }, { details = true })
+      for _, m in ipairs(diff_marks) do
+        assert.is_nil(m[4].virt_lines, "DIFF_NS virt_lines extmark on target row should be cleared")
+      end
+
+      vim.api.nvim_buf_delete(buf, { force = true })
+    end)
+
+    it("re-renders AI suggestions on target row when row_ai provided", function()
+      local buf = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "line1", "line2", "line3" })
+      local aidraft_ns = vim.api.nvim_create_namespace("codereview_ai_draft")
+
+      local row_ai = {
+        [2] = { { severity = "info", comment = "fix this", status = "pending" } },
+      }
+
+      diff_render.update_selection_at_row(buf, 2, {}, row_ai, {}, nil, {}, nil)
+
+      local ai_marks = vim.api.nvim_buf_get_extmarks(buf, aidraft_ns, { 1, 0 }, { 1, -1 }, { details = true })
+      local has_virt_lines = false
+      for _, m in ipairs(ai_marks) do
+        if m[4] and m[4].virt_lines then has_virt_lines = true end
+      end
+      assert.truthy(has_virt_lines, "AI suggestion should be re-rendered as virt_lines")
+
+      vim.api.nvim_buf_delete(buf, { force = true })
+    end)
+
+    it("does not touch extmarks on other rows", function()
+      local buf = vim.api.nvim_create_buf(false, true)
+      local aidraft_ns = vim.api.nvim_create_namespace("codereview_ai_draft")
+
+      -- Place extmarks only on row 5 (0-indexed=4)
+      local id = vim.api.nvim_buf_set_extmark(buf, aidraft_ns, 4, 0, { virt_lines = { { { "other", "hl" } } } })
+
+      -- Update row 2 — should not touch row 5
+      diff_render.update_selection_at_row(buf, 2, {}, {}, {}, nil, {}, nil)
+
+      local other_marks = vim.api.nvim_buf_get_extmarks(buf, aidraft_ns, { 4, 0 }, { 4, -1 }, {})
+      assert.equals(1, #other_marks, "extmarks on non-target rows should be untouched")
+      assert.equals(id, other_marks[1][1], "mark ID should be unchanged")
+
+      vim.api.nvim_buf_delete(buf, { force = true })
+    end)
+  end)
+
   describe("toggle_scroll_mode line preservation", function()
     local function make_files()
       return {

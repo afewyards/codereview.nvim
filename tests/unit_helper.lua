@@ -208,18 +208,36 @@ _G.vim = {
     nvim_win_get_buf = function() return 1 end,
     nvim_buf_get_extmarks = function(buf, ns, start, end_, opts)
       if not _extmark_store[buf] then return {} end
+      -- Parse start/end row bounds (supports both number and {row, col} tuple)
+      local start_row = type(start) == "table" and start[1] or 0
+      local end_row = type(end_) == "table" and end_[1] or (end_ == -1 and math.huge or end_)
+      local function in_range(m) return m[2] >= start_row and m[2] <= end_row end
       if ns == -1 then
         -- All namespaces
         local result = {}
         for _, marks in pairs(_extmark_store[buf]) do
           for _, m in ipairs(marks) do
-            table.insert(result, m)
+            if in_range(m) then table.insert(result, m) end
           end
         end
         return result
       end
       if not _extmark_store[buf][ns] then return {} end
-      return _extmark_store[buf][ns]
+      local result = {}
+      for _, m in ipairs(_extmark_store[buf][ns]) do
+        if in_range(m) then table.insert(result, m) end
+      end
+      return result
+    end,
+    nvim_buf_del_extmark = function(buf, ns, id)
+      if not _extmark_store[buf] or not _extmark_store[buf][ns] then return false end
+      for i, mark in ipairs(_extmark_store[buf][ns]) do
+        if mark[1] == id then
+          table.remove(_extmark_store[buf][ns], i)
+          return true
+        end
+      end
+      return false
     end,
   },
   b = {
