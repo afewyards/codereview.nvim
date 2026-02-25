@@ -298,14 +298,20 @@ end
 --- @param state table
 --- @return number file_idx
 function M.current_file_from_cursor(layout, state)
-  local cursor = vim.api.nvim_win_get_cursor(layout.main_win)
-  local row = cursor[1]
-  for i = #state.file_sections, 1, -1 do
-    if row >= state.file_sections[i].start_line then
-      return state.file_sections[i].file_idx
+  local row = vim.api.nvim_win_get_cursor(layout.main_win)[1]
+  local sections = state.file_sections
+  if #sections == 0 then return 1 end
+  local lo, hi = 1, #sections
+  while lo < hi do
+    local mid = math.floor((lo + hi + 1) / 2)
+    if row >= sections[mid].start_line then
+      lo = mid
+    else
+      hi = mid - 1
     end
   end
-  return 1
+  if row < sections[lo].start_line then return 1 end
+  return sections[lo].file_idx
 end
 
 --- Toggle between per-file and all-files scroll mode, preserving cursor position.

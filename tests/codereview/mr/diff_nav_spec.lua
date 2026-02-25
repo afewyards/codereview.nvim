@@ -117,6 +117,79 @@ describe("mr.diff_nav", function()
     end)
   end)
 
+  describe("current_file_from_cursor", function()
+    local _orig_nvim_win_get_cursor
+
+    before_each(function()
+      _orig_nvim_win_get_cursor = vim.api.nvim_win_get_cursor
+    end)
+
+    after_each(function()
+      vim.api.nvim_win_get_cursor = _orig_nvim_win_get_cursor
+    end)
+
+    local function stub_cursor(row)
+      vim.api.nvim_win_get_cursor = function(_win)
+        return { row, 0 }
+      end
+    end
+
+    local layout = { main_win = 1 }
+
+    it("returns correct file_idx for cursor in first file", function()
+      stub_cursor(5)
+      local state = {
+        file_sections = {
+          { start_line = 1, file_idx = 1 },
+          { start_line = 20, file_idx = 2 },
+          { start_line = 40, file_idx = 3 },
+        },
+      }
+      assert.equals(1, diff_nav.current_file_from_cursor(layout, state))
+    end)
+
+    it("returns correct file_idx for cursor in last file", function()
+      stub_cursor(45)
+      local state = {
+        file_sections = {
+          { start_line = 1, file_idx = 1 },
+          { start_line = 20, file_idx = 2 },
+          { start_line = 40, file_idx = 3 },
+        },
+      }
+      assert.equals(3, diff_nav.current_file_from_cursor(layout, state))
+    end)
+
+    it("returns 1 when cursor is before all sections", function()
+      stub_cursor(1)
+      local state = {
+        file_sections = {
+          { start_line = 5, file_idx = 1 },
+          { start_line = 20, file_idx = 2 },
+        },
+      }
+      assert.equals(1, diff_nav.current_file_from_cursor(layout, state))
+    end)
+
+    it("returns correct file_idx at exact section boundary", function()
+      stub_cursor(20)
+      local state = {
+        file_sections = {
+          { start_line = 1, file_idx = 1 },
+          { start_line = 20, file_idx = 2 },
+          { start_line = 40, file_idx = 3 },
+        },
+      }
+      assert.equals(2, diff_nav.current_file_from_cursor(layout, state))
+    end)
+
+    it("returns 1 for empty sections", function()
+      stub_cursor(5)
+      local state = { file_sections = {} }
+      assert.equals(1, diff_nav.current_file_from_cursor(layout, state))
+    end)
+  end)
+
   describe("ensure_virt_lines_visible", function()
     local DIFF_NS = vim.api.nvim_create_namespace("codereview_diff")
 
