@@ -326,6 +326,73 @@ describe("mr.diff_render", function()
     end)
   end)
 
+  describe("render_all_files diff_cache", function()
+    it("populates cache on first call with per-file entries", function()
+      local buf = vim.api.nvim_create_buf(false, true)
+      local files = {
+        { new_path = "foo.lua", old_path = "foo.lua", diff = "@@ -1,2 +1,2 @@\n ctx\n-old\n+new\n" },
+        { new_path = "bar.lua", old_path = "bar.lua", diff = "@@ -1,1 +1,1 @@\n-x\n+y\n" },
+      }
+      local review = {}
+      local diff_cache = {}
+
+      diff_render.render_all_files(buf, files, review, {}, 8, nil, nil, nil, nil, nil, diff_cache)
+
+      assert.truthy(diff_cache["foo.lua:8"], "cache entry for foo.lua should exist")
+      assert.truthy(diff_cache["foo.lua:8"].hunks, "cache should contain hunks")
+      assert.truthy(diff_cache["foo.lua:8"].display, "cache should contain display")
+      assert.truthy(diff_cache["bar.lua:8"], "cache entry for bar.lua should exist")
+
+      vim.api.nvim_buf_delete(buf, { force = true })
+    end)
+
+    it("uses cache on second call (no git re-run)", function()
+      local buf = vim.api.nvim_create_buf(false, true)
+      local files = {
+        { new_path = "cached.lua", old_path = "cached.lua", diff = "@@ -1,2 +1,2 @@\n ctx\n-old\n+new\n" },
+      }
+      local review = {}
+      local diff_cache = {}
+
+      local r1 = diff_render.render_all_files(buf, files, review, {}, 8, nil, nil, nil, nil, nil, diff_cache)
+      -- Poison the diff to verify the second call uses cache
+      diff_cache["cached.lua:8"].sentinel = true
+      local r2 = diff_render.render_all_files(buf, files, review, {}, 8, nil, nil, nil, nil, nil, diff_cache)
+
+      assert.truthy(diff_cache["cached.lua:8"].sentinel, "cache should have been reused (sentinel preserved)")
+      assert.equals(#r1.line_data, #r2.line_data)
+
+      vim.api.nvim_buf_delete(buf, { force = true })
+    end)
+
+    it("uses per-file context as cache key suffix", function()
+      local buf = vim.api.nvim_create_buf(false, true)
+      local files = {
+        { new_path = "ctx.lua", old_path = "ctx.lua", diff = "@@ -1,2 +1,2 @@\n ctx\n-old\n+new\n" },
+      }
+      local review = {}
+      local diff_cache = {}
+
+      -- file_contexts overrides global context for file 1
+      diff_render.render_all_files(buf, files, review, {}, 8, { [1] = 3 }, nil, nil, nil, nil, diff_cache)
+
+      assert.truthy(diff_cache["ctx.lua:3"], "cache key should use per-file context")
+      assert.is_nil(diff_cache["ctx.lua:8"], "global context key should not exist")
+
+      vim.api.nvim_buf_delete(buf, { force = true })
+    end)
+
+    it("does not error when diff_cache is nil", function()
+      local buf = vim.api.nvim_create_buf(false, true)
+      local files = {
+        { new_path = "nocache.lua", old_path = "nocache.lua", diff = "@@ -1,1 +1,1 @@\n-a\n+b\n" },
+      }
+      local result = diff_render.render_all_files(buf, files, {}, {}, 8)
+      assert.equals(1, #result.file_sections)
+      vim.api.nvim_buf_delete(buf, { force = true })
+    end)
+  end)
+
   describe("toggle_scroll_mode line preservation", function()
     local function make_files()
       return {

@@ -572,7 +572,7 @@ end
 
 -- ─── All-files scroll view ────────────────────────────────────────────────────
 
-function M.render_all_files(buf, files, review, discussions, context, file_contexts, ai_suggestions, row_selection, current_user, editing_note)
+function M.render_all_files(buf, files, review, discussions, context, file_contexts, ai_suggestions, row_selection, current_user, editing_note, diff_cache)
   local parser = require("codereview.mr.diff_parser")
   context = context or config.get().diff.context
   file_contexts = file_contexts or {}
@@ -600,10 +600,17 @@ function M.render_all_files(buf, files, review, discussions, context, file_conte
 
     -- Parse and build display for this file (per-file context overrides global)
     local file_ctx = file_contexts[file_idx] or context
-    local diff_text = file_diff.diff or ""
-    if review.base_sha and review.head_sha then
-      local fpath = file_diff.new_path or file_diff.old_path
-      if fpath then
+    local fpath = file_diff.new_path or file_diff.old_path
+    local cache_key = fpath and (fpath .. ":" .. file_ctx) or nil
+    local file_cached = diff_cache and cache_key and diff_cache[cache_key]
+
+    local hunks, display
+    if file_cached then
+      hunks = file_cached.hunks
+      display = file_cached.display
+    else
+      local diff_text = file_diff.diff or ""
+      if review.base_sha and review.head_sha and fpath then
         local result = vim.fn.system({
           "git", "diff", "-U" .. file_ctx,
           review.base_sha, review.head_sha, "--", fpath,
@@ -612,10 +619,12 @@ function M.render_all_files(buf, files, review, discussions, context, file_conte
           diff_text = result
         end
       end
+      hunks = parser.parse_hunks(diff_text)
+      display = parser.build_display(hunks, file_ctx)
+      if diff_cache and cache_key then
+        diff_cache[cache_key] = { hunks = hunks, display = display }
+      end
     end
-
-    local hunks = parser.parse_hunks(diff_text)
-    local display = parser.build_display(hunks, file_ctx)
 
     if #display == 0 then
       table.insert(all_lines, "  (no changes)")

@@ -82,10 +82,10 @@ function M.open(review, discussions)
 
   if #files > 0 then
     if state.scroll_mode then
-      local render_result = M.render_all_files(layout.main_buf, files, review, state.discussions, state.context, state.file_contexts, state.ai_suggestions, state.row_selection, state.current_user)
+      local render_result = M.render_all_files(layout.main_buf, files, review, state.discussions, state.context, state.file_contexts, state.ai_suggestions, state.row_selection, state.current_user, nil, state.git_diff_cache)
       diff_state.apply_scroll_result(state, render_result)
     else
-      local line_data, row_disc, row_ai = M.render_file_diff(layout.main_buf, files[1], review, state.discussions, state.context, state.ai_suggestions, state.row_selection, state.current_user)
+      local line_data, row_disc, row_ai = M.render_file_diff(layout.main_buf, files[1], review, state.discussions, state.context, state.ai_suggestions, state.row_selection, state.current_user, nil, state.git_diff_cache)
       diff_state.apply_file_result(state, 1, line_data, row_disc, row_ai)
     end
   else
@@ -110,10 +110,10 @@ function M.open(review, discussions)
       -- Re-render to show draft markers
       M.render_sidebar(layout.sidebar_buf, state)
       if state.scroll_mode then
-        local render_result = M.render_all_files(layout.main_buf, state.files, review, state.discussions, state.context, state.file_contexts, state.ai_suggestions, state.row_selection, state.current_user)
+        local render_result = M.render_all_files(layout.main_buf, state.files, review, state.discussions, state.context, state.file_contexts, state.ai_suggestions, state.row_selection, state.current_user, nil, state.git_diff_cache)
         diff_state.apply_scroll_result(state, render_result)
       else
-        M.render_file_diff(layout.main_buf, state.files[state.current_file], review, state.discussions, state.context, state.ai_suggestions, state.row_selection, state.current_user)
+        M.render_file_diff(layout.main_buf, state.files[state.current_file], review, state.discussions, state.context, state.ai_suggestions, state.row_selection, state.current_user, nil, state.git_diff_cache)
       end
     end
   end)

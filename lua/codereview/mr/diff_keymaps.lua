@@ -49,12 +49,12 @@ function M.setup_keymaps(state, layout, active_states)
     local view = vim.fn.winsaveview()
 
     if state.scroll_mode then
-      local result = diff_render.render_all_files(layout.main_buf, state.files, state.review, state.discussions, state.context, state.file_contexts, state.ai_suggestions, state.row_selection, state.current_user, state.editing_note)
+      local result = diff_render.render_all_files(layout.main_buf, state.files, state.review, state.discussions, state.context, state.file_contexts, state.ai_suggestions, state.row_selection, state.current_user, state.editing_note, state.git_diff_cache)
       diff_state.apply_scroll_result(state, result)
     else
       local file = state.files and state.files[state.current_file]
       if file then
-        local ld, rd, ra = diff_render.render_file_diff(layout.main_buf, file, state.review, state.discussions, state.context, state.ai_suggestions, state.row_selection, state.current_user, state.editing_note)
+        local ld, rd, ra = diff_render.render_file_diff(layout.main_buf, file, state.review, state.discussions, state.context, state.ai_suggestions, state.row_selection, state.current_user, state.editing_note, state.git_diff_cache)
         diff_state.apply_file_result(state, state.current_file, ld, rd, ra)
       end
     end
@@ -86,6 +86,7 @@ function M.setup_keymaps(state, layout, active_states)
       diff_sidebar.render_sidebar(layout.sidebar_buf, state)
       return
     end
+    diff_state.clear_diff_cache(state)
     rerender_view()
   end
 
@@ -184,12 +185,12 @@ function M.setup_keymaps(state, layout, active_states)
   -- Re-render current view after AI suggestion state change
   local function rerender_ai()
     if state.scroll_mode then
-      local result = diff_render.render_all_files(layout.main_buf, state.files, state.review, state.discussions, state.context, state.file_contexts, state.ai_suggestions, state.row_selection, state.current_user)
+      local result = diff_render.render_all_files(layout.main_buf, state.files, state.review, state.discussions, state.context, state.file_contexts, state.ai_suggestions, state.row_selection, state.current_user, nil, state.git_diff_cache)
       diff_state.apply_scroll_result(state, result)
     else
       local file = state.files and state.files[state.current_file]
       if not file then return end
-      local ld, rd, ra = diff_render.render_file_diff(layout.main_buf, file, state.review, state.discussions, state.context, state.ai_suggestions, state.row_selection, state.current_user)
+      local ld, rd, ra = diff_render.render_file_diff(layout.main_buf, file, state.review, state.discussions, state.context, state.ai_suggestions, state.row_selection, state.current_user, nil, state.git_diff_cache)
       diff_state.apply_file_result(state, state.current_file, ld, rd, ra)
     end
     diff_sidebar.render_sidebar(layout.sidebar_buf, state)
@@ -614,7 +615,7 @@ function M.setup_keymaps(state, layout, active_states)
         else
           state.file_contexts[file_idx] = 99999
         end
-        local result = diff_render.render_all_files(layout.main_buf, state.files, state.review, state.discussions, state.context, state.file_contexts, state.ai_suggestions, state.row_selection, state.current_user)
+        local result = diff_render.render_all_files(layout.main_buf, state.files, state.review, state.discussions, state.context, state.file_contexts, state.ai_suggestions, state.row_selection, state.current_user, nil, state.git_diff_cache)
         diff_state.apply_scroll_result(state, result)
         local row = diff_nav.find_row_for_anchor(state.scroll_line_data, anchor)
         vim.api.nvim_win_set_cursor(layout.main_win, { row, 0 })
@@ -628,7 +629,7 @@ function M.setup_keymaps(state, layout, active_states)
         end
         local file = state.files and state.files[state.current_file]
         if not file then return end
-        local ld, rd, ra = diff_render.render_file_diff(layout.main_buf, file, state.review, state.discussions, state.context, state.ai_suggestions, state.row_selection, state.current_user)
+        local ld, rd, ra = diff_render.render_file_diff(layout.main_buf, file, state.review, state.discussions, state.context, state.ai_suggestions, state.row_selection, state.current_user, nil, state.git_diff_cache)
         diff_state.apply_file_result(state, state.current_file, ld, rd, ra)
         local row = diff_nav.find_row_for_anchor(ld, anchor, state.current_file)
         vim.api.nvim_win_set_cursor(layout.main_win, { row, 0 })
@@ -1185,7 +1186,7 @@ function M.setup_keymaps(state, layout, active_states)
 
       if state.scroll_mode then
         -- Always re-render all files (buffer may have summary content)
-        local result = diff_render.render_all_files(layout.main_buf, state.files, state.review, state.discussions, state.context, state.file_contexts, state.ai_suggestions, state.row_selection, state.current_user)
+        local result = diff_render.render_all_files(layout.main_buf, state.files, state.review, state.discussions, state.context, state.file_contexts, state.ai_suggestions, state.row_selection, state.current_user, nil, state.git_diff_cache)
         diff_state.apply_scroll_result(state, result)
         diff_sidebar.render_sidebar(layout.sidebar_buf, state)
         for _, sec in ipairs(state.file_sections) do
@@ -1197,7 +1198,7 @@ function M.setup_keymaps(state, layout, active_states)
       else
         diff_sidebar.render_sidebar(layout.sidebar_buf, state)
         local line_data, row_disc, row_ai = diff_render.render_file_diff(
-          layout.main_buf, state.files[entry.idx], state.review, state.discussions, state.context, state.ai_suggestions, state.row_selection, state.current_user)
+          layout.main_buf, state.files[entry.idx], state.review, state.discussions, state.context, state.ai_suggestions, state.row_selection, state.current_user, nil, state.git_diff_cache)
         diff_state.apply_file_result(state, entry.idx, line_data, row_disc, row_ai)
       end
       vim.api.nvim_set_current_win(layout.main_win)
