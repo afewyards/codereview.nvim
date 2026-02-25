@@ -119,9 +119,10 @@ require("codereview").setup({
 
   -- AI review (requires Claude CLI)
   ai = {
-    enabled   = true,
-    claude_cmd = "claude",
-    agent      = "code-review",
+    enabled      = true,
+    claude_cmd   = "claude",
+    agent        = "code-review",
+    review_level = "info",  -- "info" | "suggestion" | "warning" | "error"
   },
 
   -- Override or disable keybindings
@@ -131,6 +132,19 @@ require("codereview").setup({
   },
 })
 ```
+
+### AI Review Level
+
+The `ai.review_level` option controls the verbosity of AI code reviews. Higher levels filter out lower-severity comments:
+
+| Level | Shows |
+|-------|-------|
+| `"info"` | Everything (default) |
+| `"suggestion"` | Suggestions, warnings, and errors |
+| `"warning"` | Warnings and errors only |
+| `"error"` | Errors only |
+
+The AI is instructed to skip items below the configured level, saving tokens and reducing noise. To see lower-severity items again, change the level and re-run the AI review.
 
 ## Default Keymaps
 
