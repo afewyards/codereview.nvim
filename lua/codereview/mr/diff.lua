@@ -320,12 +320,38 @@ function M.place_ai_suggestions(buf, line_data, suggestions, file_diff, row_sele
     if suggestion.status ~= "dismissed" then
       local path = file_diff.new_path or file_diff.old_path
       if suggestion.file == path then
+        local matched_row = nil
         for row, data in ipairs(line_data) do
           if data.item and data.item.new_line == suggestion.line then
-            if not row_ai_map[row] then row_ai_map[row] = {} end
-            table.insert(row_ai_map[row], suggestion)
+            matched_row = row
             break
           end
+        end
+        -- Fuzzy fallback: if AI provided a code snippet, verify the matched line
+        -- contains it. If not, search all lines for a better match.
+        if suggestion.code and suggestion.code ~= "" then
+          local code = suggestion.code
+          if matched_row then
+            local text = line_data[matched_row].item and line_data[matched_row].item.text or ""
+            if not vim.trim(text):find(code, 1, true) then
+              matched_row = nil -- line number was wrong, search by code
+            end
+          end
+          if not matched_row then
+            for row, data in ipairs(line_data) do
+              if data.item and data.item.new_line then
+                local text = vim.trim(data.item.text or "")
+                if text:find(code, 1, true) then
+                  matched_row = row
+                  break
+                end
+              end
+            end
+          end
+        end
+        if matched_row then
+          if not row_ai_map[matched_row] then row_ai_map[matched_row] = {} end
+          table.insert(row_ai_map[matched_row], suggestion)
         end
       end
     end
@@ -352,14 +378,40 @@ function M.place_ai_suggestions_all(buf, all_line_data, file_sections, suggestio
       for _, section in ipairs(file_sections) do
         local fpath = section.file.new_path or section.file.old_path
         if suggestion.file == fpath then
+          local matched_row = nil
           for i = section.start_line, section.end_line do
             local data = all_line_data[i]
             if data and data.item and data.item.new_line == suggestion.line
               and data.file_idx == section.file_idx then
-              if not scroll_row_ai[i] then scroll_row_ai[i] = {} end
-              table.insert(scroll_row_ai[i], suggestion)
+              matched_row = i
               break
             end
+          end
+          -- Fuzzy fallback: verify code snippet matches, search if not
+          if suggestion.code and suggestion.code ~= "" then
+            local code = suggestion.code
+            if matched_row then
+              local text = all_line_data[matched_row].item and all_line_data[matched_row].item.text or ""
+              if not vim.trim(text):find(code, 1, true) then
+                matched_row = nil
+              end
+            end
+            if not matched_row then
+              for i = section.start_line, section.end_line do
+                local data = all_line_data[i]
+                if data and data.item and data.item.new_line and data.file_idx == section.file_idx then
+                  local text = vim.trim(data.item.text or "")
+                  if text:find(code, 1, true) then
+                    matched_row = i
+                    break
+                  end
+                end
+              end
+            end
+          end
+          if matched_row then
+            if not scroll_row_ai[matched_row] then scroll_row_ai[matched_row] = {} end
+            table.insert(scroll_row_ai[matched_row], suggestion)
           end
           break
         end

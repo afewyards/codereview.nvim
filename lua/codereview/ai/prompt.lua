@@ -119,14 +119,15 @@ function M.build_review_prompt(review, diffs)
 
   table.insert(parts, "## Instructions")
   table.insert(parts, "")
-  table.insert(parts, "Each diff line is prefixed with its line number (e.g., L38:). Use this number for the line field.")
+  table.insert(parts, "Each diff line is prefixed with its line number (e.g., L38:). Use the EXACT number from the L-prefix for the line field.")
   table.insert(parts, "Review this MR. Output a JSON array in a ```json code block.")
-  table.insert(parts, 'Each item: {"file": "path", "line": <number from L-prefix>, "severity": "error"|"warning"|"info"|"suggestion", "comment": "text"}')
+  table.insert(parts, 'Each item: {"file": "path", "line": <number from L-prefix>, "code": "<exact content of that line>", "severity": "error"|"warning"|"info"|"suggestion", "comment": "text"}')
+  table.insert(parts, 'The "code" field must contain the trimmed source code from the line you are commenting on (without the diff +/- prefix).')
   table.insert(parts, 'Use \\n inside "comment" strings for line breaks (e.g. "Problem.\\n\\nSuggested fix:").')
   table.insert(parts, "If no issues, output `[]`.")
   table.insert(parts, "Focus on: bugs, security, error handling, edge cases, naming, clarity.")
   table.insert(parts, "Do NOT comment on style or formatting.")
-  table.insert(parts, "IMPORTANT: The line number must reference the exact code line the comment applies to, not a nearby comment or section header.")
+  table.insert(parts, "IMPORTANT: Find the L-prefix on the exact code line your comment applies to and use that number. Do NOT guess or count lines yourself.")
 
   return table.concat(parts, "\n")
 end
@@ -164,6 +165,7 @@ function M.parse_review_output(output)
       table.insert(suggestions, {
         file = item.file,
         line = tonumber(item.line),
+        code = type(item.code) == "string" and vim.trim(item.code) or nil,
         severity = item.severity or "info",
         comment = item.comment,
         status = "pending",
@@ -245,14 +247,15 @@ function M.build_file_review_prompt(review, file, summaries)
   table.insert(parts, "")
   table.insert(parts, "## Instructions")
   table.insert(parts, "")
-  table.insert(parts, "Each diff line is prefixed with its line number (e.g., L38:). Use this number for the line field.")
+  table.insert(parts, "Each diff line is prefixed with its line number (e.g., L38:). Use the EXACT number from the L-prefix for the line field.")
   table.insert(parts, "Review this file. Output a JSON array in a ```json code block.")
-  table.insert(parts, 'Each item: {"file": "' .. path .. '", "line": <number from L-prefix>, "severity": "error"|"warning"|"info"|"suggestion", "comment": "text"}')
+  table.insert(parts, 'Each item: {"file": "' .. path .. '", "line": <number from L-prefix>, "code": "<exact content of that line>", "severity": "error"|"warning"|"info"|"suggestion", "comment": "text"}')
+  table.insert(parts, 'The "code" field must contain the trimmed source code from the line you are commenting on (without the diff +/- prefix).')
   table.insert(parts, 'Use \\n inside "comment" strings for line breaks.')
   table.insert(parts, "If no issues, output `[]`.")
   table.insert(parts, "Focus on: bugs, security, error handling, edge cases, naming, clarity.")
   table.insert(parts, "Do NOT comment on style or formatting.")
-  table.insert(parts, "IMPORTANT: The line number must reference the exact code line the comment applies to, not a nearby comment or section header.")
+  table.insert(parts, "IMPORTANT: Find the L-prefix on the exact code line your comment applies to and use that number. Do NOT guess or count lines yourself.")
 
   return table.concat(parts, "\n")
 end
