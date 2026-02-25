@@ -214,12 +214,8 @@ function M.build(disc, opts)
           end
         end
       else
-        -- Separator line
-        if ri_sel then
-          table.insert(virt_lines, { { "██", status_hl }, { string.rep(" ", math.max(0, gutter - 2)) .. "┃", bdr } })
-        else
-          table.insert(virt_lines, { { pad .. "┃", bdr } })
-        end
+        -- Separator line (never highlighted — visual gap between replies)
+        table.insert(virt_lines, { { pad .. "┃", bdr } })
         -- Reply header
         local reply_header = {}
         if ri_sel then
