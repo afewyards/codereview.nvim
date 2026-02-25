@@ -196,6 +196,26 @@ describe("ai.prompt", function()
       local suggestions = prompt.parse_review_output(nil)
       assert.equals(0, #suggestions)
     end)
+
+    it("filters out suggestions below review_level threshold", function()
+      local config = require("codereview.config")
+      config.setup({ ai = { review_level = "warning" } })
+      local output = '```json\n[{"file": "a.lua", "line": 1, "severity": "info", "comment": "low"}, {"file": "a.lua", "line": 2, "severity": "warning", "comment": "mid"}, {"file": "a.lua", "line": 3, "severity": "error", "comment": "high"}]\n```'
+      local suggestions = prompt.parse_review_output(output)
+      assert.equals(2, #suggestions)
+      assert.equals("warning", suggestions[1].severity)
+      assert.equals("error", suggestions[2].severity)
+      config.reset()
+    end)
+
+    it("keeps all suggestions when review_level is info", function()
+      local config = require("codereview.config")
+      config.setup({ ai = { review_level = "info" } })
+      local output = '```json\n[{"file": "a.lua", "line": 1, "severity": "info", "comment": "low"}, {"file": "a.lua", "line": 2, "severity": "suggestion", "comment": "sug"}]\n```'
+      local suggestions = prompt.parse_review_output(output)
+      assert.equals(2, #suggestions)
+      config.reset()
+    end)
   end)
 
   describe("build_file_review_prompt", function()

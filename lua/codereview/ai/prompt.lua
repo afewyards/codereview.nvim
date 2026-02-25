@@ -172,6 +172,22 @@ function M.parse_review_output(output)
       })
     end
   end
+
+  -- Filter by review_level
+  local cfg = require("codereview.config").get()
+  local level = cfg.ai.review_level or "info"
+  if level ~= "info" then
+    local rank = { info = 1, suggestion = 2, warning = 3, error = 4 }
+    local threshold = rank[level] or 1
+    local filtered = {}
+    for _, s in ipairs(suggestions) do
+      if (rank[s.severity] or 1) >= threshold then
+        table.insert(filtered, s)
+      end
+    end
+    suggestions = filtered
+  end
+
   return suggestions
 end
 
