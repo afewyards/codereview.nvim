@@ -177,6 +177,75 @@ local function start_multi(review, diff_state, layout)
   end
 end
 
+--- Single-file AI review: summarize all files, then review only the current file.
+function M.start_file(review, diff_state, layout)
+  local diffs = diff_state.files
+  local file_idx = diff_state.current_file or 1
+  local target = diffs[file_idx]
+  if not target then
+    vim.notify("No file selected for AI review", vim.log.levels.WARN)
+    return
+  end
+
+  local target_path = target.new_path or target.old_path
+  local session = require("codereview.review.session")
+  local spinner = require("codereview.ui.spinner")
+  session.start()
+
+  -- Phase 1: summary pre-pass
+  local summary_prompt = prompt_mod.build_summary_prompt(review, diffs)
+  local summary_job = ai_sub.run(summary_prompt, function(output, ai_err)
+    if ai_err then
+      session.ai_finish()
+      vim.notify("AI summary failed: " .. ai_err, vim.log.levels.ERROR)
+      return
+    end
+
+    local summaries = prompt_mod.parse_summary_output(output)
+
+    -- Phase 2: review the single target file
+    local file_prompt = prompt_mod.build_file_review_prompt(review, target, summaries)
+    local file_job = ai_sub.run(file_prompt, function(file_output, file_err)
+      session.ai_finish()
+
+      if file_err then
+        vim.notify("AI review failed for " .. target_path .. ": " .. file_err, vim.log.levels.ERROR)
+        return
+      end
+
+      local suggestions = prompt_mod.parse_review_output(file_output)
+      if #suggestions == 0 then
+        vim.notify("AI review: no issues found in " .. target_path, vim.log.levels.INFO)
+        return
+      end
+
+      vim.notify(string.format("AI review: %d suggestions for %s", #suggestions, target_path), vim.log.levels.INFO)
+
+      -- Replace only this file's suggestions (preserve others)
+      local kept = {}
+      for _, s in ipairs(diff_state.ai_suggestions or {}) do
+        if s.file ~= target_path then
+          table.insert(kept, s)
+        end
+      end
+      diff_state.ai_suggestions = kept
+
+      render_file_suggestions(diff_state, layout, suggestions)
+    end)
+
+    if file_job and file_job > 0 then
+      session.ai_start(file_job)
+      spinner.set_label(string.format(" AI reviewing %s… ", target_path))
+    end
+  end, { skip_agent = true })
+
+  if summary_job and summary_job > 0 then
+    session.ai_start(summary_job)
+    spinner.set_label(" AI summarizing… ")
+    vim.notify(string.format("AI file review started for %s…", target_path), vim.log.levels.INFO)
+  end
+end
+
 function M.start(review, diff_state, layout)
   local diffs = diff_state.files
   if #diffs <= 1 then

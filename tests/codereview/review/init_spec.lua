@@ -180,3 +180,85 @@ describe("render_file_suggestions focus guard", function()
     assert.truthy(#set_win_calls > 0, "set_current_win should be called when main_win is active")
   end)
 end)
+
+describe("review.start_file", function()
+  before_each(function()
+    captured_calls = {}
+  end)
+
+  it("runs summary then single-file review with cross-file context", function()
+    local review = { title = "MR", description = "desc" }
+    local diff_state = {
+      files = {
+        { new_path = "a.lua", diff = "diff-a" },
+        { new_path = "b.lua", diff = "diff-b" },
+        { new_path = "c.lua", diff = "diff-c" },
+      },
+      discussions = {},
+      ai_suggestions = {},
+      view_mode = "diff",
+      current_file = 2, -- target is b.lua
+      scroll_mode = false,
+      line_data_cache = {},
+      row_disc_cache = {},
+      row_ai_cache = {},
+    }
+    local layout = { main_buf = 0, sidebar_buf = 0, main_win = 0 }
+
+    review_mod.start_file(review, diff_state, layout)
+
+    -- Phase 1: summary call
+    assert.truthy(#captured_calls >= 1)
+    assert.truthy(captured_calls[1].opts and captured_calls[1].opts.skip_agent)
+    assert.truthy(captured_calls[1].prompt:find("summariz"))
+
+    -- Phase 2: single file review (NOT 3 per-file calls)
+    assert.equals(2, #captured_calls, "should be exactly 2 calls: summary + 1 file")
+    assert.truthy(captured_calls[2].prompt:find("b.lua"), "should review the target file b.lua")
+  end)
+
+  it("replaces only the target file's suggestions", function()
+    local diff_state = {
+      files = {
+        { new_path = "a.lua", diff = "diff-a" },
+        { new_path = "b.lua", diff = "diff-b" },
+      },
+      discussions = {},
+      ai_suggestions = {
+        { file = "a.lua", line = 1, severity = "info", comment = "old a", status = "pending" },
+        { file = "b.lua", line = 5, severity = "info", comment = "old b", status = "pending" },
+      },
+      view_mode = "diff",
+      current_file = 1, -- re-review a.lua
+      scroll_mode = false,
+      line_data_cache = {},
+      row_disc_cache = {},
+      row_ai_cache = {},
+    }
+
+    local orig_run = package.loaded["codereview.ai.subprocess"].run
+    local call_count = 0
+    package.loaded["codereview.ai.subprocess"].run = function(prompt, callback, opts)
+      call_count = call_count + 1
+      if call_count == 1 then
+        callback('```json\n[{"file":"a.lua","summary":"does a"},{"file":"b.lua","summary":"does b"}]\n```')
+      else
+        callback('```json\n[{"file":"a.lua","line":10,"severity":"warning","comment":"new a"}]\n```')
+      end
+      return 1
+    end
+
+    local layout = { main_buf = 0, sidebar_buf = 0, main_win = 0 }
+    review_mod.start_file({ title = "T", description = "d" }, diff_state, layout)
+
+    package.loaded["codereview.ai.subprocess"].run = orig_run
+
+    assert.equals(2, #diff_state.ai_suggestions)
+    local files_seen = {}
+    for _, s in ipairs(diff_state.ai_suggestions) do
+      files_seen[s.file] = s.comment
+    end
+    assert.equals("new a", files_seen["a.lua"])
+    assert.equals("old b", files_seen["b.lua"])
+  end)
+end)
