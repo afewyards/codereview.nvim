@@ -290,101 +290,73 @@ function M.resolve_toggle(disc, mr, callback)
   end
 end
 
-function M.create_inline(mr, old_path, new_path, old_line, new_line, optimistic, opts)
-  M.open_input_popup("Inline Comment", function(text)
-    local disc
-    if optimistic and optimistic.add then
-      disc = optimistic.add(text)
-    end
-    -- Yield to event loop so Neovim redraws the optimistic comment before blocking on API
-    vim.schedule(function()
-      local provider, client, ctx = get_provider()
-      if not provider then
-        if disc and optimistic.remove then optimistic.remove(disc) end
-        return
-      end
-      local position = {
-        old_path = old_path,
-        new_path = new_path,
-        old_line = old_line,
-        new_line = new_line,
-      }
-      M.post_with_retry(
-        function() return provider.post_comment(client, ctx, mr, text, position) end,
-        function()
-          vim.notify("Comment posted", vim.log.levels.INFO)
-          if optimistic and optimistic.refresh then optimistic.refresh() end
-        end,
-        function(err)
-          vim.notify("Failed to post comment: " .. err, vim.log.levels.ERROR)
-          if disc and optimistic.mark_failed then optimistic.mark_failed(disc) end
+--- Unified comment creation for all inline comment variants.
+--- @param mr table  The MR/PR object
+--- @param opts table  Options:
+---   opts.title: string  popup title
+---   opts.api_fn: fun(provider, client, ctx, mr, text) → result, err  the API call
+---   opts.optimistic: { add, remove, mark_failed, refresh }? or nil (non-draft path)
+---   opts.use_retry: bool  whether to use post_with_retry (non-draft path)
+---   opts.success_msg: string  notification on success
+---   opts.failure_msg: string  prefix for error notification
+---   opts.on_success: fun(text)?  called after success (draft path)
+---   opts.popup_opts: table?  passed to open_input_popup
+function M.create_comment(mr, opts)
+  opts = opts or {}
+  local title = opts.title or "Comment"
+  local popup_opts = opts.popup_opts
+
+  M.open_input_popup(title, function(text)
+    if opts.optimistic and opts.optimistic.add then
+      local disc = opts.optimistic.add(text)
+
+      -- Yield to event loop so Neovim redraws the optimistic comment before blocking on API
+      vim.schedule(function()
+        local provider, client, ctx = get_provider()
+        if not provider then
+          if disc and opts.optimistic.remove then opts.optimistic.remove(disc) end
+          return
         end
-      )
-    end)
-  end, opts)
-end
-
-function M.create_inline_range(mr, old_path, new_path, start_pos, end_pos, optimistic, opts)
-  M.open_input_popup("Range Comment", function(text)
-    local disc
-    if optimistic and optimistic.add then
-      disc = optimistic.add(text)
-    end
-    vim.schedule(function()
+        M.post_with_retry(
+          function() return opts.api_fn(provider, client, ctx, mr, text) end,
+          function()
+            vim.notify(opts.success_msg or "Comment posted", vim.log.levels.INFO)
+            if opts.optimistic.refresh then opts.optimistic.refresh() end
+          end,
+          function(err)
+            vim.notify((opts.failure_msg or "Failed to post comment") .. ": " .. err, vim.log.levels.ERROR)
+            if disc and opts.optimistic.mark_failed then opts.optimistic.mark_failed(disc) end
+          end
+        )
+      end)
+    elseif opts.use_retry then
+      -- Retry path without optimistic UI
+      vim.schedule(function()
+        local provider, client, ctx = get_provider()
+        if not provider then return end
+        M.post_with_retry(
+          function() return opts.api_fn(provider, client, ctx, mr, text) end,
+          function()
+            vim.notify(opts.success_msg or "Comment posted", vim.log.levels.INFO)
+          end,
+          function(err)
+            vim.notify((opts.failure_msg or "Failed to post comment") .. ": " .. err, vim.log.levels.ERROR)
+          end
+        )
+      end)
+    else
+      -- Draft path: synchronous, no optimistic, no retry
       local provider, client, ctx = get_provider()
-      if not provider then
-        if disc and optimistic.remove then optimistic.remove(disc) end
-        return
+      if not provider then return end
+      local _, err = opts.api_fn(provider, client, ctx, mr, text)
+      if err then
+        vim.notify((opts.failure_msg or "Failed to create draft comment") .. ": " .. err, vim.log.levels.ERROR)
+      else
+        vim.notify(opts.success_msg or "Draft comment created", vim.log.levels.INFO)
+        if opts.on_success then opts.on_success(text) end
       end
-      M.post_with_retry(
-        function() return provider.post_range_comment(client, ctx, mr, text, old_path, new_path, start_pos, end_pos) end,
-        function()
-          vim.notify("Range comment posted", vim.log.levels.INFO)
-          if optimistic and optimistic.refresh then optimistic.refresh() end
-        end,
-        function(err)
-          vim.notify("Failed to post range comment: " .. err, vim.log.levels.ERROR)
-          if disc and optimistic.mark_failed then optimistic.mark_failed(disc) end
-        end
-      )
-    end)
-  end, opts)
-end
-
-function M.create_inline_draft(mr, new_path, new_line, on_success, opts)
-  M.open_input_popup("Draft Comment", function(text)
-    local provider, client, ctx = get_provider()
-    if not provider then return end
-    local _, err = provider.create_draft_comment(client, ctx, mr, {
-      body = text,
-      path = new_path,
-      line = new_line,
-    })
-    if err then
-      vim.notify("Failed to create draft comment: " .. err, vim.log.levels.ERROR)
-    else
-      vim.notify("Draft comment created", vim.log.levels.INFO)
-      if on_success then on_success(text) end
     end
-  end, opts)
-end
-
-function M.create_inline_range_draft(mr, new_path, start_line, end_line, on_success, opts)
-  M.open_input_popup("Draft Comment", function(text)
-    local provider, client, ctx = get_provider()
-    if not provider then return end
-    local _, err = provider.create_draft_comment(client, ctx, mr, {
-      body = text,
-      path = new_path,
-      line = end_line,
-    })
-    if err then
-      vim.notify("Failed to create draft comment: " .. err, vim.log.levels.ERROR)
-    else
-      vim.notify("Draft comment created", vim.log.levels.INFO)
-      if on_success then on_success(text) end
-    end
-  end, opts)
+  end, popup_opts)
 end
 
 function M.create_mr_comment(review, provider, ctx, on_success)

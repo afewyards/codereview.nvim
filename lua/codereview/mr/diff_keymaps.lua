@@ -332,15 +332,43 @@ function M.setup_keymaps(state, layout, active_states)
         local popup_opts = { anchor_line = row, win_id = layout.main_win, action_type = "comment", context_text = line_text }
         local comment = require("codereview.mr.comment")
         if session.get().active then
-          comment.create_inline_draft(state.review, file.new_path, data.item.new_line,
-            add_local_draft(file.new_path, data.item.new_line), popup_opts)
+          local new_path = file.new_path
+          local new_line = data.item.new_line
+          comment.create_comment(state.review, {
+            title = "Draft Comment",
+            api_fn = function(provider, client, ctx, mr, text)
+              return provider.create_draft_comment(client, ctx, mr, { body = text, path = new_path, line = new_line })
+            end,
+            on_success = add_local_draft(file.new_path, data.item.new_line),
+            success_msg = "Draft comment created",
+            failure_msg = "Failed to create draft comment",
+            popup_opts = popup_opts,
+          })
         else
-          comment.create_inline(state.review, file.old_path, file.new_path, data.item.old_line, data.item.new_line, {
-            add = add_optimistic_comment(file.old_path, file.new_path, data.item.old_line, data.item.new_line),
-            remove = remove_optimistic,
-            mark_failed = mark_optimistic_failed,
-            refresh = refresh_discussions,
-          }, popup_opts)
+          local old_path = file.old_path
+          local new_path = file.new_path
+          local old_line = data.item.old_line
+          local new_line = data.item.new_line
+          comment.create_comment(state.review, {
+            title = "Inline Comment",
+            api_fn = function(provider, client, ctx, mr, text)
+              return provider.post_comment(client, ctx, mr, text, {
+                old_path = old_path,
+                new_path = new_path,
+                old_line = old_line,
+                new_line = new_line,
+              })
+            end,
+            optimistic = {
+              add = add_optimistic_comment(old_path, new_path, old_line, new_line),
+              remove = remove_optimistic,
+              mark_failed = mark_optimistic_failed,
+              refresh = refresh_discussions,
+            },
+            success_msg = "Comment posted",
+            failure_msg = "Failed to post comment",
+            popup_opts = popup_opts,
+          })
         end
       else
         if session.get().active then
@@ -362,9 +390,18 @@ function M.setup_keymaps(state, layout, active_states)
             vim.api.nvim_win_get_buf(layout.main_win), row - 1, row, false
           )[1] or ""
           local comment = require("codereview.mr.comment")
-          comment.create_inline_draft(state.review, file.new_path, data.item.new_line,
-            add_local_draft(file.new_path, data.item.new_line),
-            { anchor_line = row, win_id = layout.main_win, action_type = "comment", context_text = line_text })
+          local new_path = file.new_path
+          local new_line = data.item.new_line
+          comment.create_comment(state.review, {
+            title = "Draft Comment",
+            api_fn = function(provider, client, ctx, mr, text)
+              return provider.create_draft_comment(client, ctx, mr, { body = text, path = new_path, line = new_line })
+            end,
+            on_success = add_local_draft(file.new_path, data.item.new_line),
+            success_msg = "Draft comment created",
+            failure_msg = "Failed to create draft comment",
+            popup_opts = { anchor_line = row, win_id = layout.main_win, action_type = "comment", context_text = line_text },
+          })
         else
           diff_comments.create_comment_at_cursor(layout, state, {
             add = add_optimistic_comment,
@@ -399,29 +436,38 @@ function M.setup_keymaps(state, layout, active_states)
         local popup_opts = { anchor_line = e, anchor_start = s, win_id = layout.main_win, action_type = "comment", context_text = line_text }
         local comment = require("codereview.mr.comment")
         if session.get().active then
-          comment.create_inline_range_draft(
-            state.review,
-            file.new_path,
-            start_data.item.new_line,
-            end_data.item.new_line,
-            add_local_draft(file.new_path, end_data.item.new_line, start_data.item.new_line),
-            popup_opts
-          )
+          local new_path = file.new_path
+          local end_line = end_data.item.new_line
+          comment.create_comment(state.review, {
+            title = "Draft Comment",
+            api_fn = function(provider, client, ctx, mr, text)
+              return provider.create_draft_comment(client, ctx, mr, { body = text, path = new_path, line = end_line })
+            end,
+            on_success = add_local_draft(file.new_path, end_data.item.new_line, start_data.item.new_line),
+            success_msg = "Draft comment created",
+            failure_msg = "Failed to create draft comment",
+            popup_opts = popup_opts,
+          })
         else
-          comment.create_inline_range(
-            state.review,
-            file.old_path,
-            file.new_path,
-            { old_line = start_data.item.old_line, new_line = start_data.item.new_line },
-            { old_line = end_data.item.old_line, new_line = end_data.item.new_line },
-            {
-              add = add_optimistic_comment(file.old_path, file.new_path, end_data.item.old_line, end_data.item.new_line, start_data.item.new_line),
+          local old_path = file.old_path
+          local new_path = file.new_path
+          local start_pos = { old_line = start_data.item.old_line, new_line = start_data.item.new_line }
+          local end_pos = { old_line = end_data.item.old_line, new_line = end_data.item.new_line }
+          comment.create_comment(state.review, {
+            title = "Range Comment",
+            api_fn = function(provider, client, ctx, mr, text)
+              return provider.post_range_comment(client, ctx, mr, text, old_path, new_path, start_pos, end_pos)
+            end,
+            optimistic = {
+              add = add_optimistic_comment(old_path, new_path, end_data.item.old_line, end_data.item.new_line, start_data.item.new_line),
               remove = remove_optimistic,
               mark_failed = mark_optimistic_failed,
               refresh = refresh_discussions,
             },
-            popup_opts
-          )
+            success_msg = "Range comment posted",
+            failure_msg = "Failed to post range comment",
+            popup_opts = popup_opts,
+          })
         end
       else
         if session.get().active then
@@ -444,14 +490,18 @@ function M.setup_keymaps(state, layout, active_states)
             vim.api.nvim_win_get_buf(layout.main_win), e - 1, e, false
           )[1] or ""
           local comment = require("codereview.mr.comment")
-          comment.create_inline_range_draft(
-            state.review,
-            file.new_path,
-            start_data.item.new_line,
-            end_data.item.new_line,
-            add_local_draft(file.new_path, end_data.item.new_line, start_data.item.new_line),
-            { anchor_line = e, anchor_start = s, win_id = layout.main_win, action_type = "comment", context_text = line_text }
-          )
+          local new_path = file.new_path
+          local end_line = end_data.item.new_line
+          comment.create_comment(state.review, {
+            title = "Draft Comment",
+            api_fn = function(provider, client, ctx, mr, text)
+              return provider.create_draft_comment(client, ctx, mr, { body = text, path = new_path, line = end_line })
+            end,
+            on_success = add_local_draft(file.new_path, end_data.item.new_line, start_data.item.new_line),
+            success_msg = "Draft comment created",
+            failure_msg = "Failed to create draft comment",
+            popup_opts = { anchor_line = e, anchor_start = s, win_id = layout.main_win, action_type = "comment", context_text = line_text },
+          })
         else
           diff_comments.create_comment_range(layout, state, {
             add = add_optimistic_comment,
