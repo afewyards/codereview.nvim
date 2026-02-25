@@ -45,7 +45,7 @@ function M.setup_keymaps(state, layout, active_states)
   -- ── Local helper functions (must be defined before callbacks table) ──────────
 
   -- Re-render discussions without re-fetching from API
-  local function rerender_view()
+  local function rerender_view_sync()
     local view = vim.fn.winsaveview()
 
     if state.scroll_mode then
@@ -64,6 +64,20 @@ function M.setup_keymaps(state, layout, active_states)
     view.lnum = math.min(view.lnum, max_line)
     view.topline = math.min(view.topline, max_line)
     vim.fn.winrestview(view)
+  end
+
+  local render_timer = nil
+
+  local function rerender_view()
+    if render_timer then
+      pcall(vim.fn.timer_stop, render_timer)
+    end
+    render_timer = vim.fn.timer_start(20, function()
+      render_timer = nil
+      vim.schedule(function()
+        rerender_view_sync()
+      end)
+    end)
   end
 
   -- Re-fetch discussions from API and re-render the diff view
@@ -838,7 +852,7 @@ function M.setup_keymaps(state, layout, active_states)
         note_idx = sel_idx,
         spacer_height = initial_height + 2,
       }
-      rerender_view()
+      rerender_view_sync()
 
       -- Compute spacer_offset: how many virt_lines precede the spacer
       local spacer_offset = tvl.build(disc, {
@@ -864,7 +878,7 @@ function M.setup_keymaps(state, layout, active_states)
         on_resize = function(new_h)
           if state.editing_note then
             state.editing_note.spacer_height = new_h + 2
-            rerender_view()
+            rerender_view_sync()
           end
         end,
       })
