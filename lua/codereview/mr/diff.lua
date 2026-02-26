@@ -13,6 +13,28 @@ function M.get_state(buf)
   return active_states[buf]
 end
 
+--- Close all active review layouts (used when switching to a different review).
+function M.close_active()
+  local split = require("codereview.ui.split")
+  local session = require("codereview.review.session")
+  local sess = session.get()
+  if sess.ai_pending then
+    for _, jid in ipairs(sess.ai_job_ids or {}) do
+      pcall(vim.fn.jobstop, jid)
+    end
+    session.ai_finish()
+  end
+  if sess.active then
+    session.stop()
+  end
+  for buf, entry in pairs(active_states) do
+    split.close(entry.layout)
+    pcall(vim.api.nvim_buf_delete, entry.layout.main_buf, { force = true })
+    pcall(vim.api.nvim_buf_delete, entry.layout.sidebar_buf, { force = true })
+    active_states[buf] = nil
+  end
+end
+
 -- ─── Comment/annotation helpers (delegated to diff_comments) ────────────────
 
 M.build_row_items     = diff_comments.build_row_items

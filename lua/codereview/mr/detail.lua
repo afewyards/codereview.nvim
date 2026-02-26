@@ -317,6 +317,7 @@ function M.open(entry)
   local diff = require("codereview.mr.diff")
   local split = require("codereview.ui.split")
 
+  diff.close_active()
   local layout = split.create()
 
   local state = diff_state_mod.create_state({
