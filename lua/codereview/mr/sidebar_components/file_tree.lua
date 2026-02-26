@@ -65,7 +65,7 @@ local function render_file_entry(state, files, entry, lines, row_map, max_name_b
   local ucount = count_file_unresolved(file, state.discussions)
   local ustr = ucount > 0 and (" ⚠" .. ucount) or ""
   local aicount = count_file_ai(file, state.ai_suggestions)
-  local aistr = aicount > 0 and (" AI:" .. aicount) or ""
+  local aistr = aicount > 0 and (" ✨" .. aicount) or ""
 
   local review_icon
   if state.view_mode == "diff" and entry.idx == state.current_file then
