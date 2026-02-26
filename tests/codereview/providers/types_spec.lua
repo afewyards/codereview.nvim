@@ -16,6 +16,18 @@ describe("providers.types", function()
       assert.equal("alice", r.author)
       assert.equal("ccc", r.start_sha)
     end)
+
+    it("preserves merge_status field", function()
+      local raw = { id = 1, title = "Test", merge_status = "can_be_merged" }
+      local review = types.normalize_review(raw)
+      assert.equals("can_be_merged", review.merge_status)
+    end)
+
+    it("defaults merge_status to nil", function()
+      local raw = { id = 1, title = "Test" }
+      local review = types.normalize_review(raw)
+      assert.is_nil(review.merge_status)
+    end)
   end)
 
   describe("normalize_discussion", function()

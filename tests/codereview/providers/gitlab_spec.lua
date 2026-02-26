@@ -26,6 +26,27 @@ describe("providers.gitlab", function()
       assert.equal("success", r.pipeline_status)
       assert.equal("bob", r.approved_by[1])
     end)
+
+    it("passes through merge_status", function()
+      local mr = {
+        iid = 1, title = "T", author = { username = "alice" },
+        source_branch = "a", target_branch = "main", state = "opened",
+        diff_refs = {}, approved_by = {},
+        merge_status = "can_be_merged",
+      }
+      local r = gitlab.normalize_mr(mr)
+      assert.equal("can_be_merged", r.merge_status)
+    end)
+
+    it("merge_status is nil when not set", function()
+      local mr = {
+        iid = 1, title = "T", author = { username = "alice" },
+        source_branch = "a", target_branch = "main", state = "opened",
+        diff_refs = {}, approved_by = {},
+      }
+      local r = gitlab.normalize_mr(mr)
+      assert.is_nil(r.merge_status)
+    end)
   end)
 
   describe("normalize_discussion", function()

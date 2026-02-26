@@ -60,6 +60,7 @@ function M.normalize_mr(mr)
     approved_by = approved_by,
     approvals_required = mr.approvals_before_merge or 0,
     sha = mr.sha,
+    merge_status = mr.merge_status,
   })
 end
 

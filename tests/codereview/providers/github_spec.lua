@@ -24,6 +24,46 @@ describe("providers.github", function()
       assert.equal("aaa", r.start_sha)  -- GitHub: start_sha = base_sha
       assert.equal("feat/x", r.source_branch)
     end)
+
+    it("maps mergeable=true to can_be_merged", function()
+      local pr = {
+        number = 1, title = "T",
+        user = { login = "alice" },
+        head = { ref = "a", sha = "bbb" },
+        base = { ref = "main", sha = "aaa" },
+        state = "open",
+        mergeable = true,
+        mergeable_state = "clean",
+      }
+      local r = github.normalize_pr(pr)
+      assert.equal("can_be_merged", r.merge_status)
+    end)
+
+    it("maps mergeable=false to cannot_be_merged", function()
+      local pr = {
+        number = 1, title = "T",
+        user = { login = "alice" },
+        head = { ref = "a", sha = "bbb" },
+        base = { ref = "main", sha = "aaa" },
+        state = "open",
+        mergeable = false,
+        mergeable_state = "dirty",
+      }
+      local r = github.normalize_pr(pr)
+      assert.equal("cannot_be_merged", r.merge_status)
+    end)
+
+    it("merge_status is nil when mergeable is nil", function()
+      local pr = {
+        number = 1, title = "T",
+        user = { login = "alice" },
+        head = { ref = "a", sha = "bbb" },
+        base = { ref = "main", sha = "aaa" },
+        state = "open",
+      }
+      local r = github.normalize_pr(pr)
+      assert.is_nil(r.merge_status)
+    end)
   end)
 
   describe("normalize_graphql_threads", function()

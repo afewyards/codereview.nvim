@@ -80,6 +80,13 @@ end
 --- Maps a GitHub PR object to the normalized Review shape.
 --- GitHub has no separate start_sha — use base.sha for both base_sha and start_sha.
 function M.normalize_pr(pr)
+  local merge_status
+  if pr.mergeable == true then
+    merge_status = "can_be_merged"
+  elseif pr.mergeable == false then
+    merge_status = "cannot_be_merged"
+  end
+
   return types.normalize_review({
     id = pr.number,
     title = pr.title,
@@ -93,6 +100,7 @@ function M.normalize_pr(pr)
     web_url = pr.html_url or "",
     description = pr.body or "",
     sha = pr.head and pr.head.sha,
+    merge_status = merge_status,
   })
 end
 
