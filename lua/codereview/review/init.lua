@@ -2,6 +2,7 @@
 local ai_sub = require("codereview.ai.subprocess")
 local prompt_mod = require("codereview.ai.prompt")
 local diff_state_mod = require("codereview.mr.diff_state")
+local log = require("codereview.log")
 local M = {}
 
 --- Render suggestions for a single file into the diff view.
@@ -42,6 +43,36 @@ local function render_file_suggestions(diff_state, layout, suggestions)
       vim.api.nvim_set_current_win(layout.main_win)
     end
   end)
+end
+
+--- Fetch file content if available, respecting max_file_size.
+--- Returns content string or nil.
+local function fetch_file_content(diff_state, review, path, deleted)
+  if deleted then return nil end
+  local provider = diff_state.provider
+  local ctx = diff_state.ctx
+  if not provider or not provider.get_file_content or not ctx then return nil end
+
+  local cfg = require("codereview.config").get()
+  local max_size = cfg.ai.max_file_size or 500
+  if max_size == 0 then return nil end
+
+  local client = require("codereview.api.client")
+  local content, err = provider.get_file_content(client, ctx, review.head_sha, path)
+  if not content then
+    if err then log.debug("AI: could not fetch content for " .. path .. ": " .. err) end
+    return nil
+  end
+
+  -- Check line count
+  local line_count = 1
+  for _ in content:gmatch("\n") do line_count = line_count + 1 end
+  if line_count > max_size then
+    log.debug(string.format("AI: skipping content for %s (%d lines > %d max)", path, line_count, max_size))
+    return nil
+  end
+
+  return content
 end
 
 --- Single-file review (unchanged behavior).
@@ -129,8 +160,9 @@ local function start_multi(review, diff_state, layout)
     local job_ids = {}
 
     for _, file in ipairs(diffs) do
-      local file_prompt = prompt_mod.build_file_review_prompt(review, file, summaries)
       local path = file.new_path or file.old_path
+      local content = fetch_file_content(diff_state, review, path, file.deleted_file)
+      local file_prompt = prompt_mod.build_file_review_prompt(review, file, summaries, content)
 
       local file_job = ai_sub.run(file_prompt, function(file_output, file_err)
         if file_err then
@@ -225,7 +257,8 @@ function M.start_file(review, diff_state, layout)
     local summaries = prompt_mod.parse_summary_output(output)
 
     -- Phase 2: review the single target file
-    local file_prompt = prompt_mod.build_file_review_prompt(review, target, summaries)
+    local content = fetch_file_content(diff_state, review, target_path, target.deleted_file)
+    local file_prompt = prompt_mod.build_file_review_prompt(review, target, summaries, content)
     local file_job = ai_sub.run(file_prompt, function(file_output, file_err)
       session.ai_finish()
 

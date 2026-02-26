@@ -26,6 +26,9 @@ package.loaded["codereview.log"] = {
   error = function() end,
 }
 
+-- Stub api client
+package.loaded["codereview.api.client"] = {}
+
 -- Stub spinner
 package.loaded["codereview.ui.spinner"] = {
   open = function() end,
@@ -260,5 +263,78 @@ describe("review.start_file", function()
     end
     assert.equals("new a", files_seen["a.lua"])
     assert.equals("old b", files_seen["b.lua"])
+  end)
+end)
+
+describe("file content in per-file review", function()
+  before_each(function()
+    captured_calls = {}
+  end)
+
+  it("includes full file content in per-file prompt for multi-file review", function()
+    local content_fetch_calls = {}
+    local mock_provider = {
+      get_file_content = function(client, ctx, ref, path)
+        table.insert(content_fetch_calls, path)
+        return "-- full content of " .. path
+      end,
+    }
+    local review = { title = "Multi", description = "desc", head_sha = "abc123" }
+    local diff_state = {
+      files = {
+        { new_path = "a.lua", diff = "@@ -1,1 +1,1 @@\n-old\n+new\n" },
+        { new_path = "b.lua", diff = "@@ -1,1 +1,1 @@\n-old\n+new\n" },
+      },
+      discussions = {},
+      ai_suggestions = {},
+      view_mode = "diff",
+      current_file = 1,
+      scroll_mode = false,
+      line_data_cache = {},
+      row_disc_cache = {},
+      row_ai_cache = {},
+      provider = mock_provider,
+      ctx = { base_url = "https://api.github.com", project = "owner/repo" },
+    }
+    review_mod.start(review, diff_state, { main_buf = 0, sidebar_buf = 0, main_win = 0 })
+
+    -- Should have fetched content for both files
+    assert.equals(2, #content_fetch_calls)
+    -- Per-file prompts (calls 2 and 3) should contain full file content
+    assert.truthy(captured_calls[2].prompt:find("Full File Content") or
+                  captured_calls[3].prompt:find("Full File Content"),
+      "per-file prompts should include full file content")
+  end)
+
+  it("skips content fetch for deleted files", function()
+    local content_fetch_calls = {}
+    local mock_provider = {
+      get_file_content = function(client, ctx, ref, path)
+        table.insert(content_fetch_calls, path)
+        return "content"
+      end,
+    }
+    local review = { title = "Multi", description = "desc", head_sha = "abc123" }
+    local diff_state = {
+      files = {
+        { new_path = "a.lua", diff = "@@ -1,1 +1,1 @@\n-old\n+new\n" },
+        { new_path = "deleted.lua", old_path = "deleted.lua", deleted_file = true, diff = "@@ -1,1 +0,0 @@\n-gone\n" },
+      },
+      discussions = {},
+      ai_suggestions = {},
+      view_mode = "diff",
+      current_file = 1,
+      scroll_mode = false,
+      line_data_cache = {},
+      row_disc_cache = {},
+      row_ai_cache = {},
+      provider = mock_provider,
+      ctx = { base_url = "https://api.github.com", project = "owner/repo" },
+    }
+    review_mod.start(review, diff_state, { main_buf = 0, sidebar_buf = 0, main_win = 0 })
+
+    -- Should only fetch content for a.lua, not deleted.lua
+    assert.equals(1, #content_fetch_calls)
+    assert.equals("a.lua", content_fetch_calls[1])
   end)
 end)
