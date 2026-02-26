@@ -22,6 +22,11 @@ describe("summary redesign integration", function()
         resolvable = true, resolved = false,
         position = { new_path = "src/main.ts", new_line = 10 },
       }}},
+      { id = "d3", resolved = false, notes = {{
+        id = 3, author = "bob", body = "LGTM overall",
+        created_at = "2026-02-25T15:00:00Z", system = false,
+        resolvable = true, resolved = false,
+      }}},
     }
 
     local header = detail.build_header_lines(review, 70)
@@ -37,10 +42,11 @@ describe("summary redesign integration", function()
     assert.is_truthy(all_text:find("## Activity"))
     assert.is_truthy(all_text:find("## Discussions"))
 
-    -- Content present
-    assert.is_truthy(all_text:find("src/main.ts:10"))
+    -- General comment shown, inline excluded
+    assert.is_truthy(all_text:find("LGTM overall"))
+    assert.is_falsy(all_text:find("src/main.ts:10"))
+    assert.is_falsy(all_text:find("Please fix this"))
     assert.is_truthy(all_text:find("assigned"))
-    assert.is_truthy(all_text:find("Please fix this"))
     assert.is_truthy(all_text:find("bold"))
 
     -- State and metadata in header
@@ -72,7 +78,7 @@ describe("summary redesign integration", function()
     assert.equals(0, #activity.lines)
   end)
 
-  it("has file_path row_map entries for inline discussions", function()
+  it("has no file_path row_map entries for inline discussions (excluded)", function()
     local discussions = {
       { id = "d1", resolved = false, notes = {{
         id = 1, author = "alice", body = "Fix",
@@ -90,12 +96,10 @@ describe("summary redesign integration", function()
         table.insert(file_path_entries, entry)
       end
     end
-    assert.equals(1, #file_path_entries)
-    assert.equals("src/foo.ts", file_path_entries[1].path)
-    assert.equals(5, file_path_entries[1].line)
+    assert.equals(0, #file_path_entries)
   end)
 
-  it("has thread_start row_map entries for all discussions", function()
+  it("has thread_start row_map entries only for general discussions (inline excluded)", function()
     local discussions = {
       { id = "d1", resolved = false, notes = {{
         id = 1, author = "alice", body = "General comment",
@@ -116,6 +120,6 @@ describe("summary redesign integration", function()
     for _, entry in pairs(result.row_map) do
       if entry.type == "thread_start" then thread_starts = thread_starts + 1 end
     end
-    assert.equals(2, thread_starts)
+    assert.equals(1, thread_starts)
   end)
 end)

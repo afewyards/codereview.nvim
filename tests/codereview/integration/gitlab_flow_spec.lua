@@ -179,7 +179,7 @@ describe("GitLab integration flow", function()
       assert.is_true(found_system, "system notes should render with Nerd Font icon")
     end)
 
-    it("shows inline discussions (with diff position) in Discussions section", function()
+    it("excludes inline discussions (with diff position) from Discussions section", function()
       local discussions = {
         {
           notes = {
@@ -199,12 +199,12 @@ describe("GitLab integration flow", function()
 
       local result = detail.build_activity_lines(discussions)
 
-      -- Inline comments now appear in the Discussions section with their file path
+      -- Inline comments should NOT appear in the summary — they belong in the diff
       local found_bob = false
       for _, line in ipairs(result.lines) do
         if line:find("@bob") then found_bob = true end
       end
-      assert.is_true(found_bob, "inline discussion should appear in Discussions section")
+      assert.is_false(found_bob, "inline discussion should not appear in Discussions section")
     end)
   end)
 
