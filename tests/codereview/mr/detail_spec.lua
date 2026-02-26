@@ -149,6 +149,13 @@ describe("mr.detail", function()
       local joined = table.concat(result.lines, "\n")
       assert.truthy(joined:find("jan"))
       assert.truthy(joined:find("approved"))
+      -- System notes should have a Nerd Font icon (3-byte UTF-8 sequences)
+      local has_icon = false
+      for _, l in ipairs(result.lines) do
+        -- Check for any of the activity icon bytes (all start with 0xef)
+        if l:find("\xef", 1, true) then has_icon = true end
+      end
+      assert.is_true(has_icon)
     end)
 
     it("returns structured result with lines, highlights, and row_map", function()
@@ -277,7 +284,7 @@ describe("mr.detail", function()
       assert.is_true(found)
     end)
 
-    it("skips inline discussions (with position)", function()
+    it("shows inline discussions (with position) in Discussions section", function()
       local discussions = {
         {
           id = "abc",
@@ -295,7 +302,10 @@ describe("mr.detail", function()
       }
       local result = detail.build_activity_lines(discussions)
       local joined = table.concat(result.lines, "\n")
-      assert.falsy(joined:find("Inline note"))
+      -- Inline note IS now shown in the Discussions section
+      assert.truthy(joined:find("Inline note"))
+      -- And its file path is shown
+      assert.truthy(joined:find("foo.lua:10"))
     end)
 
     it("strips markdown from comment body and adds highlights", function()
@@ -377,6 +387,60 @@ describe("mr.detail", function()
       assert.is_true(has_cb)
     end)
 
+    it("renders Activity section header", function()
+      local discussions = {
+        { id = "s1", notes = {{ id = 1, author = "olaf", body = "assigned to @olaf",
+          created_at = "2026-02-20T11:00:00Z", system = true, resolvable = false, resolved = false }} },
+      }
+      local result = detail.build_activity_lines(discussions, 60)
+      local found = false
+      for _, l in ipairs(result.lines) do
+        if l:match("^## Activity") then found = true end
+      end
+      assert.is_truthy(found)
+    end)
+
+    it("renders Discussions section header with unresolved count", function()
+      local discussions = {
+        { id = "d1", resolved = false, notes = {{ id = 1, author = "alice", body = "fix this",
+          created_at = "2026-02-20T11:00:00Z", system = false, resolvable = true, resolved = false }} },
+      }
+      local result = detail.build_activity_lines(discussions, 60)
+      local found = false
+      for _, l in ipairs(result.lines) do
+        if l:match("## Discussions.*unresolved") then found = true end
+      end
+      assert.is_truthy(found)
+    end)
+
+    it("shows file path for inline comments", function()
+      local discussions = {
+        { id = "d1", resolved = false, notes = {{ id = 1, author = "alice", body = "fix this",
+          created_at = "2026-02-20T11:00:00Z", system = false, resolvable = true, resolved = false,
+          position = { new_path = "src/auth.ts", new_line = 42 } }} },
+      }
+      local result = detail.build_activity_lines(discussions, 60)
+      local found = false
+      for _, l in ipairs(result.lines) do
+        if l:find("src/auth.ts:42") then found = true end
+      end
+      assert.is_truthy(found)
+    end)
+
+    it("assigns file_path row_map type for jumpable file paths", function()
+      local discussions = {
+        { id = "d1", resolved = false, notes = {{ id = 1, author = "alice", body = "fix this",
+          created_at = "2026-02-20T11:00:00Z", system = false, resolvable = true, resolved = false,
+          position = { new_path = "src/auth.ts", new_line = 42 } }} },
+      }
+      local result = detail.build_activity_lines(discussions, 60)
+      local found_file_row = false
+      for _, entry in pairs(result.row_map) do
+        if entry.type == "file_path" then found_file_row = true end
+      end
+      assert.is_truthy(found_file_row)
+    end)
+
     it("still renders system notes as simple lines", function()
       local discussions = {
         {
@@ -396,8 +460,14 @@ describe("mr.detail", function()
       local joined = table.concat(result.lines, "\n")
       assert.truthy(joined:find("jan"))
       assert.truthy(joined:find("approved"))
-      -- System notes should NOT have box drawing
+      -- System notes should NOT have box drawing (┌ only appears for user threads)
       assert.falsy(joined:find("┌"))
+      -- System notes should have a Nerd Font icon
+      local has_icon = false
+      for _, l in ipairs(result.lines) do
+        if l:find("\xef", 1, true) then has_icon = true end
+      end
+      assert.is_true(has_icon)
     end)
   end)
 

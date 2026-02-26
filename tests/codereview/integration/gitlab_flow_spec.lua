@@ -153,7 +153,7 @@ describe("GitLab integration flow", function()
       assert.is_true(found_author, "activity should render @alice")
     end)
 
-    it("renders system notes with dash prefix", function()
+    it("renders system notes with Nerd Font icon in Activity section", function()
       local discussions = {
         {
           notes = {
@@ -175,12 +175,13 @@ describe("GitLab integration flow", function()
 
       local found_system = false
       for _, line in ipairs(result.lines) do
-        if line:find("^  %- @") then found_system = true end
+        -- System notes now render with a Nerd Font icon (3-byte UTF-8 starting with 0xef)
+        if line:find("\xef", 1, true) and line:find("@gitlab") then found_system = true end
       end
-      assert.is_true(found_system, "system notes should render with dash prefix")
+      assert.is_true(found_system, "system notes should render with Nerd Font icon")
     end)
 
-    it("skips discussions with a diff position (inline comments)", function()
+    it("shows inline discussions (with diff position) in Discussions section", function()
       local discussions = {
         {
           notes = {
@@ -198,14 +199,14 @@ describe("GitLab integration flow", function()
         },
       }
 
-      local lines = detail.build_activity_lines(discussions)
+      local result = detail.build_activity_lines(discussions)
 
-      -- Inline comment notes are skipped by build_activity_lines
+      -- Inline comments now appear in the Discussions section with their file path
       local found_bob = false
-      for _, line in ipairs(lines) do
+      for _, line in ipairs(result.lines) do
         if line:find("@bob") then found_bob = true end
       end
-      assert.is_false(found_bob, "inline discussion should be skipped in activity")
+      assert.is_true(found_bob, "inline discussion should appear in Discussions section")
     end)
   end)
 

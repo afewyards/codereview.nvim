@@ -125,6 +125,189 @@ end
 
 local format_time_short = tvl.format_time_relative
 
+local ACTIVITY_ICONS = {
+  { pattern = "assigned",         icon = "\xef\x90\x95", hl = "CodeReviewActivityAssign" },
+  { pattern = "added %d+ commit", icon = "\xef\x90\x97", hl = "CodeReviewActivityCommit" },
+  { pattern = "review",           icon = "\xef\x90\x9f", hl = "CodeReviewActivityComment" },
+  { pattern = "resolved",         icon = "\xef\x90\xae", hl = "CodeReviewActivityResolved" },
+  { pattern = "approved",         icon = "\xef\x90\x9d", hl = "CodeReviewActivityApproved" },
+  { pattern = "merged",           icon = "\xef\x90\x99", hl = "CodeReviewActivityMerged" },
+}
+local FALLBACK_ICON = { icon = "\xef\x91\x84", hl = "CodeReviewActivityGeneric" }
+
+local function get_activity_icon(body)
+  local lower = (body or ""):lower()
+  for _, entry in ipairs(ACTIVITY_ICONS) do
+    if lower:match(entry.pattern) then
+      return entry
+    end
+  end
+  return FALLBACK_ICON
+end
+
+local function strip_html(body)
+  local s = (body or ""):gsub("<br%s*/?>", " ")
+  s = s:gsub("<[^>]+>", "")
+  s = s:gsub("\n", " ")
+  return s
+end
+
+local function render_thread(result, disc, width, reply_key, resolve_key)
+  local lines = result.lines
+  local highlights = result.highlights
+  local row_map = result.row_map
+  local first_note = disc.notes and disc.notes[1]
+  if not first_note then return end
+
+  local resolved = disc.resolved
+  if resolved == nil then
+    for _, note in ipairs(disc.notes) do
+      if note.resolvable ~= nil then
+        resolved = note.resolved
+        break
+      end
+    end
+  end
+
+  local status_str = ""
+  if first_note.resolvable ~= nil or disc.resolved ~= nil then
+    status_str = resolved and " Resolved " or " Unresolved "
+  end
+
+  local time_str = format_time_short(first_note.created_at)
+  local header_meta = time_str ~= "" and (" · " .. time_str) or ""
+  local header_text = "@" .. first_note.author
+  local fill = math.max(0, 62 - #header_text - #header_meta - #status_str)
+
+  local thread_start_row = #lines
+
+  -- Header: ┌ @author · time  Resolved/Unresolved ──────
+  table.insert(lines, string.format(
+    "┌ %s%s%s%s",
+    header_text,
+    header_meta,
+    status_str,
+    string.rep("─", fill)
+  ))
+  row_map[thread_start_row] = { type = "thread_start", discussion = disc }
+
+  -- Header highlights
+  table.insert(highlights, {thread_start_row, 0, 3, "CodeReviewThreadBorder"})
+  table.insert(highlights, {thread_start_row, 4, 4 + #header_text, "CodeReviewCommentAuthor"})
+  if #header_meta > 0 then
+    table.insert(highlights, {thread_start_row, 4 + #header_text, 4 + #header_text + #header_meta, "CodeReviewThreadMeta"})
+  end
+  if #status_str > 0 then
+    local status_start = 4 + #header_text + #header_meta
+    local status_hl = resolved and "CodeReviewCommentResolved" or "CodeReviewCommentUnresolved"
+    table.insert(highlights, {thread_start_row, status_start, status_start + #status_str, status_hl})
+  end
+  if fill > 0 then
+    local fill_start = 4 + #header_text + #header_meta + #status_str
+    table.insert(highlights, {thread_start_row, fill_start, fill_start + fill * 3, "CodeReviewThreadBorder"})
+  end
+
+  -- File path line for inline comments (position present)
+  if first_note.position then
+    local path = first_note.position.new_path or ""
+    local line_num = first_note.position.new_line or 0
+    local file_path_str = "│ \xef\x90\x9f " .. path .. ":" .. line_num
+    local file_path_row = #lines
+    table.insert(lines, file_path_str)
+    row_map[file_path_row] = {
+      type = "file_path",
+      discussion = disc,
+      path = first_note.position.new_path,
+      line = first_note.position.new_line,
+    }
+    table.insert(highlights, {file_path_row, 0, #file_path_str, "CodeReviewDiscussionFilePath"})
+  end
+
+  -- Body lines parsed for block-level markdown
+  local body_start = #lines
+  local body_result = markdown.parse_blocks(first_note.body or "", "CodeReviewComment", { width = width })
+  for _, bl in ipairs(body_result.lines) do
+    local row = #lines
+    table.insert(lines, bl)
+    row_map[row] = { type = "thread", discussion = disc }
+  end
+  for _, h in ipairs(body_result.highlights) do
+    table.insert(highlights, { body_start + h[1], h[2], h[3], h[4] })
+  end
+  for _, cb in ipairs(body_result.code_blocks) do
+    table.insert(result.code_blocks, {
+      start_row = body_start + cb.start_row,
+      end_row = body_start + cb.end_row,
+      lang = cb.lang,
+      text = cb.text,
+      indent = cb.indent,
+    })
+  end
+
+  -- Replies
+  for i = 2, #disc.notes do
+    local reply = disc.notes[i]
+    if not reply.system then
+      local rt = format_time_short(reply.created_at)
+      local rmeta = rt ~= "" and (" · " .. rt) or ""
+      local sep_row = #lines
+      table.insert(lines, "")
+      row_map[sep_row] = { type = "thread", discussion = disc }
+
+      local reply_header_row = #lines
+      table.insert(lines, string.format("↪ @%s%s", reply.author, rmeta))
+      row_map[reply_header_row] = { type = "thread", discussion = disc }
+
+      -- Reply header highlights
+      table.insert(highlights, {reply_header_row, 0, 3, "CodeReviewThreadBorder"})
+      local rauthor_len = 1 + #reply.author
+      table.insert(highlights, {reply_header_row, 4, 4 + rauthor_len, "CodeReviewCommentAuthor"})
+      if #rmeta > 0 then
+        table.insert(highlights, {reply_header_row, 4 + rauthor_len, 4 + rauthor_len + #rmeta, "CodeReviewThreadMeta"})
+      end
+
+      local reply_body_start = #lines
+      local reply_result = markdown.parse_blocks(reply.body or "", "CodeReviewComment", { width = width })
+      for _, rl in ipairs(reply_result.lines) do
+        local rrow = #lines
+        table.insert(lines, rl)
+        row_map[rrow] = { type = "thread", discussion = disc }
+      end
+      for _, h in ipairs(reply_result.highlights) do
+        table.insert(highlights, { reply_body_start + h[1], h[2], h[3], h[4] })
+      end
+      for _, cb in ipairs(reply_result.code_blocks) do
+        table.insert(result.code_blocks, {
+          start_row = reply_body_start + cb.start_row,
+          end_row = reply_body_start + cb.end_row,
+          lang = cb.lang,
+          text = cb.text,
+          indent = cb.indent,
+        })
+      end
+    end
+  end
+
+  -- Footer: └ r:reply  gt:un/resolve ──────────────────────
+  local footer_text = disc.is_draft
+    and string.format("%s:un/resolve", resolve_key)
+    or string.format("%s:reply  %s:un/resolve", reply_key, resolve_key)
+  local footer_fill = math.max(0, 44 - #footer_text)
+  local footer_row = #lines
+  table.insert(lines, string.format("└ %s%s", footer_text, string.rep("─", footer_fill)))
+  row_map[footer_row] = { type = "thread", discussion = disc }
+
+  -- Footer highlights
+  table.insert(highlights, {footer_row, 0, 3, "CodeReviewThreadBorder"})
+  table.insert(highlights, {footer_row, 4, 4 + #footer_text, "CodeReviewFloatFooterKey"})
+  if footer_fill > 0 then
+    local ffill_start = 4 + #footer_text
+    table.insert(highlights, {footer_row, ffill_start, ffill_start + footer_fill * 3, "CodeReviewThreadBorder"})
+  end
+
+  table.insert(lines, "")
+end
+
 function M.build_activity_lines(discussions, width)
   width = width or 60
   local result = { lines = {}, highlights = {}, row_map = {}, code_blocks = {} }
@@ -135,163 +318,77 @@ function M.build_activity_lines(discussions, width)
 
   local lines = result.lines
   local highlights = result.highlights
-  local row_map = result.row_map
-
-  table.insert(lines, "")
-  local activity_line = "-- Activity " .. string.rep("-", 58)
-  table.insert(lines, activity_line)
-  table.insert(highlights, {#lines - 1, 0, #activity_line, "CodeReviewThreadBorder"})
-  table.insert(lines, "")
 
   local km = require("codereview.keymaps")
   local reply_key = km.get("reply") or "r"
   local resolve_key = km.get("toggle_resolve") or "gt"
 
+  -- Pass 1: collect system notes
+  local system_notes = {}
   for _, disc in ipairs(discussions) do
     local first_note = disc.notes and disc.notes[1]
-    if first_note and not first_note.position then
-      if first_note.system then
-        table.insert(lines, string.format(
-          "  - @%s %s (%s)",
-          first_note.author,
-          first_note.body:gsub("<br%s*/?>", " "):gsub("<[^>]+>", ""):gsub("\n", " "):sub(1, 80),
-          M.format_time(first_note.created_at)
-        ))
-      else
-        local resolved = disc.resolved
-        if resolved == nil then
-          for _, note in ipairs(disc.notes) do
-            if note.resolvable ~= nil then
-              resolved = note.resolved
-              break
-            end
-          end
-        end
-
-        local status_str = ""
-        if first_note.resolvable ~= nil or disc.resolved ~= nil then
-          status_str = resolved and " Resolved " or " Unresolved "
-        end
-
-        local time_str = format_time_short(first_note.created_at)
-        local header_meta = time_str ~= "" and (" · " .. time_str) or ""
-        local header_text = "@" .. first_note.author
-        local fill = math.max(0, 62 - #header_text - #header_meta - #status_str)
-
-        -- Row offset is 0-indexed from start of lines table
-        local thread_start_row = #lines
-
-        -- Header: ┌ @author · MM/DD HH:MM  Resolved/Unresolved ──────
-        table.insert(lines, string.format(
-          "┌ %s%s%s%s",
-          header_text,
-          header_meta,
-          status_str,
-          string.rep("─", fill)
-        ))
-        row_map[thread_start_row] = { type = "thread_start", discussion = disc }
-
-        -- Header highlights
-        table.insert(highlights, {thread_start_row, 0, 3, "CodeReviewThreadBorder"})
-        table.insert(highlights, {thread_start_row, 4, 4 + #header_text, "CodeReviewCommentAuthor"})
-        if #header_meta > 0 then
-          table.insert(highlights, {thread_start_row, 4 + #header_text, 4 + #header_text + #header_meta, "CodeReviewThreadMeta"})
-        end
-        if #status_str > 0 then
-          local status_start = 4 + #header_text + #header_meta
-          local status_hl = resolved and "CodeReviewCommentResolved" or "CodeReviewCommentUnresolved"
-          table.insert(highlights, {thread_start_row, status_start, status_start + #status_str, status_hl})
-        end
-        if fill > 0 then
-          local fill_start = 4 + #header_text + #header_meta + #status_str
-          table.insert(highlights, {thread_start_row, fill_start, fill_start + fill * 3, "CodeReviewThreadBorder"})
-        end
-
-        -- Body lines parsed for block-level markdown
-        local body_start = #lines
-        local body_result = markdown.parse_blocks(first_note.body or "", "CodeReviewComment", { width = width })
-        for _, bl in ipairs(body_result.lines) do
-          local row = #lines
-          table.insert(lines, bl)
-          row_map[row] = { type = "thread", discussion = disc }
-        end
-        for _, h in ipairs(body_result.highlights) do
-          table.insert(highlights, { body_start + h[1], h[2], h[3], h[4] })
-        end
-        for _, cb in ipairs(body_result.code_blocks) do
-          table.insert(result.code_blocks, {
-            start_row = body_start + cb.start_row,
-            end_row = body_start + cb.end_row,
-            lang = cb.lang,
-            text = cb.text,
-            indent = cb.indent,
-          })
-        end
-
-        -- Replies
-        for i = 2, #disc.notes do
-          local reply = disc.notes[i]
-          if not reply.system then
-            local rt = format_time_short(reply.created_at)
-            local rmeta = rt ~= "" and (" · " .. rt) or ""
-            local sep_row = #lines
-            table.insert(lines, "")
-            row_map[sep_row] = { type = "thread", discussion = disc }
-
-            local reply_header_row = #lines
-            table.insert(lines, string.format("↪ @%s%s", reply.author, rmeta))
-            row_map[reply_header_row] = { type = "thread", discussion = disc }
-
-            -- Reply header highlights
-            table.insert(highlights, {reply_header_row, 0, 3, "CodeReviewThreadBorder"})
-            local rauthor_len = 1 + #reply.author
-            table.insert(highlights, {reply_header_row, 4, 4 + rauthor_len, "CodeReviewCommentAuthor"})
-            if #rmeta > 0 then
-              table.insert(highlights, {reply_header_row, 4 + rauthor_len, 4 + rauthor_len + #rmeta, "CodeReviewThreadMeta"})
-            end
-
-            local reply_body_start = #lines
-            local reply_result = markdown.parse_blocks(reply.body or "", "CodeReviewComment", { width = width })
-            for _, rl in ipairs(reply_result.lines) do
-              local rrow = #lines
-              table.insert(lines, rl)
-              row_map[rrow] = { type = "thread", discussion = disc }
-            end
-            for _, h in ipairs(reply_result.highlights) do
-              table.insert(highlights, { reply_body_start + h[1], h[2], h[3], h[4] })
-            end
-            for _, cb in ipairs(reply_result.code_blocks) do
-              table.insert(result.code_blocks, {
-                start_row = reply_body_start + cb.start_row,
-                end_row = reply_body_start + cb.end_row,
-                lang = cb.lang,
-                text = cb.text,
-                indent = cb.indent,
-              })
-            end
-          end
-        end
-
-        -- Footer: └ r:reply  gt:un/resolve ──────────────────────
-        local footer_text = disc.is_draft
-          and string.format("%s:un/resolve", resolve_key)
-          or string.format("%s:reply  %s:un/resolve", reply_key, resolve_key)
-        local footer_fill = math.max(0, 44 - #footer_text)
-        local footer_row = #lines
-        table.insert(lines, string.format("└ %s%s", footer_text, string.rep("─", footer_fill)))
-        row_map[footer_row] = { type = "thread", discussion = disc }
-
-        -- Footer highlights
-        table.insert(highlights, {footer_row, 0, 3, "CodeReviewThreadBorder"})
-        table.insert(highlights, {footer_row, 4, 4 + #footer_text, "CodeReviewFloatFooterKey"})
-        if footer_fill > 0 then
-          local ffill_start = 4 + #footer_text
-          table.insert(highlights, {footer_row, ffill_start, ffill_start + footer_fill * 3, "CodeReviewThreadBorder"})
-        end
-
-        table.insert(lines, "")
-      end
+    if first_note and first_note.system then
+      table.insert(system_notes, first_note)
     end
+  end
+
+  -- Pass 2: collect user discussions (both general AND inline)
+  local user_discussions = {}
+  for _, disc in ipairs(discussions) do
+    local first_note = disc.notes and disc.notes[1]
+    if first_note and not first_note.system then
+      table.insert(user_discussions, disc)
+    end
+  end
+
+  -- ── Activity section ─────────────────────────────────────────────
+  table.insert(lines, "")
+  local sep1 = string.rep("─", width)
+  table.insert(lines, sep1)
+  table.insert(highlights, {#lines - 1, 0, #sep1, "CodeReviewMdHr"})
+  local act_header_row = #lines
+  table.insert(lines, "## Activity")
+  table.insert(highlights, {act_header_row, 0, 11, "CodeReviewMdH2"})
+  table.insert(lines, "")
+
+  for _, note in ipairs(system_notes) do
+    local icon_entry = get_activity_icon(note.body)
+    local icon = icon_entry.icon
+    local author_str = "@" .. note.author
+    local time_str = format_time_short(note.created_at)
+    local body_text = strip_html(note.body):sub(1, 80)
+    -- Build line: "  {icon} @author body_text   time"
+    local left = "  " .. icon .. " " .. author_str .. " " .. body_text
+    local right = time_str
+    local gap = math.max(1, width - #left - #right)
+    local activity_line = left .. string.rep(" ", gap) .. right
+    local activity_row = #lines
+    table.insert(lines, activity_line)
+    -- Highlights: icon (3 bytes), @author, time
+    local icon_col = 2
+    table.insert(highlights, {activity_row, icon_col, icon_col + 3, icon_entry.hl})
+    local author_col = icon_col + 3 + 1  -- after icon + space
+    table.insert(highlights, {activity_row, author_col, author_col + #author_str, "CodeReviewCommentAuthor"})
+    if #right > 0 then
+      local time_col = #left + gap
+      table.insert(highlights, {activity_row, time_col, time_col + #right, "CodeReviewActivityTime"})
+    end
+  end
+
+  -- ── Discussions section ───────────────────────────────────────────
+  table.insert(lines, "")
+  local sep2 = string.rep("─", width)
+  table.insert(lines, sep2)
+  table.insert(highlights, {#lines - 1, 0, #sep2, "CodeReviewMdHr"})
+  local _, unresolved = M.count_discussions(discussions)
+  local disc_header = "## Discussions (" .. unresolved .. " unresolved)"
+  local disc_header_row = #lines
+  table.insert(lines, disc_header)
+  table.insert(highlights, {disc_header_row, 0, #disc_header, "CodeReviewMdH2"})
+  table.insert(lines, "")
+
+  for _, disc in ipairs(user_discussions) do
+    render_thread(result, disc, width, reply_key, resolve_key)
   end
 
   return result
