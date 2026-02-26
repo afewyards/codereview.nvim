@@ -77,6 +77,19 @@ local function start_single(review, diff_state, layout)
     end)
 
     render_file_suggestions(diff_state, layout, suggestions)
+
+    local summary_mod = require("codereview.ai.summary")
+    summary_mod.generate(review, diffs, diff_state.ai_suggestions, function(text, gen_err)
+      if gen_err then
+        vim.schedule(function()
+          vim.notify("AI summary failed: " .. gen_err, vim.log.levels.WARN)
+        end)
+        return
+      end
+      vim.schedule(function()
+        diff_state.ai_review_summary = text
+      end)
+    end)
   end)
 
   if job_id and job_id > 0 then
@@ -152,6 +165,18 @@ local function start_multi(review, diff_state, layout)
               vim.notify(string.format("AI review: %d suggestions found", count), vim.log.levels.INFO)
             end)
           end
+          local summary_mod = require("codereview.ai.summary")
+          summary_mod.generate(review, diffs, diff_state.ai_suggestions, function(text, gen_err)
+            if gen_err then
+              vim.schedule(function()
+                vim.notify("AI summary failed: " .. gen_err, vim.log.levels.WARN)
+              end)
+              return
+            end
+            vim.schedule(function()
+              diff_state.ai_review_summary = text
+            end)
+          end)
         end
       end)
 
@@ -227,6 +252,19 @@ function M.start_file(review, diff_state, layout)
       diff_state.ai_suggestions = kept
 
       render_file_suggestions(diff_state, layout, suggestions)
+
+      local summary_mod = require("codereview.ai.summary")
+      summary_mod.generate(review, diffs, diff_state.ai_suggestions, function(text, gen_err)
+        if gen_err then
+          vim.schedule(function()
+            vim.notify("AI summary failed: " .. gen_err, vim.log.levels.WARN)
+          end)
+          return
+        end
+        vim.schedule(function()
+          diff_state.ai_review_summary = text
+        end)
+      end)
     end)
 
     if file_job and file_job > 0 then
