@@ -17,6 +17,7 @@ local diff_render = require("codereview.mr.diff_render")
 local diff_sidebar = require("codereview.mr.diff_sidebar")
 local diff_nav = require("codereview.mr.diff_nav")
 local diff_comments = require("codereview.mr.diff_comments")
+local tracker = require("codereview.mr.review_tracker")
 local wrap_text = tvl.wrap_text
 
 -- Namespace — same name returns same ID, safe to redeclare
@@ -1205,6 +1206,11 @@ function M.setup_keymaps(state, layout, active_states)
     end
   end)
 
+  -- Sidebar: ? to show help
+  map(sidebar_buf, "n", "?", function()
+    require("codereview.mr.sidebar_help").open()
+  end)
+
   -- Sidebar: <CR> to select file, toggle directory, or open summary
   map(sidebar_buf, "n", "<CR>", function()
     local cursor = vim.api.nvim_win_get_cursor(layout.sidebar_win)
@@ -1385,6 +1391,33 @@ function M.setup_keymaps(state, layout, active_states)
         if file_idx ~= state.current_file then
           state.current_file = file_idx
           diff_sidebar.render_sidebar(layout.sidebar_buf, state)
+        end
+      end
+
+      -- Review tracking: mark visible hunks as seen, re-render sidebar on change
+      local track_idx = state.current_file or 1
+      local file_entry = state.files and state.files[track_idx]
+      local track_path = file_entry and (file_entry.new_path or file_entry.old_path)
+      if track_path then
+        local line_data = state.scroll_mode
+          and state.scroll_line_data
+          or (state.line_data_cache[track_idx] or {})
+        if #line_data > 0 then
+          if not state.file_review_status[track_path] then
+            state.file_review_status[track_path] = tracker.init_file(
+              track_path, line_data,
+              state.scroll_mode and track_idx or nil
+            )
+          end
+          local frs = state.file_review_status[track_path]
+          local ok, w0 = pcall(vim.fn.line, "w0")
+          if ok then
+            local win_height = vim.api.nvim_win_get_height(layout.main_win)
+            local changed = tracker.mark_visible(frs, w0, w0 + win_height - 1)
+            if changed then
+              diff_sidebar.render_sidebar(layout.sidebar_buf, state)
+            end
+          end
         end
       end
     end,

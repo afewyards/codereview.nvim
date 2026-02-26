@@ -30,6 +30,9 @@ local _ns_counter = 0
 -- Sign store
 local _sign_store = {}
 
+-- Keymap store
+local _keymap_store = {}
+
 -- Create minimal vim global for testing
 _G.vim = {
   fn = {
@@ -239,6 +242,16 @@ _G.vim = {
       end
       return false
     end,
+    nvim_buf_get_keymap = function(buf, mode)
+      if not _keymap_store[buf] then return {} end
+      local result = {}
+      for _, km in ipairs(_keymap_store[buf]) do
+        if km.mode == mode then
+          table.insert(result, km)
+        end
+      end
+      return result
+    end,
   },
   b = {
     foo = {}
@@ -303,7 +316,18 @@ _G.vim = {
     return result
   end,
   keymap = {
-    set = function() end,
+    set = function(mode, lhs, fn, opts)
+      opts = opts or {}
+      local buf = opts.buffer
+      if buf then
+        if not _keymap_store[buf] then _keymap_store[buf] = {} end
+        table.insert(_keymap_store[buf], {
+          mode = mode,
+          lhs = lhs,
+          rhs = fn,
+        })
+      end
+    end,
   },
   filetype = {
     match = function() return nil end,
