@@ -281,7 +281,7 @@ _G.vim = {
     end,
     __newindex = function() end,
   }),
-  o = setmetatable({}, {
+  o = setmetatable({ lines = 10, columns = 80 }, {
     __index = function() return "" end,
     __newindex = function() end,
   }),
