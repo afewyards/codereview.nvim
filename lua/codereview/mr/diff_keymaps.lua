@@ -1218,6 +1218,13 @@ function M.setup_keymaps(state, layout, active_states)
     local entry = state.sidebar_row_map and state.sidebar_row_map[row]
     if not entry then return end
 
+    -- Restore main_buf into main_win if the user switched to another buffer
+    if vim.api.nvim_win_is_valid(layout.main_win)
+      and vim.api.nvim_buf_is_valid(layout.main_buf)
+      and vim.api.nvim_win_get_buf(layout.main_win) ~= layout.main_buf then
+      vim.api.nvim_win_set_buf(layout.main_win, layout.main_buf)
+    end
+
     if entry.type == "summary" then
       state.view_mode = "summary"
       diff_sidebar.render_sidebar(layout.sidebar_buf, state)
