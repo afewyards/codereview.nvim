@@ -411,10 +411,24 @@ function M.create_draft_comment(client, ctx, review, params)
 end
 
 --- Bulk-publish all draft notes on an MR.
-function M.publish_review(client, ctx, review)
+--- @param opts table|nil Optional { body: string, event: string }
+function M.publish_review(client, ctx, review, opts)
   local headers, err = get_headers()
   if not headers then return nil, err end
-  return client.post(ctx.base_url, mr_base(ctx, review.id) .. "/draft_notes/bulk_publish", { body = {}, headers = headers })
+  local _, bulk_err = client.post(ctx.base_url, mr_base(ctx, review.id) .. "/draft_notes/bulk_publish", { body = {}, headers = headers })
+  if bulk_err then return nil, bulk_err end
+  opts = opts or {}
+  if opts.body and opts.body ~= "" then
+    local _, note_err = client.post(ctx.base_url, mr_base(ctx, review.id) .. "/notes", { body = { body = opts.body }, headers = headers })
+    if note_err then return nil, note_err end
+  end
+  if opts.event == "APPROVE" then
+    local approve_body = {}
+    if review.sha then approve_body.sha = review.sha end
+    local _, approve_err = client.post(ctx.base_url, mr_base(ctx, review.id) .. "/approve", { body = approve_body, headers = headers })
+    if approve_err then return nil, approve_err end
+  end
+  return {}, nil
 end
 
 --- Create a new merge request.
