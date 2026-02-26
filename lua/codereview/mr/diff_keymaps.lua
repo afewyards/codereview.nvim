@@ -252,6 +252,26 @@ function M.setup_keymaps(state, layout, active_states)
     end
   end
 
+  local function jump_to_summary_file_path()
+    if state.view_mode ~= "summary" then return false end
+    local cursor = vim.api.nvim_win_get_cursor(layout.main_win)[1]
+    local entry = state.summary_row_map and state.summary_row_map[cursor]
+    if not entry or entry.type ~= "file_path" then return false end
+
+    -- Find file index by path
+    for idx, f in ipairs(state.files or {}) do
+      if f.new_path == entry.path or f.old_path == entry.path then
+        state.view_mode = "diff"
+        state.row_selection = {}
+        vim.wo[layout.main_win].wrap = false
+        vim.wo[layout.main_win].linebreak = false
+        diff_nav.switch_to_file(layout, state, idx)
+        return true
+      end
+    end
+    return false
+  end
+
   -- Refresh: close and reopen the MR view
   local function refresh()
     require("codereview.review.session").stop()
@@ -323,6 +343,7 @@ function M.setup_keymaps(state, layout, active_states)
     -- NOTE: We must NOT map bare "c" with nowait — it blocks cc from ever firing.
     create_comment = function()
       if state.view_mode == "summary" then
+        if jump_to_summary_file_path() then return end
         local comment = require("codereview.mr.comment")
         comment.create_mr_comment(state.review, state.provider, state.ctx, refresh_discussions)
         return
@@ -924,6 +945,25 @@ function M.setup_keymaps(state, layout, active_states)
 
     select_next_note = function()
       if state.view_mode ~= "diff" then
+        -- In summary: cycle through discussion thread headers first
+        local cursor_row = vim.api.nvim_win_get_cursor(layout.main_win)[1]
+        local thread_rows = {}
+        for row, entry in pairs(state.summary_row_map or {}) do
+          if entry.type == "thread_start" then
+            table.insert(thread_rows, row)
+          end
+        end
+        table.sort(thread_rows)
+
+        -- Find next thread header after cursor
+        for _, r in ipairs(thread_rows) do
+          if r > cursor_row then
+            vim.api.nvim_win_set_cursor(layout.main_win, { r, 0 })
+            return
+          end
+        end
+
+        -- Past last thread (or no threads): transition to diff view
         if not state.files or #state.files == 0 then return end
         -- Transition from summary to diff view
         state.view_mode = "diff"
@@ -1024,6 +1064,28 @@ function M.setup_keymaps(state, layout, active_states)
 
     select_prev_note = function()
       if state.view_mode ~= "diff" then
+        -- In summary: cycle backward through discussion thread headers
+        local cursor_row = vim.api.nvim_win_get_cursor(layout.main_win)[1]
+        local thread_rows = {}
+        for row, entry in pairs(state.summary_row_map or {}) do
+          if entry.type == "thread_start" then
+            table.insert(thread_rows, row)
+          end
+        end
+        table.sort(thread_rows)
+
+        -- Find previous thread header before cursor
+        for i = #thread_rows, 1, -1 do
+          if thread_rows[i] < cursor_row then
+            vim.api.nvim_win_set_cursor(layout.main_win, { thread_rows[i], 0 })
+            return
+          end
+        end
+
+        -- On or before first thread: stay put (don't transition to diff)
+        if #thread_rows > 0 then return end
+
+        -- No threads at all: transition to diff view
         if not state.files or #state.files == 0 then return end
         -- Transition from summary to diff view
         state.view_mode = "diff"
@@ -1201,8 +1263,12 @@ function M.setup_keymaps(state, layout, active_states)
     vim.notify("Discarded failed comment", vim.log.levels.INFO)
   end)
 
-  -- Load more context (<CR> on a load_more line)
+  -- Load more context (<CR> on a load_more line); file path jump in summary
   map(main_buf, "n", "<CR>", function()
+    if state.view_mode == "summary" then
+      jump_to_summary_file_path()
+      return
+    end
     if state.view_mode ~= "diff" then return end
     local cursor = vim.api.nvim_win_get_cursor(layout.main_win)
     local row = cursor[1]
