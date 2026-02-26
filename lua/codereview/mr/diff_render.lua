@@ -23,6 +23,18 @@ local SEPARATOR_NS = vim.api.nvim_create_namespace("codereview_separator")
 -- Persists across re-renders within the same session.
 local syntax_file_cache = {}  -- { [filetype] = path_string | false }
 
+-- Track SHAs we've already attempted to fetch to avoid repeated network calls.
+local fetched_shas = {}
+
+--- Fetch git objects for the given SHAs if they're not available locally.
+--- Only attempts once per unique SHA pair.
+local function ensure_git_objects(base_sha, head_sha)
+  local key = base_sha .. head_sha
+  if fetched_shas[key] then return end
+  fetched_shas[key] = true
+  vim.fn.system({ "git", "fetch", "origin", base_sha, head_sha })
+end
+
 -- ─── Formatting helpers ───────────────────────────────────────────────────────
 
 function M.format_line_number(old_nr, new_nr)
@@ -778,6 +790,14 @@ function M.render_all_files(buf, files, review, discussions, context, file_conte
           "git", "diff", "-U" .. file_ctx,
           review.base_sha, review.head_sha, "--", fpath,
         })
+        -- Only fetch missing objects when user explicitly changed context
+        if vim.v.shell_error ~= 0 and file_ctx ~= context then
+          ensure_git_objects(review.base_sha, review.head_sha)
+          result = vim.fn.system({
+            "git", "diff", "-U" .. file_ctx,
+            review.base_sha, review.head_sha, "--", fpath,
+          })
+        end
         if vim.v.shell_error == 0 and result ~= "" then
           diff_text = result
         end
