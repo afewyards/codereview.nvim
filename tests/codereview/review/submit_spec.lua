@@ -24,3 +24,22 @@ describe("review.submit", function()
     end)
   end)
 end)
+
+describe("bulk_publish", function()
+  it("passes opts to provider.publish_review", function()
+    local captured_opts
+    package.loaded["codereview.providers"] = {
+      detect = function()
+        return {
+          publish_review = function(_, _, _, opts) captured_opts = opts return {}, nil end,
+        }, { base_url = "test" }, nil
+      end,
+    }
+    package.loaded["codereview.api.client"] = {}
+    package.loaded["codereview.review.submit"] = nil
+    local s = require("codereview.review.submit")
+    s.bulk_publish({ id = 1 }, { body = "LGTM", event = "APPROVE" })
+    assert.equal("LGTM", captured_opts.body)
+    assert.equal("APPROVE", captured_opts.event)
+  end)
+end)

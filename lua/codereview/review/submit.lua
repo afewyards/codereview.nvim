@@ -54,7 +54,7 @@ function M.submit_review(review, suggestions)
   return #errors == 0
 end
 
-function M.submit_and_publish(review, ai_suggestions)
+function M.submit_and_publish(review, ai_suggestions, opts)
   -- Post remaining accepted AI suggestions as drafts
   if ai_suggestions then
     local remaining = M.filter_accepted(ai_suggestions)
@@ -63,20 +63,20 @@ function M.submit_and_publish(review, ai_suggestions)
     end
   end
   -- Publish all drafts (human + AI)
-  M.bulk_publish(review)
+  M.bulk_publish(review, opts)
   -- Dismiss all AI suggestions
   if ai_suggestions then
     for _, s in ipairs(ai_suggestions) do s.status = "dismissed" end
   end
 end
 
-function M.bulk_publish(review)
+function M.bulk_publish(review, opts)
   local provider, ctx, err = providers.detect()
   if not provider then
     vim.notify("Could not detect platform: " .. (err or ""), vim.log.levels.ERROR)
     return false
   end
-  local _, pub_err = provider.publish_review(client, ctx, review)
+  local _, pub_err = provider.publish_review(client, ctx, review, opts)
   if pub_err then
     vim.notify("Failed to publish: " .. pub_err, vim.log.levels.ERROR)
     return false
