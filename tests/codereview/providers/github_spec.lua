@@ -733,4 +733,25 @@ describe("publish_review with pending review", function()
     assert.is_nil(err)
     assert.is_true(result.data)
   end)
+
+  it("passes body and event from opts", function()
+    github._pending_review_id = 200
+    local posted_body
+    local mock_client = {
+      get = function(_, path, _)
+        if path:find("/reviews$") then
+          return { status = 200, data = { { id = 200, state = "PENDING" } } }
+        end
+        return { status = 200, data = {} }
+      end,
+      post = function(_, path, opts)
+        if path:find("/events") then posted_body = opts.body end
+        return { status = 200, data = {} }, nil
+      end,
+    }
+    local ctx = { base_url = "https://api.github.com", project = "owner/repo" }
+    github.publish_review(mock_client, ctx, { id = 42, sha = "abc" }, { body = "LGTM", event = "APPROVE" })
+    assert.equal("APPROVE", posted_body.event)
+    assert.equal("LGTM", posted_body.body)
+  end)
 end)
