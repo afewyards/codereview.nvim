@@ -768,18 +768,25 @@ function M.setup_keymaps(state, layout, active_states)
     submit = function()
       if state.view_mode ~= "diff" then return end
       local session = require("codereview.review.session")
+      local submit_float = require("codereview.mr.submit_float")
       local submit_mod = require("codereview.review.submit")
 
       if session.get().ai_pending then
         vim.notify("AI review still running — publishing available drafts", vim.log.levels.WARN)
       end
 
-      submit_mod.submit_and_publish(state.review, state.ai_suggestions)
-      state.local_drafts = {}
-      rerender_ai()
-      session.stop()
-      diff_sidebar.render_sidebar(layout.sidebar_buf, state)
-      refresh_discussions()
+      submit_float.open({
+        prefill = state.ai_review_summary or "",
+        on_submit = function(body, event)
+          submit_mod.submit_and_publish(state.review, state.ai_suggestions, { body = body, event = event })
+          state.local_drafts = {}
+          state.ai_review_summary = nil
+          rerender_ai()
+          session.stop()
+          diff_sidebar.render_sidebar(layout.sidebar_buf, state)
+          refresh_discussions()
+        end,
+      })
     end,
 
     open_in_browser = function()
