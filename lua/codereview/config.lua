@@ -10,7 +10,7 @@ local defaults = {
   picker = nil,
   debug = false,      -- write request/auth logs to .codereview.log
   diff = { context = 8, scroll_threshold = 50, comment_width = 80, separator_char = "╳", separator_lines = 2 },
-  ai = { enabled = true, claude_cmd = "claude", agent = "code-review", review_level = "info" },
+  ai = { enabled = true, claude_cmd = "claude", agent = "code-review", review_level = "info", max_file_size = 500 },
   keymaps = {},
 }
 
@@ -34,6 +34,7 @@ local function validate(c)
   if not valid_levels[c.ai.review_level] then
     c.ai.review_level = "info"
   end
+  c.ai.max_file_size = math.max(0, c.ai.max_file_size or 500)
   return c
 end
 
