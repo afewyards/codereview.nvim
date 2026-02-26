@@ -682,6 +682,30 @@ end
 
 -- ─── All-files scroll view ────────────────────────────────────────────────────
 
+--- Build a map of file path -> discussions[] for O(1) lookup.
+--- Handles both current and outdated (change_position) paths.
+local function index_discussions_by_path(discussions, review)
+  local by_path = {}
+  for _, disc in ipairs(discussions or {}) do
+    local note = disc.notes and disc.notes[1]
+    if not note or not note.position then goto continue end
+    local path
+    if is_outdated(disc, review) and note.change_position then
+      local cp = note.change_position
+      path = cp.new_path or cp.old_path
+    else
+      local pos = note.position
+      path = pos.new_path or pos.old_path
+    end
+    if path then
+      by_path[path] = by_path[path] or {}
+      table.insert(by_path[path], disc)
+    end
+    ::continue::
+  end
+  return by_path
+end
+
 function M.render_all_files(buf, files, review, discussions, context, file_contexts, ai_suggestions, row_selection, current_user, editing_note, diff_cache)
   local parser = require("codereview.mr.diff_parser")
   context = context or config.get().diff.context
@@ -690,6 +714,35 @@ function M.render_all_files(buf, files, review, discussions, context, file_conte
   local all_lines = {}
   local all_line_data = {}
   local file_sections = {}
+
+  -- Batch git diff: collect uncached paths sharing the global context and fetch in one call
+  if review.base_sha and review.head_sha and diff_cache then
+    local uncached_paths = {}
+    for file_idx, file_diff in ipairs(files) do
+      local fpath = file_diff.new_path or file_diff.old_path
+      local file_ctx = file_contexts[file_idx] or context
+      local cache_key = fpath and (fpath .. ":" .. file_ctx) or nil
+      if fpath and file_ctx == context and not (cache_key and diff_cache[cache_key]) then
+        table.insert(uncached_paths, fpath)
+      end
+    end
+    if #uncached_paths > 0 then
+      local cmd = { "git", "diff", "-U" .. context, review.base_sha, review.head_sha, "--" }
+      for _, p in ipairs(uncached_paths) do table.insert(cmd, p) end
+      local result = vim.fn.system(cmd)
+      if vim.v.shell_error == 0 and result ~= "" then
+        local batch = parser.parse_batch_diff(result)
+        for path, diff_text in pairs(batch) do
+          local cache_key = path .. ":" .. context
+          if not diff_cache[cache_key] then
+            local hunks = parser.parse_hunks(diff_text)
+            local display = parser.build_display(hunks, context)
+            diff_cache[cache_key] = { hunks = hunks, display = display }
+          end
+        end
+      end
+    end
+  end
 
   for file_idx, file_diff in ipairs(files) do
     local section_start = #all_lines + 1
@@ -880,49 +933,49 @@ function M.render_all_files(buf, files, review, discussions, context, file_conte
 
   -- Place comment signs and inline threads per file section
   local all_row_discussions = {}
+  local disc_by_path = index_discussions_by_path(discussions, review)
   for _, section in ipairs(file_sections) do
-    for _, disc in ipairs(discussions or {}) do
-      if discussion_matches_file(disc, section.file, review) then
-        local target_line, range_start, disc_outdated = discussion_line(disc, review)
-        if target_line then
-          local sign_name = is_resolved(disc) and "CodeReviewCommentSign"
-            or "CodeReviewUnresolvedSign"
-          local file_prefix = section.file_idx .. ":"
-          -- Place signs on range lines using O(1) lookups
-          if range_start and range_start ~= target_line then
-            for ln = range_start, target_line - 1 do
-              local i = scroll_map[file_prefix .. ln]
-              if i then
-                pcall(vim.fn.sign_place, 0, "CodeReview", sign_name, buf, { lnum = i })
-              end
+    local fpath = section.file.new_path or section.file.old_path
+    for _, disc in ipairs(disc_by_path[fpath] or {}) do
+      local target_line, range_start, disc_outdated = discussion_line(disc, review)
+      if target_line then
+        local sign_name = is_resolved(disc) and "CodeReviewCommentSign"
+          or "CodeReviewUnresolvedSign"
+        local file_prefix = section.file_idx .. ":"
+        -- Place signs on range lines using O(1) lookups
+        if range_start and range_start ~= target_line then
+          for ln = range_start, target_line - 1 do
+            local i = scroll_map[file_prefix .. ln]
+            if i then
+              pcall(vim.fn.sign_place, 0, "CodeReview", sign_name, buf, { lnum = i })
             end
           end
-          -- Find the end-line row for the inline thread (O(1) lookup)
-          local i = scroll_map[file_prefix .. target_line]
-          if i then
-            -- Place sign (also covers single-line comments)
-            pcall(vim.fn.sign_place, 0, "CodeReview", sign_name, buf, { lnum = i })
+        end
+        -- Find the end-line row for the inline thread (O(1) lookup)
+        local i = scroll_map[file_prefix .. target_line]
+        if i then
+          -- Place sign (also covers single-line comments)
+          pcall(vim.fn.sign_place, 0, "CodeReview", sign_name, buf, { lnum = i })
 
-            local notes = disc.notes
-            if notes and #notes > 0 then
-              local sel = row_selection and row_selection[i]
-              local sel_idx = sel and sel.type == "comment" and sel.disc_id == disc.id and sel.note_idx or nil
-              local result = tvl.build(disc, {
-                sel_idx = sel_idx,
-                current_user = current_user,
-                outdated = disc_outdated,
-                editing_note = editing_note,
-                spacer_height = editing_note and editing_note.spacer_height or 0,
-                gutter = 4,
-              })
-              pcall(vim.api.nvim_buf_set_extmark, buf, DIFF_NS, i - 1, 0, {
-                virt_lines = result.virt_lines, virt_lines_above = false,
-              })
-            end
-
-            if not all_row_discussions[i] then all_row_discussions[i] = {} end
-            table.insert(all_row_discussions[i], disc)
+          local notes = disc.notes
+          if notes and #notes > 0 then
+            local sel = row_selection and row_selection[i]
+            local sel_idx = sel and sel.type == "comment" and sel.disc_id == disc.id and sel.note_idx or nil
+            local result = tvl.build(disc, {
+              sel_idx = sel_idx,
+              current_user = current_user,
+              outdated = disc_outdated,
+              editing_note = editing_note,
+              spacer_height = editing_note and editing_note.spacer_height or 0,
+              gutter = 4,
+            })
+            pcall(vim.api.nvim_buf_set_extmark, buf, DIFF_NS, i - 1, 0, {
+              virt_lines = result.virt_lines, virt_lines_above = false,
+            })
           end
+
+          if not all_row_discussions[i] then all_row_discussions[i] = {} end
+          table.insert(all_row_discussions[i], disc)
         end
       end
     end

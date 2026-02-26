@@ -393,6 +393,73 @@ describe("mr.diff_render", function()
     end)
   end)
 
+  describe("render_all_files discussion pre-indexing", function()
+    it("places comments using path index instead of scanning all discussions", function()
+      local buf = vim.api.nvim_create_buf(false, true)
+      local files = {
+        { new_path = "a.lua", old_path = "a.lua", diff = "@@ -1,2 +1,2 @@\n ctx\n-old\n+new\n" },
+        { new_path = "b.lua", old_path = "b.lua", diff = "@@ -5,2 +5,2 @@\n ctx\n-old2\n+new2\n" },
+      }
+      local discussions = {
+        {
+          id = "d1",
+          notes = {{
+            id = "n1",
+            body = "comment on a.lua",
+            author = "user1",
+            created_at = "2026-01-01T00:00:00Z",
+            position = { new_path = "a.lua", new_line = 2 },
+          }},
+        },
+        {
+          id = "d2",
+          notes = {{
+            id = "n2",
+            body = "comment on b.lua",
+            author = "user2",
+            created_at = "2026-01-01T00:00:00Z",
+            position = { new_path = "b.lua", new_line = 6 },
+          }},
+        },
+      }
+      local result = diff_render.render_all_files(buf, files, { diff_refs = nil }, discussions, 3, nil, nil, nil, nil, nil, nil)
+      local found_d1, found_d2 = false, false
+      for _, discs in pairs(result.row_discussions) do
+        for _, d in ipairs(discs) do
+          if d.id == "d1" then found_d1 = true end
+          if d.id == "d2" then found_d2 = true end
+        end
+      end
+      assert.is_true(found_d1, "discussion on a.lua should be placed")
+      assert.is_true(found_d2, "discussion on b.lua should be placed")
+      vim.api.nvim_buf_delete(buf, { force = true })
+    end)
+
+    it("ignores discussions for files not in the file list", function()
+      local buf = vim.api.nvim_create_buf(false, true)
+      local files = {
+        { new_path = "a.lua", old_path = "a.lua", diff = "@@ -1,2 +1,2 @@\n ctx\n-old\n+new\n" },
+      }
+      local discussions = {
+        {
+          id = "d_other",
+          notes = {{
+            id = "n_other",
+            body = "comment on other file",
+            author = "user1",
+            created_at = "2026-01-01T00:00:00Z",
+            position = { new_path = "other.lua", new_line = 1 },
+          }},
+        },
+      }
+      local result = diff_render.render_all_files(buf, files, { diff_refs = nil }, discussions, 3, nil, nil, nil, nil, nil, nil)
+      local total = 0
+      for _ in pairs(result.row_discussions) do total = total + 1 end
+      assert.equals(0, total)
+      vim.api.nvim_buf_delete(buf, { force = true })
+    end)
+  end)
+
   describe("update_selection_at_row", function()
     it("clears AIDRAFT_NS extmarks on target row only", function()
       local buf = vim.api.nvim_create_buf(false, true)
@@ -501,5 +568,93 @@ describe("mr.diff_render", function()
 
       vim.api.nvim_buf_delete(buf, { force = true })
     end)
+  end)
+end)
+
+describe("render_all_files batch git diff", function()
+  it("pre-populates cache from batch diff when cache is cold", function()
+    local system_calls = {}
+    local orig_system = vim.fn.system
+    vim.fn.system = function(cmd)
+      table.insert(system_calls, cmd)
+      if type(cmd) == "table" and cmd[1] == "git" and cmd[2] == "diff" then
+        return table.concat({
+          "diff --git a/a.lua b/a.lua",
+          "--- a/a.lua",
+          "+++ b/a.lua",
+          "@@ -1,2 +1,2 @@",
+          " ctx",
+          "-old",
+          "+new",
+          "diff --git a/b.lua b/b.lua",
+          "--- a/b.lua",
+          "+++ b/b.lua",
+          "@@ -5,2 +5,2 @@",
+          " ctx2",
+          "-old2",
+          "+new2",
+        }, "\n")
+      end
+      return ""
+    end
+    vim.v.shell_error = 0
+
+    local buf = vim.api.nvim_create_buf(false, true)
+    local files = {
+      { new_path = "a.lua", old_path = "a.lua", diff = "" },
+      { new_path = "b.lua", old_path = "b.lua", diff = "" },
+    }
+    local diff_cache = {}
+    local review = { base_sha = "aaa", head_sha = "bbb", diff_refs = nil }
+    diff_render.render_all_files(buf, files, review, {}, 3, nil, nil, nil, nil, nil, diff_cache)
+
+    local git_diff_calls = 0
+    for _, call in ipairs(system_calls) do
+      if type(call) == "table" and call[1] == "git" and call[2] == "diff" then
+        git_diff_calls = git_diff_calls + 1
+      end
+    end
+    assert.equals(1, git_diff_calls)
+
+    assert.truthy(diff_cache["a.lua:3"])
+    assert.truthy(diff_cache["b.lua:3"])
+
+    vim.fn.system = orig_system
+    vim.api.nvim_buf_delete(buf, { force = true })
+  end)
+
+  it("skips batch call when all files are cached", function()
+    local system_calls = {}
+    local orig_system = vim.fn.system
+    vim.fn.system = function(cmd)
+      table.insert(system_calls, cmd)
+      return ""
+    end
+
+    local buf = vim.api.nvim_create_buf(false, true)
+    local diff_parser = require("codereview.mr.diff_parser")
+    local diff_text_a = "@@ -1,2 +1,2 @@\n ctx\n-old\n+new\n"
+    local diff_text_b = "@@ -5,2 +5,2 @@\n ctx\n-old2\n+new2\n"
+    local diff_cache = {
+      ["a.lua:3"] = { hunks = diff_parser.parse_hunks(diff_text_a), display = diff_parser.build_display(diff_parser.parse_hunks(diff_text_a), 3) },
+      ["b.lua:3"] = { hunks = diff_parser.parse_hunks(diff_text_b), display = diff_parser.build_display(diff_parser.parse_hunks(diff_text_b), 3) },
+    }
+    local files = {
+      { new_path = "a.lua", old_path = "a.lua", diff = diff_text_a },
+      { new_path = "b.lua", old_path = "b.lua", diff = diff_text_b },
+    }
+    local review = { base_sha = "aaa", head_sha = "bbb", diff_refs = nil }
+    diff_render.render_all_files(buf, files, review, {}, 3, nil, nil, nil, nil, nil, diff_cache)
+
+    local git_diff_calls = 0
+    for _, call in ipairs(system_calls) do
+      if type(call) == "table" and call[1] == "git" and call[2] == "diff" then
+        git_diff_calls = git_diff_calls + 1
+      end
+    end
+    assert.equals(0, git_diff_calls)
+
+    vim.fn.system = orig_system
+    vim.api.nvim_buf_delete(buf, { force = true })
   end)
 end)
