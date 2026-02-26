@@ -690,6 +690,50 @@ describe("discard_pending_review", function()
   end)
 end)
 
+describe("get_file_content", function()
+  it("returns decoded file content from base64 API response", function()
+    local mock_client = {
+      get = function(base_url, path, opts)
+        assert.truthy(path:find("/repos/owner/repo/contents/src/auth.lua"))
+        assert.equals("abc123", opts.query.ref)
+        return {
+          data = {
+            content = vim.base64.encode("local M = {}\nreturn M\n"),
+            encoding = "base64",
+          },
+          status = 200,
+        }
+      end,
+    }
+    local ctx = { base_url = "https://api.github.com", project = "owner/repo" }
+    local auth = require("codereview.api.auth")
+    local orig_get_token = auth.get_token
+    auth.get_token = function() return "fake-token", "bearer" end
+
+    local content, err = github.get_file_content(mock_client, ctx, "abc123", "src/auth.lua")
+
+    auth.get_token = orig_get_token
+    assert.is_nil(err)
+    assert.equals("local M = {}\nreturn M\n", content)
+  end)
+
+  it("returns nil on API error", function()
+    local mock_client = {
+      get = function() return nil, "HTTP 404" end,
+    }
+    local ctx = { base_url = "https://api.github.com", project = "owner/repo" }
+    local auth = require("codereview.api.auth")
+    local orig_get_token = auth.get_token
+    auth.get_token = function() return "fake-token", "bearer" end
+
+    local content, err = github.get_file_content(mock_client, ctx, "abc123", "missing.lua")
+
+    auth.get_token = orig_get_token
+    assert.is_nil(content)
+    assert.truthy(err)
+  end)
+end)
+
 describe("publish_review with pending review", function()
   before_each(function()
     package.loaded["codereview.api.auth"] = {

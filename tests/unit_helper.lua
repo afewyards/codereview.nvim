@@ -472,6 +472,49 @@ _G.vim = {
   NIL = setmetatable({}, {
     __tostring = function() return "vim.NIL" end
   }),
+  base64 = (function()
+    local b64chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+    local function encode(data)
+      local result = {}
+      local padding = 2 - ((#data - 1) % 3)
+      data = data .. string.rep("\0", padding)
+      for i = 1, #data, 3 do
+        local a, b, c = data:byte(i), data:byte(i + 1), data:byte(i + 2)
+        local idx1 = bit32 and bit32.rshift(a, 2) or (a >> 2)
+        local idx2 = bit32 and (bit32.band(a, 3) * 16 + bit32.rshift(b, 4)) or ((a & 3) * 16 + (b >> 4))
+        local idx3 = bit32 and (bit32.band(b, 15) * 4 + bit32.rshift(c, 6)) or ((b & 15) * 4 + (c >> 6))
+        local idx4 = bit32 and bit32.band(c, 63) or (c & 63)
+        table.insert(result, b64chars:sub(idx1 + 1, idx1 + 1))
+        table.insert(result, b64chars:sub(idx2 + 1, idx2 + 1))
+        table.insert(result, b64chars:sub(idx3 + 1, idx3 + 1))
+        table.insert(result, b64chars:sub(idx4 + 1, idx4 + 1))
+      end
+      local encoded = table.concat(result)
+      return encoded:sub(1, #encoded - padding) .. string.rep("=", padding)
+    end
+    local function decode(data)
+      data = data:gsub("[^" .. b64chars .. "=]", "")
+      local result = {}
+      local padding = data:match("=*$")
+      local pad_len = padding and #padding or 0
+      data = data:gsub("=", "A")
+      for i = 1, #data, 4 do
+        local a = b64chars:find(data:sub(i, i), 1, true) - 1
+        local b = b64chars:find(data:sub(i + 1, i + 1), 1, true) - 1
+        local c = b64chars:find(data:sub(i + 2, i + 2), 1, true) - 1
+        local d = b64chars:find(data:sub(i + 3, i + 3), 1, true) - 1
+        local v = bit32 and (bit32.lshift(a, 18) + bit32.lshift(b, 12) + bit32.lshift(c, 6) + d)
+               or (a * 2^18 + b * 2^12 + c * 2^6 + d)
+        local b1 = bit32 and bit32.rshift(bit32.band(v, 0xFF0000), 16) or (math.floor(v / 2^16) % 256)
+        local b2 = bit32 and bit32.rshift(bit32.band(v, 0x00FF00), 8) or (math.floor(v / 2^8) % 256)
+        local b3 = bit32 and bit32.band(v, 0x0000FF) or (v % 256)
+        table.insert(result, string.char(b1, b2, b3))
+      end
+      local decoded = table.concat(result)
+      return decoded:sub(1, #decoded - pad_len)
+    end
+    return { encode = encode, decode = decode }
+  end)(),
 }
 
 -- Stub plenary.curl to avoid LuaRocks dependency
