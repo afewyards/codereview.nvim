@@ -9,7 +9,7 @@ describe("sidebar_components.file_tree", function()
     }
   end
 
-  it("displays counts in N ⚠N AI:N format (no emoji badges)", function()
+  it("displays counts in N ⚠N ✨N format", function()
     local state = {
       view_mode = "diff",
       current_file = 2,
@@ -38,9 +38,8 @@ describe("sidebar_components.file_tree", function()
     assert.falsy(joined:find("%[4%]"), "Should NOT use [N] bracket format")
     -- Unresolved: ⚠N format
     assert.truthy(joined:find("⚠3"), "Should show 3 unresolved with ⚠ prefix")
-    -- AI: AI:N format, not emoji
-    assert.truthy(joined:find("AI:1"), "Should show AI count as AI:N")
-    assert.falsy(joined:find("🤖"), "Should NOT use robot emoji")
+    -- AI: ✨N sparkle format
+    assert.truthy(joined:find("✨1"), "Should show AI count with sparkle icon")
   end)
 
   it("shows correct review status icon for each status", function()
