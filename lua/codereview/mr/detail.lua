@@ -93,10 +93,24 @@ function M.build_header_lines(review, width)
     end
   end
 
+  -- Adjust code block indents for the 2-space description prefix
+  local code_blocks = {}
+  if block_result then
+    for _, cb in ipairs(block_result.code_blocks) do
+      table.insert(code_blocks, {
+        start_row = cb.start_row,
+        end_row = cb.end_row,
+        lang = cb.lang,
+        text = cb.text,
+        indent = cb.indent + 2,
+      })
+    end
+  end
+
   return {
     lines = lines,
     highlights = highlights,
-    code_blocks = block_result and block_result.code_blocks or {},
+    code_blocks = code_blocks,
   }
 end
 
