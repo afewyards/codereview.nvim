@@ -372,6 +372,48 @@ describe("get_draft_notes", function()
   end)
 end)
 
+describe("get_file_content", function()
+  it("returns raw file content from GitLab API", function()
+    local mock_client = {
+      get = function(base_url, path, opts)
+        assert.truthy(path:find("/repository/files/"))
+        assert.truthy(path:find("/raw"))
+        assert.equals("abc123", opts.query.ref)
+        return {
+          data = "local M = {}\nreturn M\n",
+          status = 200,
+        }
+      end,
+    }
+    local ctx = { base_url = "https://gitlab.com", project = "group/repo" }
+    local auth = require("codereview.api.auth")
+    local orig = auth.get_token
+    auth.get_token = function() return "fake-token", "private" end
+
+    local content, err = gitlab.get_file_content(mock_client, ctx, "abc123", "src/auth.lua")
+
+    auth.get_token = orig
+    assert.is_nil(err)
+    assert.equals("local M = {}\nreturn M\n", content)
+  end)
+
+  it("returns nil on API error", function()
+    local mock_client = {
+      get = function() return nil, "HTTP 404" end,
+    }
+    local ctx = { base_url = "https://gitlab.com", project = "group/repo" }
+    local auth = require("codereview.api.auth")
+    local orig = auth.get_token
+    auth.get_token = function() return "fake-token", "private" end
+
+    local content, err = gitlab.get_file_content(mock_client, ctx, "abc123", "missing.lua")
+
+    auth.get_token = orig
+    assert.is_nil(content)
+    assert.truthy(err)
+  end)
+end)
+
 describe("delete_draft_note", function()
   before_each(function()
     package.loaded["codereview.api.auth"] = {

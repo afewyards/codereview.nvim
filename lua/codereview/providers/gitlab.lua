@@ -168,6 +168,28 @@ function M.get_diffs(client, ctx, review)
   return diffs
 end
 
+--- Fetch raw file content at a specific ref (commit SHA).
+--- Returns the file content as a string, or nil + error.
+function M.get_file_content(client, ctx, ref, path)
+  local headers, err = get_headers()
+  if not headers then return nil, err end
+  local encoded_path = path:gsub("/", "%%2F")
+  local api_path = string.format(
+    "/api/v4/projects/%s/repository/files/%s/raw",
+    encoded_project(ctx),
+    encoded_path
+  )
+  local result, req_err = client.get(ctx.base_url, api_path, {
+    headers = headers,
+    query = { ref = ref },
+  })
+  if not result then return nil, req_err end
+  if type(result.data) == "string" then
+    return result.data
+  end
+  return nil, "Unexpected response format"
+end
+
 --- Get all discussions for an MR.
 function M.get_discussions(client, ctx, review)
   local headers, err = get_headers()
