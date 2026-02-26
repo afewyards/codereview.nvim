@@ -90,16 +90,16 @@ function M.normalize_pr(pr)
   return types.normalize_review({
     id = pr.number,
     title = pr.title,
-    author = pr.user and pr.user.login or "",
-    source_branch = pr.head and pr.head.ref or "",
-    target_branch = pr.base and pr.base.ref or "main",
+    author = type(pr.user) == "table" and pr.user.login or "",
+    source_branch = type(pr.head) == "table" and pr.head.ref or "",
+    target_branch = type(pr.base) == "table" and pr.base.ref or "main",
     state = pr.state,
-    head_sha = pr.head and pr.head.sha,
-    base_sha = pr.base and pr.base.sha,
-    start_sha = pr.base and pr.base.sha,  -- GitHub-specific: no separate start sha
+    head_sha = type(pr.head) == "table" and pr.head.sha or nil,
+    base_sha = type(pr.base) == "table" and pr.base.sha or nil,
+    start_sha = type(pr.base) == "table" and pr.base.sha or nil,
     web_url = pr.html_url or "",
     description = pr.body or "",
-    sha = pr.head and pr.head.sha,
+    sha = type(pr.head) == "table" and pr.head.sha or nil,
     merge_status = merge_status,
   })
 end
@@ -109,7 +109,7 @@ end
 function M.normalize_graphql_threads(thread_nodes)
   local discussions = {}
   for _, thread in ipairs(thread_nodes) do
-    local comments = thread.comments and thread.comments.nodes or {}
+    local comments = type(thread.comments) == "table" and thread.comments.nodes or {}
     if #comments > 0 then
       local notes = {}
       for _, c in ipairs(comments) do
@@ -120,7 +120,7 @@ function M.normalize_graphql_threads(thread_nodes)
         table.insert(notes, {
           id = c.databaseId,
           node_id = c.id,
-          author = c.author and c.author.login or "",
+          author = type(c.author) == "table" and c.author.login or "",
           body = c.body or "",
           created_at = c.createdAt or "",
           system = false,
@@ -132,7 +132,7 @@ function M.normalize_graphql_threads(thread_nodes)
             side = thread.diffSide,
             start_line = start_line or original_start_line,
             start_side = thread.startDiffSide,
-            commit_sha = c.commit and c.commit.oid,
+            commit_sha = type(c.commit) == "table" and c.commit.oid or nil,
             outdated = thread.isOutdated or c.outdated or false,
           },
         })
@@ -278,17 +278,16 @@ function M.get_discussions(client, ctx, review)
     })
     if not data then return nil, gql_err end
 
-    local connection = data
-      and data.repository
-      and data.repository.pullRequest
-      and data.repository.pullRequest.reviewThreads
+    local repo = type(data) == "table" and type(data.repository) == "table" and data.repository
+    local pr_data = repo and type(repo.pullRequest) == "table" and repo.pullRequest
+    local connection = pr_data and type(pr_data.reviewThreads) == "table" and pr_data.reviewThreads
     if not connection then return {}, nil end
 
     for _, node in ipairs(connection.nodes or {}) do
       table.insert(all_threads, node)
     end
 
-    local page_info = connection.pageInfo
+    local page_info = type(connection.pageInfo) == "table" and connection.pageInfo
     if page_info and page_info.hasNextPage then
       cursor = page_info.endCursor
     else
@@ -413,11 +412,10 @@ function M.resolve_discussion(client, ctx, review, discussion_id, resolved, node
       return nil, lerr or "GraphQL lookup failed"
     end
 
-    local threads = ldata
-      and ldata.repository
-      and ldata.repository.pullRequest
-      and ldata.repository.pullRequest.reviewThreads
-      and ldata.repository.pullRequest.reviewThreads.nodes
+    local lrepo = type(ldata) == "table" and type(ldata.repository) == "table" and ldata.repository
+    local lpr = lrepo and type(lrepo.pullRequest) == "table" and lrepo.pullRequest
+    local lthreads_conn = lpr and type(lpr.reviewThreads) == "table" and lpr.reviewThreads
+    local threads = lthreads_conn and lthreads_conn.nodes
     if not threads then
       log.error("GraphQL: no review threads in response")
       return nil, "No review threads found"
@@ -425,7 +423,7 @@ function M.resolve_discussion(client, ctx, review, discussion_id, resolved, node
 
     local comment_id = tonumber(discussion_id)
     for _, thread in ipairs(threads) do
-      local comments = thread.comments and thread.comments.nodes
+      local comments = type(thread.comments) == "table" and thread.comments.nodes
       if comments and #comments > 0 and comments[1].databaseId == comment_id then
         thread_node_id = thread.id
         break

@@ -41,13 +41,13 @@ function M.normalize_mr(mr)
   local diff_refs = mr.diff_refs or {}
   local approved_by = {}
   for _, a in ipairs(mr.approved_by or {}) do
-    table.insert(approved_by, a.user and a.user.username or "")
+    table.insert(approved_by, type(a.user) == "table" and a.user.username or "")
   end
 
   return types.normalize_review({
     id = mr.iid,
     title = mr.title,
-    author = mr.author and mr.author.username or "",
+    author = type(mr.author) == "table" and mr.author.username or "",
     source_branch = mr.source_branch,
     target_branch = mr.target_branch,
     state = mr.state,
@@ -56,7 +56,7 @@ function M.normalize_mr(mr)
     start_sha = diff_refs.start_sha,
     web_url = mr.web_url,
     description = mr.description,
-    pipeline_status = mr.head_pipeline and mr.head_pipeline.status or nil,
+    pipeline_status = type(mr.head_pipeline) == "table" and mr.head_pipeline.status or nil,
     approved_by = approved_by,
     approvals_required = mr.approvals_before_merge or 0,
     sha = mr.sha,
