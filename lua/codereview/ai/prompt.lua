@@ -247,7 +247,7 @@ function M.parse_mr_draft(output)
   return vim.trim(title), vim.trim(description)
 end
 
-function M.build_file_review_prompt(review, file, summaries)
+function M.build_file_review_prompt(review, file, summaries, content)
   local path = file.new_path or file.old_path
   local parts = {
     "You are reviewing a single file in a merge request.",
@@ -275,6 +275,15 @@ function M.build_file_review_prompt(review, file, summaries)
     table.insert(parts, "")
   end
 
+  if content and content ~= "" then
+    table.insert(parts, "## Full File Content: " .. path)
+    local ext = path:match("%.([^%.]+)$") or ""
+    table.insert(parts, "```" .. ext)
+    table.insert(parts, content)
+    table.insert(parts, "```")
+    table.insert(parts, "")
+  end
+
   table.insert(parts, "## File Under Review: " .. path)
   table.insert(parts, "```diff")
   table.insert(parts, M.annotate_diff_with_lines(file.diff or ""))
@@ -288,6 +297,9 @@ function M.build_file_review_prompt(review, file, summaries)
   table.insert(parts, 'The "code" field must contain the trimmed source code from the line you are commenting on (without the diff +/- prefix).')
   table.insert(parts, 'Use \\n inside "comment" strings for line breaks.')
   table.insert(parts, "If no issues, output `[]`.")
+  if content and content ~= "" then
+    table.insert(parts, "The full file content is provided above for context. Only review the changes shown in the diff.")
+  end
   table.insert(parts, "Focus on: bugs, security, error handling, edge cases, naming, clarity.")
   table.insert(parts, "Do NOT comment on style or formatting.")
   local sev_instr = severity_instruction()

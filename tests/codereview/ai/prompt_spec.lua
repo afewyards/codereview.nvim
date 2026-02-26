@@ -311,6 +311,34 @@ describe("ai.prompt", function()
       assert.truthy(result:find("error"), "should mention error level")
       config.reset()
     end)
+
+    it("includes full file content section when content is provided", function()
+      local review = { title = "T", description = "D" }
+      local file = { new_path = "src/foo.lua", diff = "@@ -1,2 +1,3 @@\n-old\n+new\n" }
+      local result = prompt.build_file_review_prompt(review, file, {}, "local M = {}\nfunction M.foo()\nend\nreturn M")
+      assert.truthy(result:find("## Full File Content"))
+      assert.truthy(result:find("local M = {}"))
+      assert.truthy(result:find("function M.foo"))
+      assert.truthy(result:find("Only review the changes shown in the diff"))
+    end)
+
+    it("omits full file content section when content is nil", function()
+      local review = { title = "T", description = "D" }
+      local file = { new_path = "src/foo.lua", diff = "@@ -1,2 +1,3 @@\n-old\n+new\n" }
+      local result = prompt.build_file_review_prompt(review, file, {}, nil)
+      assert.falsy(result:find("## Full File Content"))
+    end)
+
+    it("places full file content before the diff section", function()
+      local review = { title = "T", description = "D" }
+      local file = { new_path = "src/foo.lua", diff = "@@ -1,1 +1,1 @@\n-old\n+new\n" }
+      local result = prompt.build_file_review_prompt(review, file, {}, "full content here")
+      local content_pos = result:find("## Full File Content")
+      local diff_pos = result:find("## File Under Review")
+      assert.truthy(content_pos)
+      assert.truthy(diff_pos)
+      assert.truthy(content_pos < diff_pos, "Full file content should appear before diff section")
+    end)
   end)
 
   describe("build_mr_prompt", function()
