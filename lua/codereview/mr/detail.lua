@@ -116,7 +116,7 @@ function M.build_activity_lines(discussions, width)
         table.insert(lines, string.format(
           "  - @%s %s (%s)",
           first_note.author,
-          first_note.body:gsub("\n", " "):sub(1, 80),
+          first_note.body:gsub("<br%s*/?>", " "):gsub("<[^>]+>", ""):gsub("\n", " "):sub(1, 80),
           M.format_time(first_note.created_at)
         ))
       else

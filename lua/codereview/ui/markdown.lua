@@ -672,6 +672,16 @@ local function render_table(tbl_lines, base_hl, start_row, opts)
   return result
 end
 
+-- Strip HTML tags from text, converting block tags to newlines and removing the rest.
+local function strip_html(text)
+  if not text then return text end
+  -- Replace <br>, <br/>, <br /> with newline
+  text = text:gsub("<br%s*/?>", "\n")
+  -- Remove all remaining HTML tags
+  text = text:gsub("<[^>]+>", "")
+  return text
+end
+
 -- parse_blocks(text, base_hl, opts) -> { lines, highlights, code_blocks }
 -- State machine with goto continue so future block handlers can skip the paragraph fallback.
 function M.parse_blocks(text, base_hl, opts)
@@ -679,6 +689,7 @@ function M.parse_blocks(text, base_hl, opts)
   local result = { lines = {}, highlights = {}, code_blocks = {} }
   if not text or text == "" then return result end
 
+  text = strip_html(text)
   local raw_lines = M.to_lines(text)
   local i = 1
   local state = "normal"
