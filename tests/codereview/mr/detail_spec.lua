@@ -22,7 +22,7 @@ describe("mr.detail", function()
       assert.truthy(joined:find("#42"))
       assert.truthy(joined:find("Fix auth token refresh"))
       assert.truthy(joined:find("maria"))
-      assert.truthy(joined:find("Approvals"))
+      assert.truthy(joined:find("approved"))
     end)
 
     it("strips markdown from description and returns highlights", function()
@@ -398,6 +398,71 @@ describe("mr.detail", function()
       assert.truthy(joined:find("approved"))
       -- System notes should NOT have box drawing
       assert.falsy(joined:find("┌"))
+    end)
+  end)
+
+  describe("build_header_lines redesign", function()
+    it("renders bordered header card", function()
+      local review = {
+        id = 42, title = "Fix auth", author = "maria",
+        source_branch = "fix/token", target_branch = "main",
+        state = "opened", pipeline_status = "success",
+        approved_by = { "alice" }, approvals_required = 2,
+        description = "", merge_status = "can_be_merged",
+      }
+      local result = detail.build_header_lines(review, 60)
+      -- Use find with plain string (not pattern) for multi-byte box-drawing chars
+      local top = result.lines[1]
+      assert.is_truthy(top:find("╭", 1, true) and top:find("╮", 1, true))
+      local found_bottom = false
+      for _, l in ipairs(result.lines) do
+        if l:find("╰", 1, true) and l:find("╯", 1, true) then found_bottom = true end
+      end
+      assert.is_truthy(found_bottom)
+    end)
+
+    it("includes state in header", function()
+      local review = {
+        id = 42, title = "Fix auth", author = "maria",
+        source_branch = "fix/token", target_branch = "main",
+        state = "opened", pipeline_status = "success",
+        approved_by = {}, approvals_required = 0,
+        description = "",
+      }
+      local result = detail.build_header_lines(review, 60)
+      local has_state = false
+      for _, l in ipairs(result.lines) do
+        if l:find("opened") then has_state = true end
+      end
+      assert.is_truthy(has_state)
+    end)
+
+    it("shows description section header", function()
+      local review = {
+        id = 42, title = "Fix", author = "m",
+        source_branch = "a", target_branch = "b",
+        state = "opened", description = "Hello world",
+        approved_by = {}, approvals_required = 0,
+      }
+      local result = detail.build_header_lines(review, 60)
+      local found = false
+      for _, l in ipairs(result.lines) do
+        if l:match("^## Description") then found = true end
+      end
+      assert.is_truthy(found)
+    end)
+
+    it("omits description section when empty", function()
+      local review = {
+        id = 42, title = "Fix", author = "m",
+        source_branch = "a", target_branch = "b",
+        state = "opened", description = "",
+        approved_by = {}, approvals_required = 0,
+      }
+      local result = detail.build_header_lines(review, 60)
+      for _, l in ipairs(result.lines) do
+        assert.is_falsy(l:match("^## Description"))
+      end
     end)
   end)
 

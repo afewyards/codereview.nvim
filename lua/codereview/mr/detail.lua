@@ -16,42 +16,80 @@ end
 
 function M.build_header_lines(review, width)
   width = width or 70
-  local pipeline_icon = list_mod.pipeline_icon(review.pipeline_status)
   local highlights = {}
-  local lines = {
-    string.format("#%d: %s", review.id, review.title),
-    "",
-    string.format("Author: @%s   Branch: %s -> %s", review.author, review.source_branch, review.target_branch or "main"),
-    string.format("Status: %s   Pipeline: %s", review.state, pipeline_icon),
-  }
+  local lines = {}
 
+  -- ── Header card ─────────────────────────────────────────────────
+  local inner_w = width - 2  -- inside │ ... │
+  table.insert(lines, "╭" .. string.rep("─", inner_w) .. "╮")
+  table.insert(highlights, { #lines - 1, 0, #lines[#lines], "CodeReviewHeaderCardBorder" })
+
+  -- Line 1: │  #id  title                          state │
+  local id_str = "#" .. review.id
+  local state_str = review.state or "unknown"
+  local title_max = inner_w - #id_str - #state_str - 6  -- 2 pad each side + 2 spaces
+  local title = review.title or ""
+  if #title > title_max then title = title:sub(1, title_max - 1) .. "…" end
+  local gap1 = math.max(1, inner_w - 2 - #id_str - 2 - #title - #state_str)
+  local line1 = "│  " .. id_str .. "  " .. title .. string.rep(" ", gap1) .. state_str .. "  │"
+  local row1 = #lines
+  table.insert(lines, line1)
+  table.insert(highlights, { row1, 0, 3, "CodeReviewHeaderCardBorder" })
+  table.insert(highlights, { row1, #line1 - 3, #line1, "CodeReviewHeaderCardBorder" })
+  local id_start = 3
+  table.insert(highlights, { row1, id_start, id_start + #id_str, "CodeReviewHeaderCardId" })
+  local title_start = id_start + #id_str + 2
+  table.insert(highlights, { row1, title_start, title_start + #title, "CodeReviewHeaderCardTitle" })
+  -- Find state position by searching from end
+  local state_pos = #line1 - 5 - #state_str  -- 5 = "  │" (3 bytes for │ + 2 spaces)
+  local state_hl = ({ opened = "CodeReviewStateOpened", merged = "CodeReviewStateMerged", closed = "CodeReviewStateClosed" })[review.state] or "CodeReviewThreadMeta"
+  table.insert(highlights, { row1, state_pos, state_pos + #state_str, state_hl })
+
+  -- Line 2: │  @author  source → target   CI  1/2 approved │
+  local pipeline_icon = list_mod.pipeline_icon(review.pipeline_status)
+  local author_str = "@" .. review.author
+  local branch_str = review.source_branch .. " → " .. (review.target_branch or "main")
+  local right_parts = {}
+  table.insert(right_parts, pipeline_icon)
   local approved_by = (type(review.approved_by) == "table") and review.approved_by or {}
   local approvals_required = (type(review.approvals_required) == "number") and review.approvals_required or 0
   if approvals_required > 0 or #approved_by > 0 then
-    local approver_names = {}
-    for _, name in ipairs(approved_by) do
-      table.insert(approver_names, "@" .. name)
-    end
-    table.insert(lines, string.format(
-      "Approvals: %d/%d  %s",
-      #approved_by,
-      approvals_required,
-      #approver_names > 0 and table.concat(approver_names, ", ") or ""
-    ))
+    table.insert(right_parts, #approved_by .. "/" .. approvals_required .. " approved")
   end
+  if review.merge_status then
+    local ms = review.merge_status == "can_be_merged" and "mergeable" or "conflicts"
+    table.insert(right_parts, ms)
+  end
+  local right_str = table.concat(right_parts, "   ")
+  local gap2 = math.max(1, inner_w - 2 - #author_str - 2 - #branch_str - 3 - #right_str)
+  local line2 = "│  " .. author_str .. "  " .. branch_str .. string.rep(" ", gap2) .. right_str .. "  │"
+  local row2 = #lines
+  table.insert(lines, line2)
+  table.insert(highlights, { row2, 0, 3, "CodeReviewHeaderCardBorder" })
+  table.insert(highlights, { row2, #line2 - 3, #line2, "CodeReviewHeaderCardBorder" })
+  local a_start = 3
+  table.insert(highlights, { row2, a_start, a_start + #author_str, "CodeReviewCommentAuthor" })
+  local b_start = a_start + #author_str + 2
+  table.insert(highlights, { row2, b_start, b_start + #branch_str + 2, "CodeReviewHeaderBranch" })  -- +2 for → (3 bytes but visually 1 char, offset compensates)
 
-  table.insert(lines, string.rep("-", width))
+  -- Bottom border
+  table.insert(lines, "╰" .. string.rep("─", inner_w) .. "╯")
+  table.insert(highlights, { #lines - 1, 0, #lines[#lines], "CodeReviewHeaderCardBorder" })
 
+  -- ── Description section ──────────────────────────────────────────
   local block_result = nil
   if review.description and review.description ~= "" then
     table.insert(lines, "")
+    local desc_header_row = #lines
+    table.insert(lines, "## Description")
+    table.insert(highlights, { desc_header_row, 0, 14, "CodeReviewMdH2" })
     local desc_start = #lines
-    block_result = markdown.parse_blocks(review.description, "CodeReviewComment", { width = width })
+    block_result = require("codereview.ui.markdown").parse_blocks(review.description, "CodeReviewComment", { width = width })
     for _, bl in ipairs(block_result.lines) do
-      table.insert(lines, bl)
+      table.insert(lines, "  " .. bl)
     end
     for _, h in ipairs(block_result.highlights) do
-      table.insert(highlights, { desc_start + h[1], h[2], h[3], h[4] })
+      table.insert(highlights, { desc_start + h[1], h[2] + 2, h[3] + 2, h[4] })
     end
   end
 
