@@ -15,7 +15,7 @@ vim.json.decode = vim.json.decode or function() return {} end
 -- Stub config
 package.loaded["codereview.config"] = {
   get = function()
-    return { ai = { enabled = true, claude_cmd = "claude", agent = "code-review" } }
+    return { ai = { enabled = true, claude_cmd = "claude", agent = "code-review", max_file_size = 500 } }
   end,
 }
 
@@ -336,5 +336,45 @@ describe("file content in per-file review", function()
     -- Should only fetch content for a.lua, not deleted.lua
     assert.equals(1, #content_fetch_calls)
     assert.equals("a.lua", content_fetch_calls[1])
+  end)
+
+  it("skips content when file exceeds max_file_size", function()
+    local content_fetch_calls = {}
+    local mock_provider = {
+      get_file_content = function(client, ctx, ref, path)
+        table.insert(content_fetch_calls, path)
+        -- Return content with many lines (exceeds default 500)
+        local lines = {}
+        for i = 1, 501 do lines[i] = "line " .. i end
+        return table.concat(lines, "\n")
+      end,
+    }
+    local review = { title = "Multi", description = "desc", head_sha = "abc123" }
+    local diff_state = {
+      files = {
+        { new_path = "big.lua", diff = "@@ -1,1 +1,1 @@\n-old\n+new\n" },
+        { new_path = "small.lua", diff = "@@ -1,1 +1,1 @@\n-old\n+new\n" },
+      },
+      discussions = {},
+      ai_suggestions = {},
+      view_mode = "diff",
+      current_file = 1,
+      scroll_mode = false,
+      line_data_cache = {},
+      row_disc_cache = {},
+      row_ai_cache = {},
+      provider = mock_provider,
+      ctx = { base_url = "https://api.github.com", project = "owner/repo" },
+    }
+    review_mod.start(review, diff_state, { main_buf = 0, sidebar_buf = 0, main_win = 0 })
+
+    -- Content was fetched for both files
+    assert.equals(2, #content_fetch_calls)
+    -- But the per-file prompts should NOT have Full File Content for big files
+    -- (both files return 501 lines which exceeds default 500)
+    for i = 2, #captured_calls do
+      assert.falsy(captured_calls[i].prompt:find("Full File Content"),
+        "per-file prompt should not include full file content for files exceeding max_file_size")
+    end
   end)
 end)
