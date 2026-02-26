@@ -615,7 +615,8 @@ function M.discard_pending_review(client, ctx, review)
 end
 
 --- Publish all server-side draft comments by submitting the PENDING review.
-function M.publish_review(client, ctx, review)
+function M.publish_review(client, ctx, review, opts)
+  opts = opts or {}
   local headers, err = get_headers()
   if not headers then return nil, err end
   local owner, repo = parse_owner_repo(ctx)
@@ -624,8 +625,13 @@ function M.publish_review(client, ctx, review)
     return { data = true }, nil
   end
 
+  local payload = { event = opts.event or "COMMENT" }
+  if opts.body and opts.body ~= "" then
+    payload.body = opts.body
+  end
+
   local submit_path = string.format("/repos/%s/%s/pulls/%d/reviews/%d/events", owner, repo, review.id, M._pending_review_id)
-  local result, post_err = client.post(ctx.base_url, submit_path, { body = { event = "COMMENT" }, headers = headers })
+  local result, post_err = client.post(ctx.base_url, submit_path, { body = payload, headers = headers })
   M._pending_review_id = nil
   M._pending_review_node_id = nil
   return result, post_err

@@ -192,6 +192,30 @@ describe("providers.gitlab", function()
     it("exists as a function", function()
       assert.is_function(gitlab.publish_review)
     end)
+
+    it("posts body as MR note and calls approve when event is APPROVE", function()
+      package.loaded["codereview.api.auth"] = {
+        get_token = function() return "glpat-test", "pat" end,
+      }
+      local posted_paths = {}
+      local posted_bodies = {}
+      local mock_client = {
+        post = function(_, path, opts)
+          table.insert(posted_paths, path)
+          table.insert(posted_bodies, opts.body)
+          return { status = 200, data = {} }, nil
+        end,
+      }
+      local ctx = { base_url = "https://gitlab.com", project = "group/project", project_id = 1 }
+      gitlab.publish_review(mock_client, ctx, { id = 5 }, { body = "Great work!", event = "APPROVE" })
+      -- Should have 3 calls: bulk_publish, post note, approve
+      assert.equal(3, #posted_paths)
+      assert.truthy(posted_paths[1]:find("bulk_publish"))
+      assert.truthy(posted_paths[2]:find("/notes"))
+      assert.equal("Great work!", posted_bodies[2].body)
+      assert.truthy(posted_paths[3]:find("/approve"))
+      package.loaded["codereview.api.auth"] = nil
+    end)
   end)
 
   describe("create_review", function()
