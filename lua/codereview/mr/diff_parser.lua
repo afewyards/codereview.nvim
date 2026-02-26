@@ -147,4 +147,31 @@ function M.build_display(hunks, context_lines)
   return display
 end
 
+--- Split combined multi-file `git diff` output into per-file diff strings.
+--- Returns a table keyed by file path (from the `b/` side of the header).
+--- @param raw string  combined git diff output
+--- @return table<string, string>  path -> diff_text (including the diff --git header)
+function M.parse_batch_diff(raw)
+  if not raw or raw == "" then return {} end
+  local diffs = {}
+  local chunks = {}
+  local start = 1
+  while true do
+    local pos = raw:find("\ndiff %-%-git ", start)
+    if not pos then
+      table.insert(chunks, raw:sub(start))
+      break
+    end
+    table.insert(chunks, raw:sub(start, pos))
+    start = pos + 1
+  end
+  for _, chunk in ipairs(chunks) do
+    local path = chunk:match("^diff %-%-git a/.-%s+b/([^\n]+)")
+    if path then
+      diffs[path] = chunk
+    end
+  end
+  return diffs
+end
+
 return M

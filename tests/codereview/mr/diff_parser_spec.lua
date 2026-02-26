@@ -88,4 +88,90 @@ describe("diff_parser", function()
       assert.truthy(#segments > 0)
     end)
   end)
+
+  describe("parse_batch_diff", function()
+    it("splits multi-file git diff output by file path", function()
+      local raw = table.concat({
+        "diff --git a/foo.lua b/foo.lua",
+        "index abc..def 100644",
+        "--- a/foo.lua",
+        "+++ b/foo.lua",
+        "@@ -1,2 +1,2 @@",
+        " ctx",
+        "-old",
+        "+new",
+        "diff --git a/bar/baz.lua b/bar/baz.lua",
+        "index 111..222 100644",
+        "--- a/bar/baz.lua",
+        "+++ b/bar/baz.lua",
+        "@@ -5,2 +5,2 @@",
+        " ctx2",
+        "-old2",
+        "+new2",
+      }, "\n")
+
+      local result = parser.parse_batch_diff(raw)
+      assert.truthy(result["foo.lua"])
+      assert.truthy(result["bar/baz.lua"])
+      assert.truthy(result["foo.lua"]:find("@@ %-1,2 %+1,2 @@"))
+      assert.truthy(result["bar/baz.lua"]:find("@@ %-5,2 %+5,2 @@"))
+    end)
+
+    it("returns empty table for empty input", function()
+      assert.same({}, parser.parse_batch_diff(""))
+    end)
+
+    it("handles single file", function()
+      local raw = table.concat({
+        "diff --git a/only.lua b/only.lua",
+        "--- a/only.lua",
+        "+++ b/only.lua",
+        "@@ -1,1 +1,1 @@",
+        "-old",
+        "+new",
+      }, "\n")
+      local result = parser.parse_batch_diff(raw)
+      assert.truthy(result["only.lua"])
+      assert.is_nil(result["other.lua"])
+    end)
+
+    it("handles new and deleted files", function()
+      local raw = table.concat({
+        "diff --git a/new.lua b/new.lua",
+        "new file mode 100644",
+        "--- /dev/null",
+        "+++ b/new.lua",
+        "@@ -0,0 +1,2 @@",
+        "+line1",
+        "+line2",
+        "diff --git a/gone.lua b/gone.lua",
+        "deleted file mode 100644",
+        "--- a/gone.lua",
+        "+++ /dev/null",
+        "@@ -1,2 +0,0 @@",
+        "-line1",
+        "-line2",
+      }, "\n")
+      local result = parser.parse_batch_diff(raw)
+      assert.truthy(result["new.lua"])
+      assert.truthy(result["gone.lua"])
+    end)
+
+    it("handles renamed files using b/ path", function()
+      local raw = table.concat({
+        "diff --git a/old_name.lua b/new_name.lua",
+        "similarity index 90%",
+        "rename from old_name.lua",
+        "rename to new_name.lua",
+        "--- a/old_name.lua",
+        "+++ b/new_name.lua",
+        "@@ -1,2 +1,2 @@",
+        " ctx",
+        "-old",
+        "+new",
+      }, "\n")
+      local result = parser.parse_batch_diff(raw)
+      assert.truthy(result["new_name.lua"])
+    end)
+  end)
 end)
