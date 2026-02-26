@@ -284,7 +284,7 @@ describe("mr.detail", function()
       assert.is_true(found)
     end)
 
-    it("shows inline discussions (with position) in Discussions section", function()
+    it("excludes inline discussions (with position) from Discussions section", function()
       local discussions = {
         {
           id = "abc",
@@ -302,10 +302,10 @@ describe("mr.detail", function()
       }
       local result = detail.build_activity_lines(discussions)
       local joined = table.concat(result.lines, "\n")
-      -- Inline note IS now shown in the Discussions section
-      assert.truthy(joined:find("Inline note"))
-      -- And its file path is shown
-      assert.truthy(joined:find("foo.lua:10"))
+      -- Inline note is excluded from the Discussions section
+      assert.falsy(joined:find("Inline note"))
+      -- And its file path is not shown
+      assert.falsy(joined:find("foo.lua:10"))
     end)
 
     it("strips markdown from comment body and adds highlights", function()
@@ -413,7 +413,7 @@ describe("mr.detail", function()
       assert.is_truthy(found)
     end)
 
-    it("shows file path for inline comments", function()
+    it("excludes inline comments from Discussions section", function()
       local discussions = {
         { id = "d1", resolved = false, notes = {{ id = 1, author = "alice", body = "fix this",
           created_at = "2026-02-20T11:00:00Z", system = false, resolvable = true, resolved = false,
@@ -424,10 +424,10 @@ describe("mr.detail", function()
       for _, l in ipairs(result.lines) do
         if l:find("src/auth.ts:42") then found = true end
       end
-      assert.is_truthy(found)
+      assert.is_falsy(found)
     end)
 
-    it("assigns file_path row_map type for jumpable file paths", function()
+    it("assigns no file_path row_map entries for inline-only discussions", function()
       local discussions = {
         { id = "d1", resolved = false, notes = {{ id = 1, author = "alice", body = "fix this",
           created_at = "2026-02-20T11:00:00Z", system = false, resolvable = true, resolved = false,
@@ -438,7 +438,7 @@ describe("mr.detail", function()
       for _, entry in pairs(result.row_map) do
         if entry.type == "file_path" then found_file_row = true end
       end
-      assert.is_truthy(found_file_row)
+      assert.is_falsy(found_file_row)
     end)
 
     it("still renders system notes as simple lines", function()
@@ -468,6 +468,22 @@ describe("mr.detail", function()
         if l:find("\xef", 1, true) then has_icon = true end
       end
       assert.is_true(has_icon)
+    end)
+
+    it("renders discussions newest first", function()
+      local discussions = {
+        { id = "old", notes = {{ id = 1, author = "alice", body = "Old comment",
+          created_at = "2026-02-20T10:00:00Z", system = false }} },
+        { id = "new", notes = {{ id = 2, author = "bob", body = "New comment",
+          created_at = "2026-02-25T14:00:00Z", system = false }} },
+      }
+      local result = detail.build_activity_lines(discussions, 60)
+      local joined = table.concat(result.lines, "\n")
+      local new_pos = joined:find("New comment")
+      local old_pos = joined:find("Old comment")
+      assert.is_truthy(new_pos)
+      assert.is_truthy(old_pos)
+      assert.is_true(new_pos < old_pos)
     end)
   end)
 

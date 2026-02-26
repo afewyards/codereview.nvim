@@ -238,15 +238,18 @@ local function render_thread(result, disc, width, reply_key, resolve_key)
   end
 
   -- Body lines parsed for block-level markdown
+  local bar_prefix = "│ "
+  local bar_prefix_len = #bar_prefix
   local body_start = #lines
-  local body_result = markdown.parse_blocks(first_note.body or "", "CodeReviewComment", { width = width })
+  local body_result = markdown.parse_blocks(first_note.body or "", "CodeReviewComment", { width = width - 2 })
   for _, bl in ipairs(body_result.lines) do
     local row = #lines
-    table.insert(lines, bl)
+    table.insert(lines, bar_prefix .. bl)
+    table.insert(highlights, { row, 0, 3, "CodeReviewThreadBorder" })
     row_map[row] = { type = "thread", discussion = disc }
   end
   for _, h in ipairs(body_result.highlights) do
-    table.insert(highlights, { body_start + h[1], h[2], h[3], h[4] })
+    table.insert(highlights, { body_start + h[1], h[2] + bar_prefix_len, h[3] + bar_prefix_len, h[4] })
   end
   for _, cb in ipairs(body_result.code_blocks) do
     table.insert(result.code_blocks, {
@@ -254,7 +257,7 @@ local function render_thread(result, disc, width, reply_key, resolve_key)
       end_row = body_start + cb.end_row,
       lang = cb.lang,
       text = cb.text,
-      indent = cb.indent,
+      indent = cb.indent + bar_prefix_len,
     })
   end
 
@@ -265,30 +268,33 @@ local function render_thread(result, disc, width, reply_key, resolve_key)
       local rt = format_time_short(reply.created_at)
       local rmeta = rt ~= "" and (" · " .. rt) or ""
       local sep_row = #lines
-      table.insert(lines, "")
+      table.insert(lines, "│")
+      table.insert(highlights, { sep_row, 0, 3, "CodeReviewThreadBorder" })
       row_map[sep_row] = { type = "thread", discussion = disc }
 
       local reply_header_row = #lines
-      table.insert(lines, string.format("↪ @%s%s", reply.author, rmeta))
+      table.insert(lines, string.format("│ ↪ @%s%s", reply.author, rmeta))
       row_map[reply_header_row] = { type = "thread", discussion = disc }
 
       -- Reply header highlights
       table.insert(highlights, {reply_header_row, 0, 3, "CodeReviewThreadBorder"})
+      table.insert(highlights, {reply_header_row, 4, 7, "CodeReviewThreadBorder"})
       local rauthor_len = 1 + #reply.author
-      table.insert(highlights, {reply_header_row, 4, 4 + rauthor_len, "CodeReviewCommentAuthor"})
+      table.insert(highlights, {reply_header_row, 8, 8 + rauthor_len, "CodeReviewCommentAuthor"})
       if #rmeta > 0 then
-        table.insert(highlights, {reply_header_row, 4 + rauthor_len, 4 + rauthor_len + #rmeta, "CodeReviewThreadMeta"})
+        table.insert(highlights, {reply_header_row, 8 + rauthor_len, 8 + rauthor_len + #rmeta, "CodeReviewThreadMeta"})
       end
 
       local reply_body_start = #lines
-      local reply_result = markdown.parse_blocks(reply.body or "", "CodeReviewComment", { width = width })
+      local reply_result = markdown.parse_blocks(reply.body or "", "CodeReviewComment", { width = width - 2 })
       for _, rl in ipairs(reply_result.lines) do
         local rrow = #lines
-        table.insert(lines, rl)
+        table.insert(lines, bar_prefix .. rl)
+        table.insert(highlights, { rrow, 0, 3, "CodeReviewThreadBorder" })
         row_map[rrow] = { type = "thread", discussion = disc }
       end
       for _, h in ipairs(reply_result.highlights) do
-        table.insert(highlights, { reply_body_start + h[1], h[2], h[3], h[4] })
+        table.insert(highlights, { reply_body_start + h[1], h[2] + bar_prefix_len, h[3] + bar_prefix_len, h[4] })
       end
       for _, cb in ipairs(reply_result.code_blocks) do
         table.insert(result.code_blocks, {
@@ -296,7 +302,7 @@ local function render_thread(result, disc, width, reply_key, resolve_key)
           end_row = reply_body_start + cb.end_row,
           lang = cb.lang,
           text = cb.text,
-          indent = cb.indent,
+          indent = cb.indent + bar_prefix_len,
         })
       end
     end
@@ -346,11 +352,11 @@ function M.build_activity_lines(discussions, width)
     end
   end
 
-  -- Pass 2: collect user discussions (both general AND inline)
+  -- Pass 2: collect general user discussions (exclude inline discussions with position)
   local user_discussions = {}
   for _, disc in ipairs(discussions) do
     local first_note = disc.notes and disc.notes[1]
-    if first_note and not first_note.system then
+    if first_note and not first_note.system and not first_note.position then
       table.insert(user_discussions, disc)
     end
   end
@@ -401,8 +407,8 @@ function M.build_activity_lines(discussions, width)
   table.insert(highlights, {disc_header_row, 0, #disc_header, "CodeReviewMdH2"})
   table.insert(lines, "")
 
-  for _, disc in ipairs(user_discussions) do
-    render_thread(result, disc, width, reply_key, resolve_key)
+  for i = #user_discussions, 1, -1 do
+    render_thread(result, user_discussions[i], width, reply_key, resolve_key)
   end
 
   return result
@@ -412,7 +418,8 @@ function M.count_discussions(discussions)
   local total = 0
   local unresolved = 0
   for _, disc in ipairs(discussions or {}) do
-    if disc.notes and disc.notes[1] and not disc.notes[1].system then
+    local first_note = disc.notes and disc.notes[1]
+    if first_note and not first_note.system and not first_note.position then
       total = total + 1
       for _, note in ipairs(disc.notes) do
         if note.resolvable and not note.resolved then
