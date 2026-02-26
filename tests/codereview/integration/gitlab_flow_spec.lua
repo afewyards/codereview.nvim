@@ -89,14 +89,12 @@ describe("GitLab integration flow", function()
       end
       assert.is_true(found_id, "header should contain #42")
 
-      -- Approvers should be rendered as @name strings
-      local found_alice, found_bob = false, false
+      -- Approvals should be rendered as count format
+      local found_approvals = false
       for _, line in ipairs(lines) do
-        if line:find("@alice") then found_alice = true end
-        if line:find("@bob") then found_bob = true end
+        if line:find("2/2 approved") then found_approvals = true end
       end
-      assert.is_true(found_alice, "header should contain @alice")
-      assert.is_true(found_bob, "header should contain @bob")
+      assert.is_true(found_approvals, "header should contain 2/2 approved")
     end)
 
     it("shows pipeline icon for success status", function()
