@@ -19,6 +19,10 @@ local DIFF_NS = vim.api.nvim_create_namespace("codereview_diff")
 local AIDRAFT_NS = vim.api.nvim_create_namespace("codereview_ai_draft")
 local SEPARATOR_NS = vim.api.nvim_create_namespace("codereview_separator")
 
+-- Module-level cache for syntax file paths to avoid repeated runtimepath scans.
+-- Persists across re-renders within the same session.
+local syntax_file_cache = {}  -- { [filetype] = path_string | false }
+
 -- ─── Formatting helpers ───────────────────────────────────────────────────────
 
 function M.format_line_number(old_nr, new_nr)
@@ -826,9 +830,13 @@ function M.render_all_files(buf, files, review, discussions, context, file_conte
           local cluster = "GlabSyn_" .. ft:gsub("[^%w]", "_")
           if not loaded_fts[ft] then
             vim.cmd("unlet! b:current_syntax")
-            local syn_files = vim.api.nvim_get_runtime_file("syntax/" .. ft .. ".vim", false)
-            if syn_files and #syn_files > 0 then
-              pcall(vim.cmd, "syntax include @" .. cluster .. " " .. vim.fn.fnameescape(syn_files[1]))
+            if syntax_file_cache[ft] == nil then
+              local syn_files = vim.api.nvim_get_runtime_file("syntax/" .. ft .. ".vim", false)
+              syntax_file_cache[ft] = (syn_files and syn_files[1]) or false
+            end
+            local syn_file = syntax_file_cache[ft]
+            if syn_file then
+              pcall(vim.cmd, "syntax include @" .. cluster .. " " .. vim.fn.fnameescape(syn_file))
               loaded_fts[ft] = cluster
             end
           end
