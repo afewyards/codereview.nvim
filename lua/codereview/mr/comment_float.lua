@@ -127,14 +127,15 @@ function M.open(title, opts)
     })
   else
     -- Fallback: centered editor-relative float
-    local width = 70
-    local row = math.floor((vim.o.lines - total_height) / 2)
+    local width = math.min(100, math.floor(vim.o.columns * 0.6))
+    local height = math.max(total_height, 10)
+    local row = math.floor((vim.o.lines - height) / 2)
     local col = math.floor((vim.o.columns - width) / 2)
 
     handle.win = vim.api.nvim_open_win(buf, true, {
       relative = "editor",
       width = width,
-      height = total_height,
+      height = height,
       row = row,
       col = col,
       style = "minimal",
