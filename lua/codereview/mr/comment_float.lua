@@ -21,6 +21,15 @@ function M.open(title, opts)
     and vim.api.nvim_win_is_valid(opts.win_id)
     and vim.api.nvim_win_get_width(opts.win_id) >= 40
 
+  -- Capture stable reference height to avoid self-referencing the float's own height
+  local ref_height, min_height
+  if use_inline then
+    ref_height = vim.api.nvim_win_get_height(opts.win_id)
+  else
+    ref_height = vim.o.lines
+    min_height = 10
+  end
+
   -- Buffer setup
   local buf = vim.api.nvim_create_buf(false, true)
   vim.bo[buf].bufhidden = "wipe"
@@ -29,7 +38,8 @@ function M.open(title, opts)
   -- Set initial content: prefill or empty line
   local init_lines = {}
   if opts.prefill and opts.prefill ~= "" then
-    for _, pl in ipairs(vim.split(opts.prefill, "\n")) do
+    local text = opts.prefill:gsub("\\n", "\n")
+    for _, pl in ipairs(vim.split(text, "\n")) do
       table.insert(init_lines, pl)
     end
   else
@@ -38,7 +48,7 @@ function M.open(title, opts)
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, init_lines)
 
   local content_count = #init_lines - header_count
-  local total_height = ifloat.compute_height(content_count, header_count)
+  local total_height = ifloat.compute_height(content_count, header_count, ref_height)
 
   local styled_title = ifloat.title(title)
   local styled_footer = ifloat.footer()
@@ -128,7 +138,7 @@ function M.open(title, opts)
   else
     -- Fallback: centered editor-relative float
     local width = math.min(100, math.floor(vim.o.columns * 0.6))
-    local height = math.max(total_height, 10)
+    local height = math.max(total_height, min_height)
     local row = math.floor((vim.o.lines - height) / 2)
     local col = math.floor((vim.o.columns - width) / 2)
 
@@ -208,7 +218,8 @@ function M.open(title, opts)
         for _, l in ipairs(lines) do
           display_lines = display_lines + math.max(1, math.ceil(vim.fn.strdisplaywidth(l) / win_w))
         end
-        local new_height = ifloat.compute_height(display_lines, header_count)
+        local new_height = ifloat.compute_height(display_lines, header_count, ref_height)
+        if min_height then new_height = math.max(min_height, new_height) end
         if vim.api.nvim_win_is_valid(handle.win) then
           vim.api.nvim_win_set_height(handle.win, new_height)
         end

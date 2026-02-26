@@ -22,8 +22,8 @@ end
 --- @param content_lines number
 --- @param header_lines number
 --- @return number
-function M.compute_height(content_lines, header_lines)
-  local max_height = math.floor(vim.api.nvim_win_get_height(0) * 0.8)
+function M.compute_height(content_lines, header_lines, ref_height)
+  local max_height = math.floor((ref_height or vim.o.lines) * 0.8)
   local h = content_lines + header_lines
   return math.max(MIN_HEIGHT, math.min(max_height, h))
 end
