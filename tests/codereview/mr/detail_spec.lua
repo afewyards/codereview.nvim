@@ -179,7 +179,7 @@ describe("mr.detail", function()
       assert.is_table(result.row_map)
     end)
 
-    it("renders comment thread with header/footer and raw markdown body", function()
+    it("renders comment thread in flat chat-bubble style", function()
       local discussions = {
         {
           id = "abc",
@@ -196,15 +196,11 @@ describe("mr.detail", function()
       }
       local result = detail.build_activity_lines(discussions)
       local joined = table.concat(result.lines, "\n")
-      -- Box header with author
-      assert.truthy(joined:find("┌"))
+      -- Flat header: @author on first content line, no box chars
       assert.truthy(joined:find("@jan"))
-      -- Body line (raw markdown, no │ prefix)
       assert.truthy(joined:find("Looks good"))
-      -- Footer with resolved keymap labels (defaults: r, gt)
-      assert.truthy(joined:find("└"))
-      assert.truthy(joined:find("reply"))
-      assert.truthy(joined:find("resolve"))
+      assert.falsy(joined:find("┌"))
+      assert.falsy(joined:find("└"))
     end)
 
     it("renders replies with arrow notation", function()
@@ -236,7 +232,7 @@ describe("mr.detail", function()
       assert.truthy(joined:find("Done"))
     end)
 
-    it("includes resolved/unresolved status in header", function()
+    it("includes resolved/unresolved status with dot in header", function()
       local discussions = {
         {
           id = "abc",
@@ -257,6 +253,7 @@ describe("mr.detail", function()
       local result = detail.build_activity_lines(discussions)
       local joined = table.concat(result.lines, "\n")
       assert.truthy(joined:find("Unresolved"))
+      assert.truthy(joined:find("●"))
     end)
 
     it("maps thread rows to discussions in row_map", function()
@@ -460,8 +457,6 @@ describe("mr.detail", function()
       local joined = table.concat(result.lines, "\n")
       assert.truthy(joined:find("jan"))
       assert.truthy(joined:find("approved"))
-      -- System notes should NOT have box drawing (┌ only appears for user threads)
-      assert.falsy(joined:find("┌"))
       -- System notes should have a Nerd Font icon
       local has_icon = false
       for _, l in ipairs(result.lines) do
