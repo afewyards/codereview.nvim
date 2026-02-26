@@ -27,10 +27,11 @@ function M.build_header_lines(review, width)
   -- Line 1: │  #id  title                          state │
   local id_str = "#" .. review.id
   local state_str = review.state or "unknown"
-  local title_max = inner_w - #id_str - #state_str - 6  -- 2 pad each side + 2 spaces
+  local sw = vim.fn.strdisplaywidth
+  local title_max = inner_w - #id_str - #state_str - 6  -- 3×2-char pads: "  id  title...state  "
   local title = review.title or ""
-  if #title > title_max then title = title:sub(1, title_max - 1) .. "…" end
-  local gap1 = math.max(1, inner_w - 2 - #id_str - 2 - #title - #state_str)
+  if sw(title) > title_max then title = title:sub(1, title_max - 1) .. "…" end
+  local gap1 = math.max(1, inner_w - 6 - #id_str - sw(title) - #state_str)
   local line1 = "│  " .. id_str .. "  " .. title .. string.rep(" ", gap1) .. state_str .. "  │"
   local row1 = #lines
   table.insert(lines, line1)
@@ -61,7 +62,7 @@ function M.build_header_lines(review, width)
     table.insert(right_parts, ms)
   end
   local right_str = table.concat(right_parts, "   ")
-  local gap2 = math.max(1, inner_w - 2 - #author_str - 2 - #branch_str - 3 - #right_str)
+  local gap2 = math.max(1, inner_w - 6 - #author_str - sw(branch_str) - sw(right_str))
   local line2 = "│  " .. author_str .. "  " .. branch_str .. string.rep(" ", gap2) .. right_str .. "  │"
   local row2 = #lines
   table.insert(lines, line2)

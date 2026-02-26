@@ -119,7 +119,25 @@ _G.vim = {
     timer_stop = function() end,
     getreg = function() return "" end,
     confirm = function() return 1 end,
-    strdisplaywidth = function(s) return #s end,
+    strdisplaywidth = function(s)
+      local w = 0
+      local i = 1
+      local len = #s
+      while i <= len do
+        local b = s:byte(i)
+        if b < 0x80 then
+          w = w + 1; i = i + 1
+        elseif b < 0xE0 then
+          w = w + 1; i = i + 2
+        elseif b < 0xF0 then
+          w = w + 1; i = i + 3
+        else
+          -- 4-byte sequences (emoji) are typically 2 display columns
+          w = w + 2; i = i + 4
+        end
+      end
+      return w
+    end,
     screenpos = function() return { row = 5, col = 1 } end,
     getwininfo = function() return {{ topline = 1 }} end,
     winrestview = function() end,

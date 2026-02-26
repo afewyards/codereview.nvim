@@ -342,32 +342,28 @@ local function parse_alignment(sep_cell)
   return "left"
 end
 
--- Word-wrap text to fit within max_width. Returns list of strings.
+-- Word-wrap text to fit within max_width (display columns). Returns list of strings.
 local function word_wrap(text, max_width)
-  if #text <= max_width then return { text } end
+  local sw = vim.fn.strdisplaywidth
+  if sw(text) <= max_width then return { text } end
   local lines = {}
   local current = ""
   for word in text:gmatch("%S+") do
     if current == "" then
-      if #word > max_width then
-        while #word > max_width do
-          table.insert(lines, word:sub(1, max_width))
-          word = word:sub(max_width + 1)
-        end
-        current = word
+      if sw(word) > max_width then
+        -- Long word: just add as-is (byte-level splitting breaks multi-byte)
+        table.insert(lines, word)
+        current = ""
       else
         current = word
       end
-    elseif #current + 1 + #word <= max_width then
+    elseif sw(current) + 1 + sw(word) <= max_width then
       current = current .. " " .. word
     else
       table.insert(lines, current)
-      if #word > max_width then
-        while #word > max_width do
-          table.insert(lines, word:sub(1, max_width))
-          word = word:sub(max_width + 1)
-        end
-        current = word
+      if sw(word) > max_width then
+        table.insert(lines, word)
+        current = ""
       else
         current = word
       end
@@ -378,10 +374,10 @@ local function word_wrap(text, max_width)
   return lines
 end
 
--- Pad text to exactly width chars with the given alignment.
+-- Pad text to exactly width display columns with the given alignment.
 local function pad_cell(text, width, align)
-  local len = #text
-  if len >= width then return text:sub(1, width) end
+  local len = vim.fn.strdisplaywidth(text)
+  if len >= width then return text end
   local pad = width - len
   if align == "right" then
     return string.rep(" ", pad) .. text
@@ -473,11 +469,12 @@ local function render_table(tbl_lines, base_hl, start_row, opts)
   end
 
   -- Calculate natural column widths from display text (min 3)
+  local sw = vim.fn.strdisplaywidth
   local col_widths = {}
   for ci = 1, num_cols do
-    col_widths[ci] = math.max(3, #header_proc[ci].display)
+    col_widths[ci] = math.max(3, sw(header_proc[ci].display))
     for ri = 1, #data_proc do
-      col_widths[ci] = math.max(col_widths[ci], #data_proc[ri][ci].display)
+      col_widths[ci] = math.max(col_widths[ci], sw(data_proc[ri][ci].display))
     end
   end
 
