@@ -167,6 +167,65 @@ describe("ai.prompt", function()
     end)
   end)
 
+  describe("filter_unchanged_lines", function()
+    it("keeps suggestions on added lines, drops context line suggestions", function()
+      local diffs = {
+        { new_path = "src/foo.lua", diff = "@@ -10,3 +10,4 @@\n context\n-old\n+new\n+added\n" },
+      }
+      local suggestions = {
+        { file = "src/foo.lua", line = 10, comment = "context comment", severity = "info", status = "pending" },
+        { file = "src/foo.lua", line = 11, comment = "added line comment", severity = "warning", status = "pending" },
+        { file = "src/foo.lua", line = 12, comment = "another added", severity = "error", status = "pending" },
+      }
+      local filtered = prompt.filter_unchanged_lines(suggestions, diffs)
+      assert.equals(2, #filtered)
+      assert.equals(11, filtered[1].line)
+      assert.equals(12, filtered[2].line)
+    end)
+
+    it("handles multi-file diffs", function()
+      local diffs = {
+        { new_path = "a.lua", diff = "@@ -1,1 +1,2 @@\n context\n+added\n" },
+        { new_path = "b.lua", diff = "@@ -5,1 +5,2 @@\n context\n+new\n" },
+      }
+      local suggestions = {
+        { file = "a.lua", line = 1, comment = "context", severity = "info", status = "pending" },
+        { file = "a.lua", line = 2, comment = "added", severity = "info", status = "pending" },
+        { file = "b.lua", line = 6, comment = "new", severity = "info", status = "pending" },
+      }
+      local filtered = prompt.filter_unchanged_lines(suggestions, diffs)
+      assert.equals(2, #filtered)
+      assert.equals("a.lua", filtered[1].file)
+      assert.equals(2, filtered[1].line)
+      assert.equals("b.lua", filtered[2].file)
+      assert.equals(6, filtered[2].line)
+    end)
+
+    it("returns empty table when all suggestions are on context lines", function()
+      local diffs = {
+        { new_path = "f.lua", diff = "@@ -5,3 +5,3 @@\n ctx1\n-old\n+new\n ctx2\n" },
+      }
+      local suggestions = {
+        { file = "f.lua", line = 5, comment = "ctx", severity = "info", status = "pending" },
+        { file = "f.lua", line = 7, comment = "ctx2", severity = "info", status = "pending" },
+      }
+      local filtered = prompt.filter_unchanged_lines(suggestions, diffs)
+      assert.equals(0, #filtered)
+    end)
+
+    it("passes through all suggestions when all are on changed lines", function()
+      local diffs = {
+        { new_path = "f.lua", diff = "@@ -1,1 +1,2 @@\n-old\n+new\n+extra\n" },
+      }
+      local suggestions = {
+        { file = "f.lua", line = 1, comment = "a", severity = "info", status = "pending" },
+        { file = "f.lua", line = 2, comment = "b", severity = "info", status = "pending" },
+      }
+      local filtered = prompt.filter_unchanged_lines(suggestions, diffs)
+      assert.equals(2, #filtered)
+    end)
+  end)
+
   describe("build_review_prompt", function()
     it("includes MR title, file path, and JSON instruction", function()
       local review = { title = "Fix auth refresh", description = "Fixes silent token expiry" }

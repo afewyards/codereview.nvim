@@ -139,6 +139,30 @@ function M.extract_changed_lines(diff_text)
   return changed
 end
 
+--- Filter out suggestions that target unchanged context lines.
+--- @param suggestions table[]  Parsed suggestions from parse_review_output
+--- @param diffs table[]        File diff objects (each with new_path/old_path and diff fields)
+--- @return table[]             Suggestions on changed lines only
+function M.filter_unchanged_lines(suggestions, diffs)
+  local log = require("codereview.log")
+  local changed_map = {}
+  for _, file in ipairs(diffs) do
+    local path = file.new_path or file.old_path
+    changed_map[path] = M.extract_changed_lines(file.diff)
+  end
+
+  local kept = {}
+  for _, s in ipairs(suggestions) do
+    local file_changed = changed_map[s.file]
+    if file_changed and file_changed[s.line] then
+      table.insert(kept, s)
+    else
+      log.debug(string.format("AI filter: dropped comment on unchanged line %s:%d", s.file, s.line or 0))
+    end
+  end
+  return kept
+end
+
 function M.build_review_prompt(review, diffs)
   local parts = {
     "You are reviewing a merge request.",
