@@ -30,6 +30,8 @@ create_comment       = { key = "cc",    mode = "n", desc = "New comment" },
   delete_note          = { key = "x",       mode = "n", desc = "Delete note" },
   pick_comments        = { key = "<leader>fc", mode = "n", desc = "Pick comment/suggestion" },
   pick_files           = { key = "<leader>ff", mode = "n", desc = "Pick file" },
+  move_down = { key = "j", mode = "n", desc = "Move down / next comment" },
+  move_up   = { key = "k", mode = "n", desc = "Move up / prev comment" },
 }
 
 local function deep_copy(orig)
