@@ -158,7 +158,7 @@ describe("render_file_suggestions focus guard", function()
     vim.api.nvim_set_current_win = function(w) table.insert(set_win_calls, w) end
     vim.api.nvim_get_current_win = function() return 999 end
     local diff_state = {
-      files = { { new_path = "a.lua", diff = "diff-a" } },
+      files = { { new_path = "a.lua", diff = "@@ -0,0 +1 @@\n+test note\n" } },
       discussions = {}, ai_suggestions = {}, view_mode = "diff",
       current_file = 1, scroll_mode = false,
       line_data_cache = {}, row_disc_cache = {}, row_ai_cache = {},
@@ -173,7 +173,7 @@ describe("render_file_suggestions focus guard", function()
     vim.api.nvim_set_current_win = function(w) table.insert(set_win_calls, w) end
     vim.api.nvim_get_current_win = function() return 1 end
     local diff_state = {
-      files = { { new_path = "a.lua", diff = "diff-a" } },
+      files = { { new_path = "a.lua", diff = "@@ -0,0 +1 @@\n+test note\n" } },
       discussions = {}, ai_suggestions = {}, view_mode = "diff",
       current_file = 1, scroll_mode = false,
       line_data_cache = {}, row_disc_cache = {}, row_ai_cache = {},
@@ -223,7 +223,7 @@ describe("review.start_file", function()
   it("replaces only the target file's suggestions", function()
     local diff_state = {
       files = {
-        { new_path = "a.lua", diff = "diff-a" },
+        { new_path = "a.lua", diff = "@@ -9,1 +10,1 @@\n+new a\n" },
         { new_path = "b.lua", diff = "diff-b" },
       },
       discussions = {},

@@ -91,6 +91,7 @@ local function start_single(review, diff_state, layout)
     end
 
     local suggestions = prompt_mod.parse_review_output(output)
+    suggestions = prompt_mod.filter_unchanged_lines(suggestions, diffs)
     if #suggestions == 0 then
       vim.notify("AI review: no issues found!", vim.log.levels.INFO)
       return
@@ -169,6 +170,7 @@ local function start_multi(review, diff_state, layout)
           vim.notify("AI review failed for " .. path .. ": " .. file_err, vim.log.levels.WARN)
         else
           local suggestions = prompt_mod.parse_review_output(file_output)
+          suggestions = prompt_mod.filter_unchanged_lines(suggestions, { file })
           if #suggestions > 0 then
             render_file_suggestions(diff_state, layout, suggestions)
           end
@@ -268,6 +270,7 @@ function M.start_file(review, diff_state, layout)
       end
 
       local suggestions = prompt_mod.parse_review_output(file_output)
+      suggestions = prompt_mod.filter_unchanged_lines(suggestions, { target })
       if #suggestions == 0 then
         vim.notify("AI review: no issues found in " .. target_path, vim.log.levels.INFO)
         return
