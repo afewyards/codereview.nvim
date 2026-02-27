@@ -144,6 +144,7 @@ end
 --- @param diffs table[]        File diff objects (each with new_path/old_path and diff fields)
 --- @return table[]             Suggestions on changed lines only
 function M.filter_unchanged_lines(suggestions, diffs)
+  if not suggestions or not diffs then return suggestions or {} end
   local log = require("codereview.log")
   local changed_map = {}
   for _, file in ipairs(diffs) do
