@@ -110,6 +110,35 @@ function M.annotate_diff_with_lines(diff_text)
   return out
 end
 
+--- Extract the set of new-file line numbers that are actual additions ("+") in a diff.
+--- @param diff_text string|nil  Raw unified diff text
+--- @return table<number, true>  Set of line numbers with additions
+function M.extract_changed_lines(diff_text)
+  if not diff_text or diff_text == "" then return {} end
+  local changed = {}
+  local in_hunk = false
+  local new_line = 0
+
+  for line in (diff_text .. "\n"):gmatch("(.-)\n") do
+    local ns = line:match("^@@ %-[%d,]+ %+(%d+)[,%d]* @@")
+    if ns then
+      in_hunk = true
+      new_line = tonumber(ns)
+    elseif in_hunk then
+      local prefix = line:sub(1, 1)
+      if prefix == "+" then
+        changed[new_line] = true
+        new_line = new_line + 1
+      elseif prefix == "-" then
+        -- deleted line: no new_line increment
+      elseif prefix == " " or line == "" then
+        new_line = new_line + 1
+      end
+    end
+  end
+  return changed
+end
+
 function M.build_review_prompt(review, diffs)
   local parts = {
     "You are reviewing a merge request.",
@@ -140,6 +169,7 @@ function M.build_review_prompt(review, diffs)
   table.insert(parts, 'The "code" field must contain the trimmed source code from the line you are commenting on (without the diff +/- prefix).')
   table.insert(parts, 'Use \\n inside "comment" strings for line breaks (e.g. "Problem.\\n\\nSuggested fix:").')
   table.insert(parts, "If no issues, output `[]`.")
+  table.insert(parts, "ONLY comment on lines that are actual changes: lines prefixed with + (added) or - (removed) in the diff. Context lines (no +/- prefix) are for understanding only — NEVER comment on them.")
   table.insert(parts, "Focus on: bugs, security, error handling, edge cases, naming, clarity.")
   table.insert(parts, "Do NOT comment on style or formatting.")
   local sev_instr = severity_instruction()
@@ -298,8 +328,9 @@ function M.build_file_review_prompt(review, file, summaries, content)
   table.insert(parts, 'Use \\n inside "comment" strings for line breaks.')
   table.insert(parts, "If no issues, output `[]`.")
   if content and content ~= "" then
-    table.insert(parts, "The full file content is provided above for context. Only review the changes shown in the diff.")
+    table.insert(parts, "The full file content is provided above for understanding only.")
   end
+  table.insert(parts, "ONLY comment on lines that are actual changes: lines prefixed with + (added) or - (removed) in the diff. Context lines (no +/- prefix) are for understanding only — NEVER comment on them.")
   table.insert(parts, "Focus on: bugs, security, error handling, edge cases, naming, clarity.")
   table.insert(parts, "Do NOT comment on style or formatting.")
   local sev_instr = severity_instruction()

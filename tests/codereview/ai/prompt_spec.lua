@@ -139,6 +139,34 @@ describe("ai.prompt", function()
     end)
   end)
 
+  describe("extract_changed_lines", function()
+    it("returns added line numbers from annotated diff", function()
+      local diff = "@@ -10,3 +10,4 @@\n context\n-old\n+new\n+added\n"
+      local changed = prompt.extract_changed_lines(diff)
+      assert.is_true(changed[11])
+      assert.is_true(changed[12])
+      assert.is_nil(changed[10])
+    end)
+
+    it("returns empty table for diff with no additions", function()
+      local diff = "@@ -5,2 +5,1 @@\n-removed\n context\n"
+      local changed = prompt.extract_changed_lines(diff)
+      assert.same({}, changed)
+    end)
+
+    it("handles multiple hunks", function()
+      local diff = "@@ -1,2 +1,2 @@\n-old1\n+new1\n@@ -10,2 +10,2 @@\n-old2\n+new2\n"
+      local changed = prompt.extract_changed_lines(diff)
+      assert.is_true(changed[1])
+      assert.is_true(changed[10])
+    end)
+
+    it("returns empty table for nil input", function()
+      local changed = prompt.extract_changed_lines(nil)
+      assert.same({}, changed)
+    end)
+  end)
+
   describe("build_review_prompt", function()
     it("includes MR title, file path, and JSON instruction", function()
       local review = { title = "Fix auth refresh", description = "Fixes silent token expiry" }
@@ -319,7 +347,7 @@ describe("ai.prompt", function()
       assert.truthy(result:find("## Full File Content"))
       assert.truthy(result:find("local M = {}"))
       assert.truthy(result:find("function M.foo"))
-      assert.truthy(result:find("Only review the changes shown in the diff"))
+      assert.truthy(result:find("ONLY comment on lines that are actual changes"))
     end)
 
     it("omits full file content section when content is nil", function()
