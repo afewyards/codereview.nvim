@@ -1186,7 +1186,6 @@ function M.setup_keymaps(state, layout, active_states)
     end,
 
     move_down = function()
-      -- Not in diff mode → plain j
       if state.view_mode ~= "diff" then
         vim.cmd("normal! j")
         return
@@ -1195,12 +1194,27 @@ function M.setup_keymaps(state, layout, active_states)
       local cursor_row = vim.api.nvim_win_get_cursor(layout.main_win)[1]
       local row_ai = state.scroll_mode and state.scroll_row_ai or (state.row_ai_cache[state.current_file] or {})
       local row_disc_map = state.scroll_mode and state.scroll_row_disc or (state.row_disc_cache[state.current_file] or {})
-      local ai_at_row = row_ai[cursor_row] or {}
-      local discs_at_row = row_disc_map[cursor_row] or {}
-      local items = diff_comments.build_row_items(ai_at_row, discs_at_row)
+      local has_sel = next(state.row_selection) ~= nil
+      local cur_has_ann = row_ai[cursor_row] or row_disc_map[cursor_row]
 
-      -- If current row has items and something is already selected, try cycling forward
-      if #items > 0 and state.row_selection[cursor_row] then
+      -- Fast path: no selection, no annotations on current row → move and quick-check next
+      if not has_sel and not cur_has_ann then
+        vim.cmd("normal! j")
+        local new_row = vim.api.nvim_win_get_cursor(layout.main_win)[1]
+        if new_row ~= cursor_row and (row_ai[new_row] or row_disc_map[new_row]) then
+          local new_items = diff_comments.build_row_items(row_ai[new_row] or {}, row_disc_map[new_row] or {})
+          if #new_items > 0 then
+            state.row_selection = { [new_row] = new_items[1] }
+            diff_nav.ensure_virt_lines_visible(layout.main_win, layout.main_buf, new_row)
+            rerender_view()
+          end
+        end
+        return
+      end
+
+      -- Current row has annotations and something selected → try cycling forward
+      if cur_has_ann and has_sel and state.row_selection[cursor_row] then
+        local items = diff_comments.build_row_items(row_ai[cursor_row] or {}, row_disc_map[cursor_row] or {})
         local next_sel = diff_comments.cycle_row_selection(items, state.row_selection[cursor_row], 1)
         if next_sel then
           state.row_selection = { [cursor_row] = next_sel }
@@ -1210,27 +1224,26 @@ function M.setup_keymaps(state, layout, active_states)
       end
 
       -- Move cursor down
-      local had_selection = next(state.row_selection) ~= nil
       vim.cmd("normal! j")
       local new_row = vim.api.nvim_win_get_cursor(layout.main_win)[1]
-      if new_row == cursor_row then return end  -- didn't move (end of buffer)
+      if new_row == cursor_row then return end
 
-      local new_ai = row_ai[new_row] or {}
-      local new_disc = row_disc_map[new_row] or {}
-      local new_items = diff_comments.build_row_items(new_ai, new_disc)
-
-      if #new_items > 0 then
-        state.row_selection = { [new_row] = new_items[1] }
-        diff_nav.ensure_virt_lines_visible(layout.main_win, layout.main_buf, new_row)
-        rerender_view()
-      elseif had_selection then
+      if row_ai[new_row] or row_disc_map[new_row] then
+        local new_items = diff_comments.build_row_items(row_ai[new_row] or {}, row_disc_map[new_row] or {})
+        if #new_items > 0 then
+          state.row_selection = { [new_row] = new_items[1] }
+          diff_nav.ensure_virt_lines_visible(layout.main_win, layout.main_buf, new_row)
+          rerender_view()
+          return
+        end
+      end
+      if has_sel then
         state.row_selection = {}
         rerender_view()
       end
     end,
 
     move_up = function()
-      -- Not in diff mode → plain k
       if state.view_mode ~= "diff" then
         vim.cmd("normal! k")
         return
@@ -1239,12 +1252,27 @@ function M.setup_keymaps(state, layout, active_states)
       local cursor_row = vim.api.nvim_win_get_cursor(layout.main_win)[1]
       local row_ai = state.scroll_mode and state.scroll_row_ai or (state.row_ai_cache[state.current_file] or {})
       local row_disc_map = state.scroll_mode and state.scroll_row_disc or (state.row_disc_cache[state.current_file] or {})
-      local ai_at_row = row_ai[cursor_row] or {}
-      local discs_at_row = row_disc_map[cursor_row] or {}
-      local items = diff_comments.build_row_items(ai_at_row, discs_at_row)
+      local has_sel = next(state.row_selection) ~= nil
+      local cur_has_ann = row_ai[cursor_row] or row_disc_map[cursor_row]
 
-      -- If current row has items and something is already selected, try cycling backward
-      if #items > 0 and state.row_selection[cursor_row] then
+      -- Fast path: no selection, no annotations on current row → move and quick-check next
+      if not has_sel and not cur_has_ann then
+        vim.cmd("normal! k")
+        local new_row = vim.api.nvim_win_get_cursor(layout.main_win)[1]
+        if new_row ~= cursor_row and (row_ai[new_row] or row_disc_map[new_row]) then
+          local new_items = diff_comments.build_row_items(row_ai[new_row] or {}, row_disc_map[new_row] or {})
+          if #new_items > 0 then
+            state.row_selection = { [new_row] = new_items[#new_items] }
+            diff_nav.ensure_virt_lines_visible(layout.main_win, layout.main_buf, new_row)
+            rerender_view()
+          end
+        end
+        return
+      end
+
+      -- Current row has annotations and something selected → try cycling backward
+      if cur_has_ann and has_sel and state.row_selection[cursor_row] then
+        local items = diff_comments.build_row_items(row_ai[cursor_row] or {}, row_disc_map[cursor_row] or {})
         local next_sel = diff_comments.cycle_row_selection(items, state.row_selection[cursor_row], -1)
         if next_sel then
           state.row_selection = { [cursor_row] = next_sel }
@@ -1254,20 +1282,20 @@ function M.setup_keymaps(state, layout, active_states)
       end
 
       -- Move cursor up
-      local had_selection = next(state.row_selection) ~= nil
       vim.cmd("normal! k")
       local new_row = vim.api.nvim_win_get_cursor(layout.main_win)[1]
-      if new_row == cursor_row then return end  -- didn't move (top of buffer)
+      if new_row == cursor_row then return end
 
-      local new_ai = row_ai[new_row] or {}
-      local new_disc = row_disc_map[new_row] or {}
-      local new_items = diff_comments.build_row_items(new_ai, new_disc)
-
-      if #new_items > 0 then
-        state.row_selection = { [new_row] = new_items[#new_items] }
-        diff_nav.ensure_virt_lines_visible(layout.main_win, layout.main_buf, new_row)
-        rerender_view()
-      elseif had_selection then
+      if row_ai[new_row] or row_disc_map[new_row] then
+        local new_items = diff_comments.build_row_items(row_ai[new_row] or {}, row_disc_map[new_row] or {})
+        if #new_items > 0 then
+          state.row_selection = { [new_row] = new_items[#new_items] }
+          diff_nav.ensure_virt_lines_visible(layout.main_win, layout.main_buf, new_row)
+          rerender_view()
+          return
+        end
+      end
+      if has_sel then
         state.row_selection = {}
         rerender_view()
       end
