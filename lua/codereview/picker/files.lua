@@ -60,6 +60,7 @@ function M.build_entries(files, discussions, ai_suggestions)
       comment_count = cc,
       unresolved_count = uc,
       ai_count = ac,
+      diff = file.diff,
     })
   end
   return entries

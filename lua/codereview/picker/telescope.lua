@@ -6,6 +6,7 @@ function M.pick_mr(entries, on_select)
   local conf = require("telescope.config").values
   local actions = require("telescope.actions")
   local action_state = require("telescope.actions.state")
+  local previewers = require("telescope.previewers")
 
   pickers
     .new({}, {
@@ -18,6 +19,16 @@ function M.pick_mr(entries, on_select)
             display = entry.display,
             ordinal = entry.title .. " " .. entry.author .. " " .. tostring(entry.id),
           }
+        end,
+      }),
+      previewer = previewers.new_buffer_previewer({
+        title = "Description",
+        define_preview = function(self, entry)
+          local desc = entry.value.review and entry.value.review.description or ""
+          if desc == "" then desc = "(no description)" end
+          local lines = vim.split(desc, "\n", { plain = true })
+          vim.api.nvim_buf_set_lines(self.state.bufnr, 0, -1, false, lines)
+          vim.bo[self.state.bufnr].syntax = "markdown"
         end,
       }),
       sorter = conf.generic_sorter({}),
@@ -41,6 +52,7 @@ function M.pick_files(entries, on_select)
   local conf = require("telescope.config").values
   local actions = require("telescope.actions")
   local action_state = require("telescope.actions.state")
+  local previewers = require("telescope.previewers")
 
   pickers
     .new({}, {
@@ -53,6 +65,15 @@ function M.pick_files(entries, on_select)
             display = entry.display,
             ordinal = entry.ordinal,
           }
+        end,
+      }),
+      previewer = previewers.new_buffer_previewer({
+        title = "Diff",
+        define_preview = function(self, entry)
+          local diff = entry.value.diff or "(no diff available)"
+          local lines = vim.split(diff, "\n", { plain = true })
+          vim.api.nvim_buf_set_lines(self.state.bufnr, 0, -1, false, lines)
+          vim.bo[self.state.bufnr].syntax = "diff"
         end,
       }),
       sorter = conf.generic_sorter({}),
@@ -68,12 +89,40 @@ function M.pick_files(entries, on_select)
     :find()
 end
 
+local function format_comment_preview(entry)
+  if entry.type == "ai_suggestion" and entry.suggestion then
+    local s = entry.suggestion
+    local lines = { "[" .. s.severity .. "] " .. (s.file or "") .. ":" .. (s.line or ""), "" }
+    if s.code then
+      table.insert(lines, "```")
+      table.insert(lines, s.code)
+      table.insert(lines, "```")
+      table.insert(lines, "")
+    end
+    table.insert(lines, s.comment or "")
+    return table.concat(lines, "\n")
+  end
+
+  if entry.type == "discussion" and entry.discussion then
+    local parts = {}
+    for _, note in ipairs(entry.discussion.notes or {}) do
+      table.insert(parts, "@" .. (note.author or "unknown") .. ":")
+      table.insert(parts, note.body or "")
+      table.insert(parts, "")
+    end
+    return table.concat(parts, "\n")
+  end
+
+  return "(no preview)"
+end
+
 function M.pick_comments(entries, on_select, opts)
   local pickers = require("telescope.pickers")
   local finders = require("telescope.finders")
   local conf = require("telescope.config").values
   local actions = require("telescope.actions")
   local action_state = require("telescope.actions.state")
+  local previewers = require("telescope.previewers")
 
   local filters = { "all", "unresolved", "resolved" }
   local filter_idx = 1
@@ -96,6 +145,15 @@ function M.pick_comments(entries, on_select, opts)
     .new({}, {
       prompt_title = "Comments & Suggestions [all]",
       finder = make_finder(current_entries),
+      previewer = previewers.new_buffer_previewer({
+        title = "Comment",
+        define_preview = function(self, entry)
+          local text = format_comment_preview(entry.value)
+          local lines = vim.split(text, "\n", { plain = true })
+          vim.api.nvim_buf_set_lines(self.state.bufnr, 0, -1, false, lines)
+          vim.bo[self.state.bufnr].syntax = "markdown"
+        end,
+      }),
       sorter = conf.generic_sorter({}),
       attach_mappings = function(prompt_bufnr, map)
         actions.select_default:replace(function()
