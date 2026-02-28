@@ -498,10 +498,18 @@ _G.vim = {
       data = data .. string.rep("\0", padding)
       for i = 1, #data, 3 do
         local a, b, c = data:byte(i), data:byte(i + 1), data:byte(i + 2)
-        local idx1 = bit32 and bit32.rshift(a, 2) or (a >> 2)
-        local idx2 = bit32 and (bit32.band(a, 3) * 16 + bit32.rshift(b, 4)) or ((a & 3) * 16 + (b >> 4))
-        local idx3 = bit32 and (bit32.band(b, 15) * 4 + bit32.rshift(c, 6)) or ((b & 15) * 4 + (c >> 6))
-        local idx4 = bit32 and bit32.band(c, 63) or (c & 63)
+        local idx1, idx2, idx3, idx4
+        if bit32 then
+          idx1 = bit32.rshift(a, 2)
+          idx2 = bit32.band(a, 3) * 16 + bit32.rshift(b, 4)
+          idx3 = bit32.band(b, 15) * 4 + bit32.rshift(c, 6)
+          idx4 = bit32.band(c, 63)
+        else
+          idx1 = math.floor(a / 4)
+          idx2 = (a % 4) * 16 + math.floor(b / 16)
+          idx3 = (b % 16) * 4 + math.floor(c / 64)
+          idx4 = c % 64
+        end
         table.insert(result, b64chars:sub(idx1 + 1, idx1 + 1))
         table.insert(result, b64chars:sub(idx2 + 1, idx2 + 1))
         table.insert(result, b64chars:sub(idx3 + 1, idx3 + 1))
