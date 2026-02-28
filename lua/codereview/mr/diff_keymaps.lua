@@ -306,6 +306,13 @@ function M.setup_keymaps(state, layout, active_states)
 
   local main_callbacks = {
     next_file = function()
+      if state.view_mode == "summary" then
+        local idx = (state.current_file or 0) + 1
+        if idx >= 1 and idx <= #(state.files or {}) then
+          diff_nav.jump_to_file(layout, state, idx)
+        end
+        return
+      end
       if state.view_mode ~= "diff" then return end
       if state.scroll_mode then
         local cursor = vim.api.nvim_win_get_cursor(layout.main_win)[1]
@@ -323,6 +330,13 @@ function M.setup_keymaps(state, layout, active_states)
     end,
 
     prev_file = function()
+      if state.view_mode == "summary" then
+        local idx = (state.current_file or 0) - 1
+        if idx >= 1 and idx <= #(state.files or {}) then
+          diff_nav.jump_to_file(layout, state, idx)
+        end
+        return
+      end
       if state.view_mode ~= "diff" then return end
       if state.scroll_mode then
         local cursor = vim.api.nvim_win_get_cursor(layout.main_win)[1]
@@ -1317,10 +1331,24 @@ function M.setup_keymaps(state, layout, active_states)
 
   local sidebar_callbacks = {
     next_file = function()
+      if state.view_mode == "summary" then
+        local idx = (state.current_file or 0) + 1
+        if idx >= 1 and idx <= #(state.files or {}) then
+          diff_nav.jump_to_file(layout, state, idx)
+        end
+        return
+      end
       if state.view_mode ~= "diff" then return end
       diff_nav.nav_file(layout, state, 1)
     end,
     prev_file = function()
+      if state.view_mode == "summary" then
+        local idx = (state.current_file or 0) - 1
+        if idx >= 1 and idx <= #(state.files or {}) then
+          diff_nav.jump_to_file(layout, state, idx)
+        end
+        return
+      end
       if state.view_mode ~= "diff" then return end
       diff_nav.nav_file(layout, state, -1)
     end,
