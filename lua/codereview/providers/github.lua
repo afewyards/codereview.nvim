@@ -340,10 +340,24 @@ function M.post_range_comment(client, ctx, review, body, old_path, new_path, sta
 end
 
 --- Reply to an existing review comment thread.
+--- When a pending review exists, adds the reply to that review (avoids
+--- "user_id can only have one pending review" 422 errors).
 function M.reply_to_discussion(client, ctx, review, discussion_id, body)
   local headers, err = get_headers()
   if not headers then return nil, err end
   local owner, repo = parse_owner_repo(ctx)
+
+  if M._pending_review_id then
+    local path_url = string.format(
+      "/repos/%s/%s/pulls/%d/reviews/%d/comments",
+      owner, repo, review.id, M._pending_review_id
+    )
+    return client.post(ctx.base_url, path_url, {
+      body = { body = body, in_reply_to = tonumber(discussion_id) },
+      headers = headers,
+    })
+  end
+
   local path_url = string.format("/repos/%s/%s/pulls/%d/comments/%s/replies", owner, repo, review.id, discussion_id)
   return client.post(ctx.base_url, path_url, { body = { body = body }, headers = headers })
 end

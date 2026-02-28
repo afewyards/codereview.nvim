@@ -314,8 +314,24 @@ describe("providers.github", function()
       local client = make_client({
         post = function(_, path, _) called_path = path return {}, nil end,
       })
+      github._pending_review_id = nil
       github.reply_to_discussion(client, ctx, review, "99", "reply body")
       assert.equal("/repos/owner/repo/pulls/42/comments/99/replies", called_path)
+    end)
+
+    it("reply_to_discussion routes through pending review when one exists", function()
+      local called_path, called_body
+      local client = make_client({
+        post = function(_, path, opts) called_path = path called_body = opts.body return {}, nil end,
+      })
+      github._pending_review_id = 777
+      github._pending_review_node_id = "PRR_node"
+      github.reply_to_discussion(client, ctx, review, "99", "reply body")
+      assert.equal("/repos/owner/repo/pulls/42/reviews/777/comments", called_path)
+      assert.equal(99, called_body.in_reply_to)
+      assert.equal("reply body", called_body.body)
+      github._pending_review_id = nil
+      github._pending_review_node_id = nil
     end)
 
     it("close patches PR with state=closed", function()
