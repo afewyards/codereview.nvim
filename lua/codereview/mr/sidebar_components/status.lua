@@ -4,6 +4,12 @@
 
 local M = {}
 
+local PUBLISHED_LABELS = {
+  APPROVE = "✓ Approved",
+  REQUEST_CHANGES = "✓ Changes requested",
+  COMMENT = "✓ Review published",
+}
+
 local function count_session_stats(state)
   local stats = { drafts = 0, ai_accepted = 0, ai_dismissed = 0, ai_pending = 0, threads = 0, unresolved = 0 }
   for _ in ipairs(state.local_drafts or {}) do
@@ -36,6 +42,15 @@ end
 function M.render(state, _width)
   local session = require("codereview.review.session")
   local sess = session.get()
+
+  if sess.published then
+    local label = PUBLISHED_LABELS[sess.published.event] or "✓ Review published"
+    return {
+      lines = { label },
+      highlights = { { row = 1, line_hl = "CodeReviewFileAdded" } },
+      row_map = { status = 1 },
+    }
+  end
 
   if not sess.active then
     return { lines = {}, highlights = {}, row_map = {} }

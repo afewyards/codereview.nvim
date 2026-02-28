@@ -61,3 +61,54 @@ describe("sidebar_components.status", function()
     assert.is_true(found, "expected CodeReviewSpinner highlight on status row")
   end)
 end)
+
+describe("published state", function()
+  local session
+  local status
+
+  before_each(function()
+    package.loaded["codereview.ui.spinner"] = {
+      open = function() end,
+      close = function() end,
+    }
+    package.loaded["codereview.review.session"] = nil
+    package.loaded["codereview.mr.sidebar_components.status"] = nil
+    session = require("codereview.review.session")
+    status = require("codereview.mr.sidebar_components.status")
+  end)
+
+  after_each(function()
+    session.reset()
+    package.loaded["codereview.ui.spinner"] = nil
+    package.loaded["codereview.review.session"] = nil
+    package.loaded["codereview.mr.sidebar_components.status"] = nil
+  end)
+
+  it("renders approved status", function()
+    session.start()
+    session.publish("APPROVE")
+    local result = status.render({}, 30)
+    assert.equals("✓ Approved", result.lines[1])
+  end)
+
+  it("renders changes requested status", function()
+    session.start()
+    session.publish("REQUEST_CHANGES")
+    local result = status.render({}, 30)
+    assert.equals("✓ Changes requested", result.lines[1])
+  end)
+
+  it("renders comment published status", function()
+    session.start()
+    session.publish("COMMENT")
+    local result = status.render({}, 30)
+    assert.equals("✓ Review published", result.lines[1])
+  end)
+
+  it("applies green highlight", function()
+    session.start()
+    session.publish("APPROVE")
+    local result = status.render({}, 30)
+    assert.equals("CodeReviewFileAdded", result.highlights[1].line_hl)
+  end)
+end)
