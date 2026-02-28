@@ -1,0 +1,684 @@
+*codereview.txt*     Review PRs and MRs without leaving Neovim
+
+==============================================================================
+INTRODUCTION                                   *codereview-introduction*
+                                                     *codereview.nvim*
+
+codereview.nvim is a Neovim plugin for reviewing pull requests and merge
+requests without leaving the editor. It provides a dual-pane diff viewer,
+threaded discussions, AI-powered review, and deep picker integration.
+
+Key features:
+  - Dual-pane diff viewer with inline comment threads
+  - GitHub and GitLab support (auto-detected)
+  - Threaded discussions: create, reply, resolve, edit, delete
+  - AI-powered review via Claude CLI, Anthropic, OpenAI, Ollama, or custom
+  - Review sessions: comments become drafts until explicitly submitted
+  - Picker integration: Telescope, fzf-lua, and snacks.nvim
+  - Fully remappable keybindings — every action can be rebound or disabled
+
+==============================================================================
+REQUIREMENTS                                         *codereview-requirements*
+
+  - Neovim >= 0.10
+  - git
+  - curl
+
+Optional (at least one required for picker support):
+  - telescope.nvim     https://github.com/nvim-telescope/telescope.nvim
+  - fzf-lua            https://github.com/ibhagwan/fzf-lua
+  - snacks.nvim        https://github.com/folke/snacks.nvim
+
+==============================================================================
+INSTALLATION                                         *codereview-installation*
+
+lazy.nvim ~
+>lua
+  {
+    "codereview-nvim/codereview.nvim",
+    opts = {},
+  }
+<
+
+packer.nvim ~
+>lua
+  use {
+    "codereview-nvim/codereview.nvim",
+    config = function()
+      require("codereview").setup()
+    end,
+  }
+<
+
+Note: Most plugin managers (lazy.nvim, packer, etc.) auto-generate helptags
+on install. If `:help codereview` does not work, run:
+>
+  :helptags ALL
+<
+
+==============================================================================
+QUICK START                                           *codereview-quickstart*
+
+1. Add a minimal setup call to your config:
+>lua
+   require("codereview").setup()
+<
+
+2. Export a token for your platform:
+>sh
+   export GITHUB_TOKEN=ghp_xxxxxxxxxxxx
+   # or
+   export GITLAB_TOKEN=glpat-xxxxxxxxxxxx
+<
+
+3. Open a repository and run:
+>
+   :CodeReview
+<
+
+This opens the picker to select a PR/MR. Once selected, the diff viewer
+loads and all keymaps become active. See |codereview-keymaps|.
+
+==============================================================================
+COMMANDS                                               *codereview-commands*
+
+                                                           *:CodeReview*
+:CodeReview
+  Open the review picker to select a PR or MR. Requires a picker
+  (telescope, fzf-lua, or snacks). See |codereview-requirements|.
+
+                                                        *:CodeReviewAI*
+:CodeReviewAI
+  Run an AI review on the entire diff of the current PR/MR. Results
+  appear as AI suggestion panels in the diff view. See |codereview-ai-review|.
+
+                                                    *:CodeReviewAIFile*
+:CodeReviewAIFile
+  Run an AI review on the currently visible file only.
+
+                                                  *:CodeReviewPipeline*
+:CodeReviewPipeline
+  Show pipeline / CI status for the current PR/MR.
+
+                                                   *:CodeReviewSubmit*
+:CodeReviewSubmit
+  Submit all pending draft comments. Only relevant when a review
+  session is active. See |:CodeReviewStart|.
+
+                                                   *:CodeReviewApprove*
+:CodeReviewApprove
+  Approve the current PR/MR on the remote platform.
+
+                                                     *:CodeReviewOpen*
+:CodeReviewOpen
+  Create a new PR/MR for the current branch.
+
+                                                    *:CodeReviewStart*
+:CodeReviewStart
+  Start a review session. While a session is active, new comments are
+  stored as drafts instead of being posted immediately. Use
+  |:CodeReviewSubmit| to post them all at once.
+
+                                                 *:CodeReviewComments*
+:CodeReviewComments
+  Open the picker to browse all comments and AI suggestions for the
+  current PR/MR.
+
+                                                    *:CodeReviewFiles*
+:CodeReviewFiles
+  Open the picker to browse changed files in the current PR/MR.
+
+==============================================================================
+KEYMAPS                                               *codereview-keymaps*
+
+All keymaps are buffer-local and active only inside the diff viewer.
+Every action can be remapped or disabled. See |codereview.keymaps|.
+
+------------------------------------------------------------------------------
+Navigation ~
+
+  Key          Action
+  --------     -------------------------------------------------------
+  ]f           Next file
+  [f           Previous file
+  j            Move down / next comment
+  k            Move up / prev comment
+  <Tab>        Select next note in thread
+  <S-Tab>      Select previous note in thread
+  <C-f>        Toggle full file view
+  <C-a>        Toggle scroll / per-file mode
+  +            Increase context lines
+  -            Decrease context lines
+
+------------------------------------------------------------------------------
+Comments ~
+
+  Key          Mode    Action
+  --------     ------  -------------------------------------------------------
+  cc           normal  Create a new comment on the current line
+  cc           visual  Create a range comment over the selected lines
+  r            normal  Reply to the currently selected thread
+  gt           normal  Toggle resolve / unresolve the selected thread
+  e            normal  Edit the selected note
+  x            normal  Delete the selected note
+
+------------------------------------------------------------------------------
+AI suggestions ~
+
+  Key          Action
+  --------     -------------------------------------------------------
+  A            Start or cancel AI review
+  af           AI review for the current file only
+  a            Accept the highlighted AI suggestion
+  x            Dismiss the highlighted AI suggestion
+  e            Edit the highlighted AI suggestion
+  ds           Dismiss all AI suggestions
+
+Note: Some keys (`a`, `e`, `x`) appear in both comment and AI suggestion
+contexts. The active binding depends on which actions are registered for
+the current buffer.
+
+------------------------------------------------------------------------------
+Actions ~
+
+  Key          Action
+  --------     -------------------------------------------------------
+  S            Submit draft comments
+  a            Approve the PR/MR
+  m            Merge the PR/MR
+  o            Open PR/MR in browser
+  p            Show pipeline status
+  R            Refresh
+  Q            Quit
+
+------------------------------------------------------------------------------
+Picker ~
+
+  Key          Action
+  --------     -------------------------------------------------------
+  <leader>fc   Browse comments and AI suggestions
+  <leader>ff   Browse changed files
+
+------------------------------------------------------------------------------
+Remapping keymaps ~                                  *codereview.keymaps*
+
+Pass a `keymaps` table to |codereview.setup()|. Each key is an action name
+(see source `lua/codereview/keymaps.lua`), and the value is either a new key
+string or `false` to disable:
+>lua
+  require("codereview").setup({
+    keymaps = {
+      quit             = "q",    -- remap Q -> q
+      toggle_resolve   = false,  -- disable toggle resolve
+      next_file        = "]n",   -- remap ]f -> ]n
+    },
+  })
+<
+
+Full list of action names:
+  next_file, prev_file, create_comment, create_range_comment, reply,
+  toggle_resolve, increase_context, decrease_context, toggle_full_file,
+  toggle_scroll_mode, accept_suggestion, dismiss_suggestion, edit_suggestion,
+  dismiss_all_suggestions, submit, approve, open_in_browser, merge,
+  show_pipeline, ai_review, ai_review_file, refresh, quit,
+  select_next_note, select_prev_note, edit_note, delete_note,
+  pick_comments, pick_files, move_down, move_up
+
+==============================================================================
+CONFIGURATION                                *codereview-configuration*
+                                                    *codereview.setup()*
+
+Call `require("codereview").setup(opts)` once in your config. All options are
+optional; the defaults shown below are used for any omitted fields.
+
+                                                        *codereview.diff*
+diff ~
+
+Options for the diff viewer.
+
+                                                          *codereview.ai*
+ai ~
+
+Options for AI review. See |codereview-ai-review|.
+
+>lua
+  require("codereview").setup({
+    -- string|nil  API base URL override (auto-detected from git remote)
+    base_url = nil,
+
+    -- string|nil  "owner/repo" — override project detection
+    project = nil,
+
+    -- "github" | "gitlab" | nil  force platform (auto-detected from git remote)
+    platform = nil,
+
+    -- string|nil  GitHub personal access token
+    github_token = nil,
+
+    -- string|nil  GitLab personal access token
+    gitlab_token = nil,
+
+    -- "telescope" | "fzf" | "snacks" | nil  force picker (auto-detected)
+    picker = nil,
+
+    -- boolean  write request/auth debug logs to .codereview.log
+    debug = false,
+
+    diff = {
+      -- number (0-20)  lines of context around each hunk
+      context = 8,
+
+      -- number  use scroll mode when changed-file count <= threshold
+      scroll_threshold = 50,
+
+      -- number  column width for comment text wrapping
+      comment_width = 80,
+
+      -- string  character used to draw diff hunk separators
+      separator_char = "╳",
+
+      -- number  blank lines inserted in separator blocks
+      separator_lines = 3,
+    },
+
+    ai = {
+      -- boolean  enable AI review features
+      enabled = true,
+
+      -- "claude_cli" | "anthropic" | "openai" | "ollama" | "custom_cmd"
+      provider = "claude_cli",
+
+      -- "info" | "suggestion" | "warning" | "error"  minimum severity to display
+      -- Most verbose (info) to least verbose (error):
+      --   info > suggestion > warning > error
+      review_level = "info",
+
+      -- number  max lines per file sent to AI (0 = no limit)
+      max_file_size = 500,
+
+      claude_cli = {
+        cmd   = "claude",       -- path or name of the claude binary
+        agent = "code-review",  -- Claude agent/profile name
+      },
+      anthropic = {
+        api_key = nil,                         -- falls back to ANTHROPIC_API_KEY
+        model   = "claude-sonnet-4-20250514",
+      },
+      openai = {
+        api_key  = nil,    -- falls back to OPENAI_API_KEY
+        model    = "gpt-4o",
+        base_url = nil,    -- override for compatible APIs (e.g. Azure)
+      },
+      ollama = {
+        model    = "llama3",
+        base_url = "http://localhost:11434",
+      },
+      custom_cmd = {
+        cmd  = nil,   -- string  command to run
+        args = {},    -- table   extra arguments
+      },
+    },
+
+    keymaps = {},
+    -- See |codereview.keymaps| for remapping instructions.
+  })
+<
+
+------------------------------------------------------------------------------
+Deprecated options ~
+
+The following options are deprecated and will be removed in a future release:
+
+  - `gitlab_url`      use `base_url` instead
+  - `ai.claude_cmd`   use `ai.claude_cli.cmd`
+  - `ai.agent`        use `ai.claude_cli.agent`
+  - Top-level `token` use `github_token` or `gitlab_token`
+
+==============================================================================
+AI REVIEW                                             *codereview-ai-review*
+
+codereview.nvim supports multiple AI providers. Configure with the `ai`
+key in |codereview.setup()|. See |codereview.ai|.
+
+------------------------------------------------------------------------------
+Claude CLI (default)                             *codereview-ai-claude-cli*
+
+Uses the `claude` command-line binary with a named agent profile. This is
+the default provider and requires no API key in your config.
+
+Requirements:
+  - `claude` binary installed and on PATH
+  - A Claude agent named `code-review` (or configure `agent` below)
+>lua
+  ai = {
+    provider = "claude_cli",
+    claude_cli = {
+      cmd   = "claude",       -- binary name or full path
+      agent = "code-review",  -- agent/profile name
+    },
+  }
+<
+
+------------------------------------------------------------------------------
+Anthropic API                                      *codereview-ai-anthropic*
+
+Calls the Anthropic Messages API directly. Set `ANTHROPIC_API_KEY` in your
+environment, or pass `api_key` in the config.
+>lua
+  ai = {
+    provider = "anthropic",
+    anthropic = {
+      api_key = nil,                        -- or set ANTHROPIC_API_KEY
+      model   = "claude-sonnet-4-20250514",
+    },
+  }
+<
+
+------------------------------------------------------------------------------
+OpenAI API                                            *codereview-ai-openai*
+
+Calls the OpenAI Chat Completions API. Set `OPENAI_API_KEY` in your
+environment, or pass `api_key` in the config. Use `base_url` for compatible
+APIs (Azure OpenAI, local proxies, etc.).
+>lua
+  ai = {
+    provider = "openai",
+    openai = {
+      api_key  = nil,    -- or set OPENAI_API_KEY
+      model    = "gpt-4o",
+      base_url = nil,    -- e.g. "https://my-azure.openai.azure.com/"
+    },
+  }
+<
+
+------------------------------------------------------------------------------
+Ollama                                                *codereview-ai-ollama*
+
+Uses a locally running Ollama instance. Start Ollama before opening a review.
+>lua
+  ai = {
+    provider = "ollama",
+    ollama = {
+      model    = "llama3",
+      base_url = "http://localhost:11434",
+    },
+  }
+<
+
+------------------------------------------------------------------------------
+Custom command                                    *codereview-ai-custom-cmd*
+
+Pass the diff to any external command. The diff is sent on stdin; the command
+should print the review to stdout.
+>lua
+  ai = {
+    provider = "custom_cmd",
+    custom_cmd = {
+      cmd  = "/path/to/my-review-tool",
+      args = { "--format", "json" },
+    },
+  }
+<
+
+------------------------------------------------------------------------------
+Review levels ~
+
+`review_level` controls the minimum severity of suggestions displayed.
+Listed from most verbose to least verbose:
+
+  info          Show all findings (informational and above)
+  suggestion    Show suggestions, warnings, and errors
+  warning       Show warnings and errors only
+  error         Show errors only
+
+==============================================================================
+AUTHENTICATION                                   *codereview-authentication*
+
+Tokens are resolved in the following order (first match wins):
+
+  1. Environment variable  (`GITHUB_TOKEN` or `GITLAB_TOKEN`)
+  2. Project config file   (`.codereview.nvim` in git root)
+  3. Plugin setup option   (`github_token` or `gitlab_token` in setup())
+
+------------------------------------------------------------------------------
+Environment variables ~
+>sh
+  export GITHUB_TOKEN=ghp_xxxxxxxxxxxx
+  export GITLAB_TOKEN=glpat-xxxxxxxxxxxx
+<
+
+------------------------------------------------------------------------------
+Project config file ~
+
+Create `.codereview.nvim` in your git repository root:
+>
+  # codereview.nvim project config
+  platform = github
+  project = owner/repo
+  base_url = https://api.github.com
+  token = ghp_xxxxxxxxxxxx
+<
+
+Supported keys:
+  platform     "github" or "gitlab"
+  project      "owner/repo"
+  base_url     API endpoint URL
+  token        personal access token
+
+WARNING: If the file contains a `token`, add `.codereview.nvim` to your
+`.gitignore` to avoid committing credentials. The plugin will warn you if
+the file is not ignored.
+>sh
+  echo ".codereview.nvim" >> .gitignore
+<
+
+==============================================================================
+HIGHLIGHTS                                           *codereview-highlights*
+
+All highlight groups are defined with `default = true`, meaning your
+colorscheme or personal overrides take precedence. Override any group with:
+>lua
+  vim.api.nvim_set_hl(0, "CodeReviewDiffAdd", { bg = "#1e3a1e" })
+<
+
+------------------------------------------------------------------------------
+Diff ~
+
+  CodeReviewDiffAdd              Added line background
+  CodeReviewDiffDelete           Deleted line background
+  CodeReviewDiffAddWord          Added word highlight (within a line)
+  CodeReviewDiffDeleteWord       Deleted word highlight (within a line)
+
+------------------------------------------------------------------------------
+Comments ~
+
+  CodeReviewComment                     Resolved comment background
+  CodeReviewCommentUnresolved           Unresolved comment background + fg
+  CodeReviewCommentBold                 Bold text in comment
+  CodeReviewCommentItalic               Italic text in comment
+  CodeReviewCommentCode                 Inline code in comment
+  CodeReviewCommentStrikethrough        Strikethrough text in comment
+  CodeReviewCommentLink                 Hyperlink in comment
+
+  CodeReviewCommentBoldUnresolved       Bold text, unresolved thread
+  CodeReviewCommentItalicUnresolved     Italic text, unresolved thread
+  CodeReviewCommentCodeUnresolved       Inline code, unresolved thread
+  CodeReviewCommentStrikethroughUnresolved  Strikethrough, unresolved
+  CodeReviewCommentLinkUnresolved       Link, unresolved thread
+
+  CodeReviewCommentAuthor               Comment author name
+  CodeReviewCommentResolved             "Resolved" indicator
+  CodeReviewCommentOutdated             Outdated comment indicator
+  CodeReviewCommentPending              Comment pending submission
+  CodeReviewCommentFailed               Comment that failed to post
+  CodeReviewCommentBorder               Border of comment float
+  CodeReviewCommentContext              Context lines around comment
+
+  CodeReviewReplyBorder                 Border of reply input float
+  CodeReviewEditBorder                  Border of edit input float
+
+  CodeReviewSelectedNote                Highlighted / active note background
+
+  CodeReviewCommentBoldSelectedNote         Bold in selected note
+  CodeReviewCommentItalicSelectedNote       Italic in selected note
+  CodeReviewCommentCodeSelectedNote         Inline code in selected note
+  CodeReviewCommentStrikethroughSelectedNote Strikethrough in selected note
+  CodeReviewCommentLinkSelectedNote         Link in selected note
+
+------------------------------------------------------------------------------
+AI suggestions ~
+
+  CodeReviewAIDraft              AI suggestion panel background
+  CodeReviewAIDraftBorder        AI suggestion panel border
+  CodeReviewAIWarning            AI warning panel background
+  CodeReviewAIWarningBorder      AI warning panel border
+  CodeReviewAIError              AI error panel background
+  CodeReviewAIErrorBorder        AI error panel border
+
+------------------------------------------------------------------------------
+Files ~
+
+  CodeReviewFileChanged          Modified file in picker
+  CodeReviewFileAdded            Added file in picker
+  CodeReviewFileDeleted          Deleted file in picker
+  CodeReviewFileUnvisited        File not yet opened in this session
+  CodeReviewFilePartial          File partially reviewed
+  CodeReviewFileReviewed         File fully reviewed
+  CodeReviewHidden               Hidden / collapsed item
+
+------------------------------------------------------------------------------
+Status ~
+
+  CodeReviewStatusUnresolved     Unresolved thread count indicator
+  CodeReviewStatusResolved       Resolved thread count indicator
+
+------------------------------------------------------------------------------
+UI ~
+
+  CodeReviewFileHeader           File path header bar
+  CodeReviewLineNr               Line number column
+  CodeReviewFloatTitle           Floating window title
+  CodeReviewFloatFooterKey       Footer key binding label
+  CodeReviewFloatFooterText      Footer descriptive text
+  CodeReviewSummaryButton        Summary action button
+  CodeReviewSpinner              Loading spinner
+  CodeReviewThreadBorder         Thread container border
+  CodeReviewThreadMeta           Thread metadata (author, time)
+  CodeReviewProgressDim          Dimmed progress text
+
+------------------------------------------------------------------------------
+Markdown rendering ~
+
+  CodeReviewMdH1                 Heading level 1
+  CodeReviewMdH2                 Heading level 2
+  CodeReviewMdH3                 Heading level 3
+  CodeReviewMdH4                 Heading level 4
+  CodeReviewMdH5                 Heading level 5
+  CodeReviewMdH6                 Heading level 6
+  CodeReviewMdCodeBlock          Fenced code block background
+  CodeReviewMdBlockquote         Blockquote text
+  CodeReviewMdBlockquoteBorder   Blockquote left border
+  CodeReviewMdTableHeader        Table header row
+  CodeReviewMdTableBorder        Table border characters
+  CodeReviewMdHr                 Horizontal rule
+  CodeReviewMdListBullet         List bullet character
+
+------------------------------------------------------------------------------
+Header card ~
+
+  CodeReviewHeaderCardBorder     PR/MR summary card border
+  CodeReviewHeaderCardTitle      PR/MR title text
+  CodeReviewHeaderCardId         PR/MR number / ID
+  CodeReviewStateOpened          "Open" state label
+  CodeReviewStateMerged          "Merged" state label
+  CodeReviewStateClosed          "Closed" state label
+  CodeReviewHeaderBranch         Branch name in header
+  CodeReviewHeaderMergeOk        Clean merge status indicator
+  CodeReviewHeaderMergeConflict  Merge conflict indicator
+
+------------------------------------------------------------------------------
+Hunk separator ~
+
+  CodeReviewHunkSeparator        Separator line between diff hunks
+  CodeReviewHunkSeparatorHint    Hunk function name hint text
+
+------------------------------------------------------------------------------
+Activity feed ~
+
+  CodeReviewActivityAssign       Assignment event icon
+  CodeReviewActivityCommit       Commit push event icon
+  CodeReviewActivityComment      Comment event icon
+  CodeReviewActivityResolved     Resolve event icon
+  CodeReviewActivityApproved     Approval event icon
+  CodeReviewActivityMerged       Merge event icon
+  CodeReviewActivityGeneric      Generic activity event icon
+  CodeReviewActivityTime         Timestamp text
+
+------------------------------------------------------------------------------
+Discussion ~
+
+  CodeReviewDiscussionFilePath   File path in discussion list
+
+------------------------------------------------------------------------------
+Signs ~
+
+  CodeReviewCommentSign          Sign for lines with comments
+  CodeReviewUnresolvedSign       Sign for lines with unresolved threads
+  CodeReviewAISign               Sign for lines with AI suggestions
+  CodeReviewAIWarningSign        Sign for lines with AI warnings
+  CodeReviewAIErrorSign          Sign for lines with AI errors
+
+Signs are defined with `vim.fn.sign_define()`, not `vim.api.nvim_set_hl()`.
+To override them, use `vim.fn.sign_define()` after setup:
+>lua
+  vim.fn.sign_define("CodeReviewCommentSign", {
+    text   = "│ ",
+    texthl = "MyCustomHighlight",
+  })
+<
+
+==============================================================================
+TROUBLESHOOTING                                   *codereview-troubleshooting*
+
+"No token found" ~
+  The plugin could not find a token for the detected platform.
+  Solution: export the appropriate environment variable before starting
+  Neovim:
+>sh
+    export GITHUB_TOKEN=ghp_xxxxxxxxxxxx
+    export GITLAB_TOKEN=glpat-xxxxxxxxxxxx
+<
+  Or add a token to `.codereview.nvim` in your project root.
+  See |codereview-authentication|.
+
+"Wrong platform detected" ~
+  The plugin infers platform from your git remote URL. If detection fails
+  (e.g. a self-hosted instance), force it explicitly:
+>lua
+    require("codereview").setup({
+      platform = "gitlab",  -- or "github"
+      base_url = "https://gitlab.mycompany.com",
+    })
+<
+
+"No picker found" ~
+  codereview.nvim requires at least one of: telescope.nvim, fzf-lua, or
+  snacks.nvim. Install one and ensure it is loaded before codereview.nvim.
+  To force a specific picker:
+>lua
+    require("codereview").setup({ picker = "telescope" })
+<
+
+Debug logging ~
+  Enable verbose logging to diagnose auth and API issues:
+>lua
+    require("codereview").setup({ debug = true })
+<
+  Logs are written to `.codereview.log` in your current working directory.
+  Inspect with:
+>sh
+    tail -f .codereview.log
+<
+
+==============================================================================
+vim:tw=78:ts=8:ft=help:norl:
