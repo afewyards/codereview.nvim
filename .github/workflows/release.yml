@@ -41,6 +41,8 @@ jobs:
           echo "deb [signed-by=/etc/apt/keyrings/charm.gpg] https://repo.charm.sh/apt/ * *" | sudo tee /etc/apt/sources.list.d/charm.list
           sudo apt-get update
           sudo apt-get install -y ffmpeg vhs
+          curl -fsSL -o /tmp/ttyd https://github.com/tsl0922/ttyd/releases/latest/download/ttyd.x86_64
+          sudo install /tmp/ttyd /usr/local/bin/ttyd
 
       - name: Generate demo GIF
         run: vhs demo/ai-review.tape
