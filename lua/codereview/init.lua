@@ -87,12 +87,18 @@ function M.submit()
 end
 function M.approve()
   local buf = vim.api.nvim_get_current_buf()
-  local mr = vim.b[buf].codereview_review
-  if not mr then
-    vim.notify("No review context in current buffer", vim.log.levels.WARN)
+  local diff_mod = require("codereview.mr.diff")
+  local active = diff_mod.get_state(buf)
+  if not active then
+    vim.notify("Open a diff view first with :CodeReview", vim.log.levels.WARN)
     return
   end
-  require("codereview.mr.actions").approve(mr)
+  local result, err = require("codereview.mr.actions").approve(active.state.review)
+  if err then
+    vim.notify("Approve failed: " .. err, vim.log.levels.ERROR)
+  elseif result then
+    vim.notify("Review approved", vim.log.levels.INFO)
+  end
 end
 function M.create_mr()
   require("codereview.mr.create").create()
