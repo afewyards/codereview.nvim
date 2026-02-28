@@ -91,9 +91,9 @@ end
 --- @param suggestions { status: string, comment: string, severity: string }[]
 --- @param callback fun(summary: string|nil, err: string|nil)
 function M.generate(review, diffs, suggestions, callback)
-  local subprocess = require("codereview.ai.subprocess")
+  local provider = require("codereview.ai.providers").get()
   local prompt = M.build_review_summary_prompt(review, diffs, suggestions)
-  subprocess.run(prompt, function(output, err)
+  provider.run(prompt, function(output, err)
     if err then
       callback(nil, err)
       return

@@ -1,5 +1,5 @@
 -- lua/codereview/review/init.lua
-local ai_sub = require("codereview.ai.subprocess")
+local ai_providers = require("codereview.ai.providers")
 local prompt_mod = require("codereview.ai.prompt")
 local diff_state_mod = require("codereview.mr.diff_state")
 local log = require("codereview.log")
@@ -82,7 +82,7 @@ local function start_single(review, diff_state, layout)
   local session = require("codereview.review.session")
   session.start()
 
-  local job_id = ai_sub.run(review_prompt, function(output, ai_err)
+  local job_id = ai_providers.get().run(review_prompt, function(output, ai_err)
     session.ai_finish()
 
     if ai_err then
@@ -147,7 +147,7 @@ local function start_multi(review, diff_state, layout)
 
   -- Phase 1: summary pre-pass
   local summary_prompt = prompt_mod.build_summary_prompt(review, diffs)
-  local summary_job = ai_sub.run(summary_prompt, function(output, ai_err)
+  local summary_job = ai_providers.get().run(summary_prompt, function(output, ai_err)
     if ai_err then
       session.ai_finish()
       vim.notify("AI summary failed: " .. ai_err, vim.log.levels.ERROR)
@@ -165,7 +165,7 @@ local function start_multi(review, diff_state, layout)
       local content = fetch_file_content(diff_state, review, path, file.deleted_file)
       local file_prompt = prompt_mod.build_file_review_prompt(review, file, summaries, content)
 
-      local file_job = ai_sub.run(file_prompt, function(file_output, file_err)
+      local file_job = ai_providers.get().run(file_prompt, function(file_output, file_err)
         if file_err then
           vim.notify("AI review failed for " .. path .. ": " .. file_err, vim.log.levels.WARN)
         else
@@ -249,7 +249,7 @@ function M.start_file(review, diff_state, layout)
 
   -- Phase 1: summary pre-pass
   local summary_prompt = prompt_mod.build_summary_prompt(review, diffs)
-  local summary_job = ai_sub.run(summary_prompt, function(output, ai_err)
+  local summary_job = ai_providers.get().run(summary_prompt, function(output, ai_err)
     if ai_err then
       session.ai_finish()
       vim.notify("AI summary failed: " .. ai_err, vim.log.levels.ERROR)
@@ -261,7 +261,7 @@ function M.start_file(review, diff_state, layout)
     -- Phase 2: review the single target file
     local content = fetch_file_content(diff_state, review, target_path, target.deleted_file)
     local file_prompt = prompt_mod.build_file_review_prompt(review, target, summaries, content)
-    local file_job = ai_sub.run(file_prompt, function(file_output, file_err)
+    local file_job = ai_providers.get().run(file_prompt, function(file_output, file_err)
       session.ai_finish()
 
       if file_err then

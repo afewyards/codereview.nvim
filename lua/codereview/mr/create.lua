@@ -1,6 +1,6 @@
 local providers = require("codereview.providers")
 local client = require("codereview.api.client")
-local ai_sub = require("codereview.ai.subprocess")
+local ai_providers = require("codereview.ai.providers")
 local prompt_mod = require("codereview.ai.prompt")
 local M = {}
 
@@ -89,7 +89,7 @@ function M.create()
   local mr_prompt = prompt_mod.build_mr_prompt(branch, diff)
   vim.notify("Generating MR description...", vim.log.levels.INFO)
 
-  ai_sub.run(mr_prompt, function(output, err)
+  ai_providers.get().run(mr_prompt, function(output, err)
     if err then
       vim.notify("Claude CLI failed: " .. err, vim.log.levels.ERROR)
       return

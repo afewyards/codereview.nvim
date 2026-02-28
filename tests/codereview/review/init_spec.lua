@@ -36,23 +36,20 @@ package.loaded["codereview.ui.spinner"] = {
   set_label = function() end,
 }
 
--- Stub subprocess to capture all calls
+-- Stub provider to capture all calls
 local captured_calls = {}
-package.loaded["codereview.ai.subprocess"] = {
+local mock_provider = {
   run = function(prompt, callback, opts)
     table.insert(captured_calls, { prompt = prompt, opts = opts })
     callback('```json\n[]\n```')
     return 1
   end,
-  build_cmd = function(cmd, agent)
-    local t = { cmd, "-p" }
-    if agent then
-      table.insert(t, "--agent")
-      table.insert(t, agent)
-    end
-    return t
-  end,
 }
+package.loaded["codereview.ai.providers"] = {
+  get = function() return mock_provider end,
+}
+-- Keep subprocess stub for backward compat (same table so mutations propagate)
+package.loaded["codereview.ai.subprocess"] = mock_provider
 
 -- Stub session
 package.loaded["codereview.review.session"] = {
