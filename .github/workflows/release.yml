@@ -24,7 +24,7 @@ jobs:
 
   demo-gifs:
     needs: release
-    runs-on: ubuntu-22.04  # vhs-action ffmpeg install fails on 24.04 (charmbracelet/vhs-action#459)
+    runs-on: ubuntu-latest
     if: ${{ needs.release.outputs.version != '' }}
     steps:
       - uses: actions/checkout@v4
@@ -34,9 +34,16 @@ jobs:
           neovim: true
           version: stable
 
-      - uses: charmbracelet/vhs-action@v2
-        with:
-          path: demo/ai-review.tape
+      - name: Install VHS and dependencies
+        run: |
+          sudo mkdir -p /etc/apt/keyrings
+          curl -fsSL https://repo.charm.sh/apt/gpg.key | sudo gpg --dearmor -o /etc/apt/keyrings/charm.gpg
+          echo "deb [signed-by=/etc/apt/keyrings/charm.gpg] https://repo.charm.sh/apt/ * *" | sudo tee /etc/apt/sources.list.d/charm.list
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg vhs
+
+      - name: Generate demo GIF
+        run: vhs demo/ai-review.tape
 
       - name: Upload demo assets to release
         env:
