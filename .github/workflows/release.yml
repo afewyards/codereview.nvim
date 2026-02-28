@@ -24,7 +24,7 @@ jobs:
 
   demo-gifs:
     needs: release
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04  # vhs-action ffmpeg install fails on 24.04 (charmbracelet/vhs-action#459)
     if: ${{ needs.release.outputs.version != '' }}
     steps:
       - uses: actions/checkout@v4
