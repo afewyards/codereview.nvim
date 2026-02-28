@@ -2,19 +2,133 @@
 # Mock Claude CLI for demo/showcase purposes.
 # Usage: echo "<prompt>" | ./demo/mock-claude
 #
-# Reads stdin (discards it), simulates AI processing delay, then outputs
-# canned code review suggestions in the format expected by codereview.nvim.
-#
-# Suggestions target + lines in the demo provider diffs (PR #42):
-#   src/utils/token.ts         L5  (error)      — module-level throw
-#   src/middleware/auth.ts     L5  (warning)     — silent header fallback
-#   src/utils/token.ts         L23 (suggestion)  — unsafe cast
-#   tests/middleware/auth.test.ts L16 (info)     — missing mock
+# Reads stdin, detects prompt type, and returns appropriate canned response.
+# Supports 4 prompt types from codereview.nvim:
+#   1. Phase 1 summary    — "one-sentence summary" marker
+#   2. Review summary      — "brief (2-4 sentence)" marker
+#   3. Per-file review     — "File Under Review:" marker (staggered delays)
+#   4. Default full review — fallback (all suggestions)
 
-cat > /dev/null
+INPUT=$(cat)
 
-sleep 3
+# --- Phase 1: File summary (JSON object mapping path → summary) ---
+if echo "$INPUT" | grep -q "one-sentence summary"; then
+  sleep 1
+  cat <<'RESPONSE'
+Here are the file summaries:
 
+```json
+{
+  "src/middleware/auth.ts": "Refactored auth middleware to use extracted token utility, removing inline JWT logic",
+  "src/utils/token.ts": "New module: JWT validation with extractTokenFromHeader and verifyToken utilities",
+  "src/routes/login.ts": "Updated login route to use new createToken utility instead of inline jwt.sign",
+  "tests/middleware/auth.test.ts": "New test suite for auth middleware covering 401 and valid-token scenarios"
+}
+```
+RESPONSE
+  exit 0
+fi
+
+# --- Review summary (markdown block for submit float prefill) ---
+if echo "$INPUT" | grep -q "brief (2-4 sentence)"; then
+  sleep 1
+  cat <<'RESPONSE'
+```markdown
+Clean refactoring that extracts JWT logic into a dedicated utility module, improving testability and separation of concerns. The auth middleware is now simpler and the new token module centralizes validation. A few security hardening opportunities remain around case-sensitivity and clock tolerance.
+```
+RESPONSE
+  exit 0
+fi
+
+# --- Per-file review (staggered delays, file-specific suggestions) ---
+if echo "$INPUT" | grep -q "File Under Review:"; then
+
+  # auth.ts — 1 suggestion (warning)
+  if echo "$INPUT" | grep -q "File Under Review: src/middleware/auth.ts"; then
+    sleep 1
+    cat <<'RESPONSE'
+I've reviewed this file. Here are my findings:
+
+```json
+[
+  {
+    "file": "src/middleware/auth.ts",
+    "line": 5,
+    "code": "const token = extractTokenFromHeader(req.headers.authorization);",
+    "severity": "warning",
+    "comment": "Bearer scheme check is case-sensitive.\n\n`extractTokenFromHeader` splits on `' '` and compares the scheme with `=== 'Bearer'` (exact case). The HTTP spec (RFC 7235) treats scheme names as case-insensitive, so clients sending `bearer` or `BEARER` will receive a 401 despite having a valid token.\n\nFix: normalise before comparing:\n  return scheme.toLowerCase() === 'bearer' ? token : null;"
+  }
+]
+```
+RESPONSE
+    exit 0
+  fi
+
+  # token.ts — 2 suggestions (error + suggestion)
+  if echo "$INPUT" | grep -q "File Under Review: src/utils/token.ts"; then
+    sleep 2
+    cat <<'RESPONSE'
+I've reviewed this file. Here are my findings:
+
+```json
+[
+  {
+    "file": "src/utils/token.ts",
+    "line": 5,
+    "code": "if (!SECRET) {",
+    "severity": "error",
+    "comment": "Module-level throw breaks test isolation.\n\nIf `JWT_SECRET` is not set when this module is first imported, Node throws immediately — crashing every test suite that imports anything depending on this file, even tests unrelated to auth.\n\nConsider lazy validation inside `verifyToken` instead, or export a separate `validateConfig()` function called at app startup."
+  },
+  {
+    "file": "src/utils/token.ts",
+    "line": 23,
+    "code": "const payload = jwt.verify(token, SECRET!) as jwt.JwtPayload;",
+    "severity": "suggestion",
+    "comment": "Consider allowing clock tolerance for token verification.\n\n`jwt.verify` with no options uses a zero-second clock tolerance, which means tokens can be rejected if the issuer's clock is even slightly ahead of the server's clock.\n\nConsider adding a small tolerance:\n  jwt.verify(token, SECRET!, { clockTolerance: 30 })"
+  }
+]
+```
+RESPONSE
+    exit 0
+  fi
+
+  # login.ts — no issues
+  if echo "$INPUT" | grep -q "File Under Review: src/routes/login.ts"; then
+    sleep 3
+    cat <<'RESPONSE'
+I've reviewed this file. No issues found.
+
+```json
+[]
+```
+RESPONSE
+    exit 0
+  fi
+
+  # auth.test.ts — 1 suggestion (info)
+  if echo "$INPUT" | grep -q "File Under Review: tests/middleware/auth.test.ts"; then
+    sleep 4
+    cat <<'RESPONSE'
+I've reviewed this file. Here are my findings:
+
+```json
+[
+  {
+    "file": "tests/middleware/auth.test.ts",
+    "line": 16,
+    "code": "it('calls next with valid token', async () => {",
+    "severity": "info",
+    "comment": "Consider adding more test cases for the happy path.\n\nThis test only covers a single valid-token scenario. Consider adding cases for:\n- Expired tokens (should return 403)\n- Tokens with missing `sub` claim\n- Tokens signed with a different secret\n\nMore granular cases will make regressions easier to diagnose."
+  }
+]
+```
+RESPONSE
+    exit 0
+  fi
+fi
+
+# --- Default fallback: all suggestions (single-file review mode) ---
+sleep 2
 cat <<'RESPONSE'
 I've reviewed the changes in this merge request. Here are my findings:
 
