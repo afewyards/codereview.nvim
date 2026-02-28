@@ -1,0 +1,51 @@
+#!/bin/sh
+# Mock Claude CLI for demo/showcase purposes.
+# Usage: echo "<prompt>" | ./demo/mock-claude
+#
+# Reads stdin (discards it), simulates AI processing delay, then outputs
+# canned code review suggestions in the format expected by codereview.nvim.
+#
+# Suggestions target lines in the demo provider diffs:
+#   plugin/auth.lua     line  5 (error),      line 10 (warning)
+#   plugin/validate.lua line  5 (info),        line  9 (suggestion)
+
+cat > /dev/null
+
+sleep 3
+
+cat <<'RESPONSE'
+I've reviewed the changes in this merge request. Here are my findings:
+
+```json
+[
+  {
+    "file": "plugin/auth.lua",
+    "line": 5,
+    "code": "return password",
+    "severity": "error",
+    "comment": "Plaintext password storage detected.\n\nPasswords must never be stored or returned in plaintext. Use a proper hashing algorithm such as bcrypt or argon2id.\n\nSuggested fix:\n  return bcrypt.hash(password, { rounds = 12 })"
+  },
+  {
+    "file": "plugin/auth.lua",
+    "line": 10,
+    "code": "if stored.password == hash_password(pass) then",
+    "severity": "warning",
+    "comment": "Timing attack vulnerability.\n\nString equality with `==` leaks timing information through early exit, allowing attackers to brute-force passwords via response-time analysis. Use a constant-time comparison function instead."
+  },
+  {
+    "file": "plugin/validate.lua",
+    "line": 5,
+    "code": "return email:match(\"[^@]+@[^@]+\")",
+    "severity": "info",
+    "comment": "Pattern match returns a capture string or nil, not a boolean.\n\nFor explicit boolean semantics, wrap with a nil check:\n  return email:match(\"[^@]+@[^@]+\") ~= nil"
+  },
+  {
+    "file": "plugin/validate.lua",
+    "line": 9,
+    "code": "return age > 0",
+    "severity": "suggestion",
+    "comment": "Missing nil check for `age` parameter.\n\nIf `age` is nil, the `>` comparison will raise a runtime error. Add a guard before the comparison:\n  if age == nil then return false end"
+  }
+]
+```
+RESPONSE
