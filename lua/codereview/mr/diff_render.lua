@@ -76,11 +76,42 @@ local function place_hunk_separators(buf, data_list, file_scoped)
       end
     end
   end
+
   local sep_line = string.rep(cfg.separator_char, win_width)
+  local full_virt = { { sep_line, "CodeReviewHunkSeparator" } }
+
+  -- Build hint line for unfold keybind
+  local keymaps = require("codereview.keymaps")
+  local toggle_key = keymaps.get("toggle_full_file") or "<C-f>"
+  local hint = " Press " .. toggle_key .. " to show full file "
+  local hint_len = vim.fn.strdisplaywidth(hint)
+  local remaining = win_width - hint_len
+
   local sep_virt = {}
-  for _ = 1, cfg.separator_lines do
-    table.insert(sep_virt, { { sep_line, "CodeReviewHunkSeparator" } })
+  if remaining >= 2 then
+    local top_lines = math.floor((cfg.separator_lines - 1) / 2)
+    local bottom_lines = cfg.separator_lines - 1 - top_lines
+    local left_pad = math.floor(remaining / 2)
+    local right_pad = remaining - left_pad
+    local hint_virt = {
+      { string.rep(cfg.separator_char, left_pad), "CodeReviewHunkSeparator" },
+      { hint, "CodeReviewHunkSeparatorHint" },
+      { string.rep(cfg.separator_char, right_pad), "CodeReviewHunkSeparator" },
+    }
+    for _ = 1, top_lines do
+      table.insert(sep_virt, full_virt)
+    end
+    table.insert(sep_virt, hint_virt)
+    for _ = 1, bottom_lines do
+      table.insert(sep_virt, full_virt)
+    end
+  else
+    -- Window too narrow for hint; fall back to plain separator lines
+    for _ = 1, cfg.separator_lines do
+      table.insert(sep_virt, full_virt)
+    end
   end
+
   local prev_hunk, prev_file = nil, nil
   for i, data in ipairs(data_list) do
     local cur_hunk = data.item and data.item.hunk_idx

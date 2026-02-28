@@ -9,7 +9,7 @@ local defaults = {
   gitlab_token = nil,
   picker = nil,
   debug = false,      -- write request/auth logs to .codereview.log
-  diff = { context = 8, scroll_threshold = 50, comment_width = 80, separator_char = "╳", separator_lines = 2 },
+  diff = { context = 8, scroll_threshold = 50, comment_width = 80, separator_char = "╳", separator_lines = 3 },
   ai = {
     enabled = true,
     provider = "claude_cli",

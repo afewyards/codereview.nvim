@@ -92,7 +92,7 @@ describe("config", function()
     config.setup({})
     local c = config.get()
     assert.equals("╳", c.diff.separator_char)
-    assert.equals(2, c.diff.separator_lines)
+    assert.equals(3, c.diff.separator_lines)
   end)
 
   it("defaults ai.max_file_size to 500", function()
