@@ -110,5 +110,5 @@ Type "Security issues addressed. Bearer check and password hashing need follow-u
 Escape
 Sleep 800ms
 Ctrl+S
-Sleep 1s
+Sleep 4s
 
