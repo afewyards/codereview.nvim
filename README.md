@@ -27,7 +27,7 @@
 - **Dual-pane diff viewer** — sidebar file tree + unified diff with inline comments
 - **Threaded discussions** — view, reply, edit, delete, and resolve/unresolve comment threads
 - **Note selection** — cycle through notes in a thread with `<Tab>`/`<S-Tab>`, then edit or delete inline
-- **AI-powered review** — Claude-based code review with accept/dismiss/edit suggestions
+- **AI-powered review** — multi-provider support (Claude CLI, Anthropic API, OpenAI, Ollama, custom) with accept/dismiss/edit suggestions
 - **Review sessions** — accumulate draft comments, submit in batch
 - **MR actions** — approve, merge, open in browser, create new MR/PR
 - **Picker integration** — Telescope, FZF, or Snacks
@@ -41,7 +41,18 @@
 {
   "afewyards/codereview.nvim",
   dependencies = { "nvim-lua/plenary.nvim" },
-  cmd = { "CodeReview" },
+  cmd = {
+    "CodeReview",
+    "CodeReviewAI",
+    "CodeReviewAIFile",
+    "CodeReviewStart",
+    "CodeReviewSubmit",
+    "CodeReviewApprove",
+    "CodeReviewOpen",
+    "CodeReviewPipeline",
+    "CodeReviewComments",
+    "CodeReviewFiles",
+  },
   opts = {},
 }
 ```
@@ -111,26 +122,66 @@ require("codereview").setup({
   -- Picker: "telescope", "fzf", or "snacks" (auto-detected)
   picker = nil,
 
+  -- Debug logging to .codereview.log
+  debug = false,
+
   -- Diff viewer
   diff = {
-    context          = 8,   -- lines of context (0-20)
-    scroll_threshold = 50,  -- use scroll mode when file count <= threshold
+    context          = 8,     -- lines of context (0-20)
+    scroll_threshold = 50,    -- use scroll mode when file count <= threshold
+    comment_width    = 80,    -- comment float width
+    separator_char   = "╳",   -- hunk separator character
+    separator_lines  = 3,     -- lines in hunk separator
   },
 
-  -- AI review (requires Claude CLI)
+  -- AI review
   ai = {
-    enabled      = true,
-    claude_cmd   = "claude",
-    agent        = "code-review",
-    review_level = "info",  -- "info" | "suggestion" | "warning" | "error"
+    enabled       = true,
+    provider      = "claude_cli",  -- "claude_cli" | "anthropic" | "openai" | "ollama" | "custom_cmd"
+    review_level  = "info",        -- "info" | "suggestion" | "warning" | "error"
+    max_file_size = 500,           -- skip files larger than N lines (0 = unlimited)
+
+    claude_cli = { cmd = "claude", agent = "code-review" },
+    anthropic  = { api_key = nil, model = "claude-sonnet-4-20250514" },
+    openai     = { api_key = nil, model = "gpt-4o", base_url = nil },
+    ollama     = { model = "llama3", base_url = "http://localhost:11434" },
+    custom_cmd = { cmd = nil, args = {} },
   },
 
   -- Override or disable keybindings
   keymaps = {
-    -- quit = "q",          -- remap quit to q
+    -- quit = "q",              -- remap quit to q
     -- toggle_resolve = false,  -- disable toggle resolve
   },
 })
+```
+
+### AI Providers
+
+Set `ai.provider` to choose a backend. Each provider has its own sub-table:
+
+| Provider | Config key | Requirements |
+|----------|-----------|--------------|
+| Claude CLI | `claude_cli` | [Claude CLI](https://docs.anthropic.com/en/docs/claude-code) installed |
+| Anthropic API | `anthropic` | `api_key` set |
+| OpenAI | `openai` | `api_key` set |
+| Ollama | `ollama` | Ollama running locally |
+| Custom command | `custom_cmd` | `cmd` set |
+
+**Example — Anthropic API:**
+```lua
+ai = {
+  provider = "anthropic",
+  anthropic = { api_key = vim.env.ANTHROPIC_API_KEY, model = "claude-sonnet-4-20250514" },
+},
+```
+
+**Example — Ollama (local):**
+```lua
+ai = {
+  provider = "ollama",
+  ollama = { model = "llama3", base_url = "http://localhost:11434" },
+},
 ```
 
 ### AI Review Level
@@ -177,6 +228,7 @@ The AI is instructed to skip items below the configured level, saving tokens and
 | Key | Action |
 |-----|--------|
 | `A` | Start / cancel AI review |
+| `af` | AI review current file |
 | `a` | Accept suggestion |
 | `x` | Dismiss suggestion |
 | `e` | Edit suggestion |
@@ -188,6 +240,7 @@ The AI is instructed to skip items below the configured level, saving tokens and
 |-----|--------|
 | `<C-f>` | Toggle full file view |
 | `<C-a>` | Toggle scroll / per-file mode |
+| `+` / `-` | Increase / decrease context lines |
 
 ### Actions
 
@@ -201,18 +254,47 @@ The AI is instructed to skip items below the configured level, saving tokens and
 | `R` | Refresh |
 | `Q` | Quit |
 
-All keymaps can be remapped or disabled via the `keymaps` option in `setup()`.
+### Picker
+
+| Key | Action |
+|-----|--------|
+| `<leader>fc` | Browse comments / suggestions |
+| `<leader>ff` | Browse changed files |
+
+### Movement
+
+| Key | Action |
+|-----|--------|
+| `j` / `k` | Move down / up (comment-aware) |
+
+### Customizing Keymaps
+
+Every keybinding can be remapped to a different key or disabled entirely via the `keymaps` option:
+
+```lua
+keymaps = {
+  quit = "q",              -- remap quit from Q to q
+  toggle_resolve = false,  -- disable toggle resolve
+  ai_review = "<leader>ar", -- remap AI review
+},
+```
+
+Available action names: `next_file`, `prev_file`, `create_comment`, `create_range_comment`, `reply`, `toggle_resolve`, `increase_context`, `decrease_context`, `toggle_full_file`, `toggle_scroll_mode`, `accept_suggestion`, `dismiss_suggestion`, `edit_suggestion`, `dismiss_all_suggestions`, `submit`, `approve`, `open_in_browser`, `merge`, `show_pipeline`, `ai_review`, `ai_review_file`, `refresh`, `quit`, `select_next_note`, `select_prev_note`, `edit_note`, `delete_note`, `pick_comments`, `pick_files`, `move_down`, `move_up`.
 
 ## Commands
 
 | Command | Description |
 |---------|-------------|
 | `:CodeReview` | Open review picker |
-| `:CodeReviewAI` | Run AI review on current diff |
+| `:CodeReviewAI` | Run AI review on entire diff |
+| `:CodeReviewAIFile` | Run AI review on current file |
 | `:CodeReviewStart` | Start manual review session (comments become drafts) |
 | `:CodeReviewSubmit` | Submit draft comments |
 | `:CodeReviewApprove` | Approve current MR/PR |
 | `:CodeReviewOpen` | Create new MR/PR |
+| `:CodeReviewPipeline` | Show pipeline status |
+| `:CodeReviewComments` | Browse comments and suggestions |
+| `:CodeReviewFiles` | Browse changed files |
 
 ## Supported Providers
 
