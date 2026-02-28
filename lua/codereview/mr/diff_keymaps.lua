@@ -817,7 +817,13 @@ function M.setup_keymaps(state, layout, active_states)
           state.local_drafts = {}
           state.ai_review_summary = nil
           rerender_ai()
-          session.stop()
+          local publish_labels = {
+            APPROVE = "✓ Approved",
+            REQUEST_CHANGES = "✓ Changes requested",
+            COMMENT = "✓ Review published",
+          }
+          session.publish(event)
+          vim.notify(publish_labels[event] or "✓ Review published", vim.log.levels.INFO)
           diff_sidebar.render_sidebar(layout.sidebar_buf, state)
           refresh_discussions()
         end,
