@@ -1,6 +1,23 @@
 #!/bin/bash
-# Wrapper to launch nvim with truecolor support for VHS recording
-export COLORTERM=truecolor
-export TERM=xterm-256color
+# Wrapper to launch nvim with truecolor support for VHS recording.
+# xterm.js (used by VHS/ttyd) answers Neovim's DECRQSS probe incorrectly,
+# causing monotone yellow output. A custom terminfo with explicit setrgbf/
+# setrgbb capabilities makes Neovim skip the probe entirely.
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# Compile custom terminfo on first run
+if ! infocmp xterm-vhs >/dev/null 2>&1; then
+  TI=$(mktemp)
+  cat > "$TI" << 'TERMINFO'
+xterm-vhs|xterm for VHS/ttyd with explicit truecolor,
+    use=xterm-256color,
+    setrgbf=\E[38;2;%p1%d;%p2%d;%p3%dm,
+    setrgbb=\E[48;2;%p1%d;%p2%d;%p3%dm,
+TERMINFO
+  tic -x "$TI"
+  rm -f "$TI"
+fi
+
+export COLORTERM=truecolor
+export TERM=xterm-vhs
 exec nvim -u "$SCRIPT_DIR/init.lua" "$@"

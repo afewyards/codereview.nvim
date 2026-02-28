@@ -25,10 +25,7 @@ vim.opt.runtimepath:prepend(repo_root)
 vim.opt.runtimepath:prepend(demo_dir)
 
 -- UI settings for recording
--- NOTE: termguicolors deliberately OFF — VHS's xterm.js canvas renderer
--- mangles 24-bit RGB output (charmbracelet/vhs#498). We rely on cterm
--- attributes instead; the VHS Set Theme maps ANSI base colors to gruvbox.
-vim.o.termguicolors = false
+vim.o.termguicolors = true
 vim.o.background = "dark"
 vim.o.number = true
 vim.o.relativenumber = false

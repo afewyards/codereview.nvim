@@ -53,13 +53,13 @@ Type "[f"
 Sleep 1500ms
 
 # Create a comment on a line
-Type "jjjjj"
+Type "jjj"
 Sleep 500ms
 Type "cc"
 Sleep 1s
 Type "Consider using a constant for the error message string"
 Sleep 1s
-Escape
+Ctrl+S
 Sleep 1500ms
 
 # Tab to navigate to existing comment
