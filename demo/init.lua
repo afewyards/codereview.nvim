@@ -18,18 +18,28 @@ end
 
 ensure_dep("plenary.nvim", "https://github.com/nvim-lua/plenary.nvim")
 ensure_dep("telescope.nvim", "https://github.com/nvim-telescope/telescope.nvim")
+ensure_dep("gruvbox-material", "https://github.com/sainnhe/gruvbox-material")
 
 -- Add main plugin + demo provider to runtimepath
 vim.opt.runtimepath:prepend(repo_root)
 vim.opt.runtimepath:prepend(demo_dir)
 
 -- UI settings for recording
+-- NOTE: termguicolors deliberately OFF — VHS's xterm.js canvas renderer
+-- mangles 24-bit RGB output (charmbracelet/vhs#498). We rely on cterm
+-- attributes instead; the VHS Set Theme maps ANSI base colors to gruvbox.
+vim.o.termguicolors = false
+vim.o.background = "dark"
 vim.o.number = true
 vim.o.relativenumber = false
 vim.o.signcolumn = "yes"
-vim.o.termguicolors = true
 vim.o.laststatus = 2
 vim.o.cmdheight = 1
+
+-- Theme
+vim.g.gruvbox_material_background = "soft"
+vim.g.gruvbox_material_enable_italic = 1
+vim.cmd([[ colorscheme gruvbox-material ]])
 
 -- Monkey-patch provider detection to skip git/network
 local providers = require("codereview.providers")

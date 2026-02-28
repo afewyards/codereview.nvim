@@ -1,0 +1,6 @@
+#!/bin/bash
+# Wrapper to launch nvim with truecolor support for VHS recording
+export COLORTERM=truecolor
+export TERM=xterm-256color
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+exec nvim -u "$SCRIPT_DIR/init.lua" "$@"
