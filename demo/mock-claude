@@ -5,9 +5,11 @@
 # Reads stdin (discards it), simulates AI processing delay, then outputs
 # canned code review suggestions in the format expected by codereview.nvim.
 #
-# Suggestions target lines in the demo provider diffs:
-#   plugin/auth.lua     line  5 (error),      line 10 (warning)
-#   plugin/validate.lua line  5 (info),        line  9 (suggestion)
+# Suggestions target + lines in the demo provider diffs (PR #42):
+#   src/utils/token.ts         L5  (error)      — module-level throw
+#   src/middleware/auth.ts     L5  (warning)     — silent header fallback
+#   src/utils/token.ts         L23 (suggestion)  — unsafe cast
+#   tests/middleware/auth.test.ts L16 (info)     — missing mock
 
 cat > /dev/null
 
@@ -19,32 +21,32 @@ I've reviewed the changes in this merge request. Here are my findings:
 ```json
 [
   {
-    "file": "plugin/auth.lua",
+    "file": "src/utils/token.ts",
     "line": 5,
-    "code": "return password",
+    "code": "if (!SECRET) {",
     "severity": "error",
-    "comment": "Plaintext password storage detected.\n\nPasswords must never be stored or returned in plaintext. Use a proper hashing algorithm such as bcrypt or argon2id.\n\nSuggested fix:\n  return bcrypt.hash(password, { rounds = 12 })"
+    "comment": "Module-level throw breaks test isolation.\n\nIf `JWT_SECRET` is not set when this module is first imported, Node throws immediately — crashing every test suite that imports anything depending on this file, even tests unrelated to auth.\n\nConsider lazy validation inside `verifyToken` instead, or export a separate `validateConfig()` function called at app startup."
   },
   {
-    "file": "plugin/auth.lua",
-    "line": 10,
-    "code": "if stored.password == hash_password(pass) then",
-    "severity": "warning",
-    "comment": "Timing attack vulnerability.\n\nString equality with `==` leaks timing information through early exit, allowing attackers to brute-force passwords via response-time analysis. Use a constant-time comparison function instead."
-  },
-  {
-    "file": "plugin/validate.lua",
+    "file": "src/middleware/auth.ts",
     "line": 5,
-    "code": "return email:match(\"[^@]+@[^@]+\")",
-    "severity": "info",
-    "comment": "Pattern match returns a capture string or nil, not a boolean.\n\nFor explicit boolean semantics, wrap with a nil check:\n  return email:match(\"[^@]+@[^@]+\") ~= nil"
+    "code": "const token = extractTokenFromHeader(req.headers.authorization);",
+    "severity": "warning",
+    "comment": "Bearer scheme check is case-sensitive.\n\n`extractTokenFromHeader` splits on `' '` and compares the scheme with `=== 'Bearer'` (exact case). The HTTP spec (RFC 7235) treats scheme names as case-insensitive, so clients sending `bearer` or `BEARER` will receive a 401 despite having a valid token.\n\nFix: normalise before comparing:\n  return scheme.toLowerCase() === 'bearer' ? token : null;"
   },
   {
-    "file": "plugin/validate.lua",
-    "line": 9,
-    "code": "return age > 0",
+    "file": "src/utils/token.ts",
+    "line": 23,
+    "code": "const payload = jwt.verify(token, SECRET!) as jwt.JwtPayload;",
     "severity": "suggestion",
-    "comment": "Missing nil check for `age` parameter.\n\nIf `age` is nil, the `>` comparison will raise a runtime error. Add a guard before the comparison:\n  if age == nil then return false end"
+    "comment": "Consider allowing clock tolerance for token verification.\n\n`jwt.verify` with no options uses a zero-second clock tolerance, which means tokens can be rejected if the issuer's clock is even slightly ahead of the server's clock.\n\nConsider adding a small tolerance:\n  jwt.verify(token, SECRET!, { clockTolerance: 30 })"
+  },
+  {
+    "file": "tests/middleware/auth.test.ts",
+    "line": 16,
+    "code": "it('calls next with valid token', async () => {",
+    "severity": "info",
+    "comment": "Consider adding more test cases for the happy path.\n\nThis test only covers a single valid-token scenario. Consider adding cases for:\n- Expired tokens (should return 403)\n- Tokens with missing `sub` claim\n- Tokens signed with a different secret\n\nMore granular cases will make regressions easier to diagnose."
   }
 ]
 ```
