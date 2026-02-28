@@ -14,6 +14,7 @@ local _state = {
   ai_job_ids = {},
   ai_total = 0,
   ai_completed = 0,
+  published = nil,
 }
 
 --- Return a copy of the current session state.
@@ -25,12 +26,14 @@ function M.get()
     ai_job_ids = _state.ai_job_ids,
     ai_total = _state.ai_total,
     ai_completed = _state.ai_completed,
+    published = _state.published,
   }
 end
 
 --- Enter review mode. Comments will accumulate as drafts.
 function M.start()
   _state.active = true
+  _state.published = nil
 end
 
 --- Exit review mode.
@@ -72,6 +75,13 @@ function M.ai_finish()
   require("codereview.ui.spinner").close()
 end
 
+--- Record that the review was published.
+---@param event string "APPROVE"|"COMMENT"|"REQUEST_CHANGES"
+function M.publish(event)
+  _state.published = { event = event }
+  M.stop()
+end
+
 --- Reset to idle state.
 function M.reset()
   _state.active = false
@@ -79,6 +89,7 @@ function M.reset()
   _state.ai_job_ids = {}
   _state.ai_total = 0
   _state.ai_completed = 0
+  _state.published = nil
 end
 
 return M
