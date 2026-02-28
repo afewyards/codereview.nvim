@@ -320,8 +320,17 @@ function M.get_diffs(_client, _ctx, review)
   return {}, nil
 end
 
+-- Track posted comments so get_discussions returns them
+local next_id = 900
+local posted_comments = {}
+
 function M.get_discussions(_client, _ctx, review)
-  if review.id == 42 then return discussions_42, nil end
+  if review.id == 42 then
+    local discs = {}
+    for _, d in ipairs(discussions_42) do table.insert(discs, d) end
+    for _, d in ipairs(posted_comments) do table.insert(discs, d) end
+    return discs, nil
+  end
   return {}, nil
 end
 
@@ -333,10 +342,57 @@ function M.get_current_user(_client, _ctx)
   return "demo-user", nil
 end
 
--- Write stubs (return success)
-function M.post_comment(_client, _ctx, _review, _body) return { id = 900 }, nil end
-function M.post_range_comment(_client, _ctx, _review, _opts) return { id = 901 }, nil end
-function M.reply_to_discussion(_client, _ctx, _review, _disc_id, _body) return { id = 902 }, nil end
+function M.post_comment(_client, _ctx, _review, body, position)
+  position = position or {}
+  next_id = next_id + 1
+  -- Normalize position like a real API: keep new_line for additions/context,
+  -- old_line only for deletion-only lines
+  local norm_pos = {
+    new_path = position.new_path,
+    old_path = position.old_path,
+    new_line = position.new_line,
+    old_line = position.new_line and nil or position.old_line,
+  }
+  table.insert(posted_comments, {
+    id = "disc-posted-" .. next_id,
+    resolved = false,
+    notes = {{
+      id = next_id, author = "demo-user", body = body,
+      created_at = os.date("!%Y-%m-%dT%H:%M:%SZ"), system = false,
+      resolvable = true, resolved = false,
+      position = norm_pos,
+    }},
+  })
+  return { id = next_id }, nil
+end
+
+function M.post_range_comment(_client, _ctx, _review, _opts)
+  next_id = next_id + 1
+  return { id = next_id }, nil
+end
+
+function M.reply_to_discussion(_client, _ctx, _review, _disc_id, _body)
+  next_id = next_id + 1
+  return { id = next_id }, nil
+end
+
+function M.create_draft_comment(_client, _ctx, review, opts)
+  opts = opts or {}
+  next_id = next_id + 1
+  table.insert(posted_comments, {
+    id = "disc-posted-" .. next_id,
+    resolved = false,
+    notes = {{
+      id = next_id, author = "demo-user", body = opts.body or "",
+      created_at = os.date("!%Y-%m-%dT%H:%M:%SZ"), system = false,
+      resolvable = true, resolved = false,
+      position = { new_path = opts.path, old_path = opts.path, new_line = opts.line },
+    }},
+  })
+  return { id = next_id }, nil
+end
+
+-- Other write stubs
 function M.edit_note(_client, _ctx, _review, _note_id, _body) return { id = 903 }, nil end
 function M.delete_note(_client, _ctx, _review, _note_id) return true, nil end
 function M.resolve_discussion(_client, _ctx, _review, _disc_id, _resolved) return true, nil end
@@ -345,7 +401,6 @@ function M.unapprove(_client, _ctx, _review) return true, nil end
 function M.merge(_client, _ctx, _review) return true, nil end
 function M.close(_client, _ctx, _review) return true, nil end
 function M.create_review(_client, _ctx, _review) return { id = 1 }, nil end
-function M.create_draft_comment(_client, _ctx, _review, _opts) return { id = 910 }, nil end
 function M.get_pending_review_drafts(_client, _ctx, _review) return {}, nil end
 function M.get_draft_notes(_client, _ctx, _review, _review_id) return {}, nil end
 function M.delete_draft_note(_client, _ctx, _review, _note_id) return true, nil end

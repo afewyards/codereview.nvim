@@ -66,6 +66,7 @@ function M.open_input_popup(title, callback, opts)
   vim.keymap.set("n", "q", close, map_opts)
   vim.keymap.set("n", "<Esc>", close, map_opts)
   vim.keymap.set({ "n", "i" }, "<C-CR>", submit, map_opts)
+  vim.keymap.set({ "n", "i" }, "<C-s>", submit, map_opts)
 end
 
 local function get_provider()

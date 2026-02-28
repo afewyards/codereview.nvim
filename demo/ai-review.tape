@@ -4,7 +4,6 @@
 Require nvim
 
 Output demo/ai-review.gif
-Output demo/ai-review.mp4
 
 Set Shell "bash"
 Set FontSize 16
@@ -20,12 +19,11 @@ Hide
 Type "nvim -u demo/init.lua --headless -c 'sleep 100m | qa'"
 Enter
 Sleep 10s
-Show
 
 # Open Neovim
 Type "./demo/run-nvim"
 Enter
-Sleep 2s
+Show
 
 # Open CodeReview picker
 Type ":CodeReview"
@@ -38,16 +36,19 @@ Enter
 Wait+Screen /auth\.ts/
 Sleep 2s
 
-# ── Trigger AI review ──────────────────────────────────────
-Type "A"
-Sleep 1s
+# ── Browse existing discussions in summary view ────────────
+# Tab cycles through discussion thread headers in summary mode
+Tab
+Sleep 800ms
+Tab
+Sleep 800ms
 
 # ── While AI loads: reply to existing discussion ───────────
 # Tab to Charlie's unresolved comment on token.ts (disc-002)
 Tab
-Sleep 500ms
-Tab
-Sleep 500ms
+Sleep 1500ms
+# ── Now in diff view — trigger AI review ───────────────────
+Type "A"
 
 # Reply to the thread
 Type "r"
@@ -58,11 +59,9 @@ Sleep 1s
 
 # ── Wait for AI suggestions to finish appearing ───────────
 # auth.ts completes at ~2s, token.ts ~3s, login.ts ~4s, auth.test.ts ~5s
-Sleep 4s
+Sleep 3s
 
-# ── Navigate and handle AI suggestions ────────────────────
-# Tab to first AI suggestion (error: module-level throw in token.ts)
-Tab
+Shift+Tab
 Sleep 800ms
 
 # Accept — posts as a draft comment
@@ -70,6 +69,10 @@ Type "a"
 Sleep 1s
 
 # Navigate to next suggestion (warning: case-insensitive Bearer check)
+Tab
+Sleep 800ms
+Tab
+Sleep 800ms
 Tab
 Sleep 800ms
 
@@ -81,19 +84,19 @@ Sleep 800ms
 Type "GA"
 Type " — update extractTokenFromHeader to use toLowerCase()."
 Ctrl+S
-Sleep 1s
+Sleep 2s
 
 # Navigate to next suggestion (suggestion: clock tolerance)
 Tab
 Sleep 800ms
 
 # Dismiss this one
-Type "x"
+Type "a"
 Sleep 800ms
 
 # Dismiss all remaining suggestions (info: more test cases)
 Type "ds"
-Sleep 800ms
+Sleep 1800ms
 
 # ── Submit review ──────────────────────────────────────────
 # Open submit float — should show AI-generated summary as prefill
@@ -109,11 +112,3 @@ Sleep 800ms
 Ctrl+S
 Sleep 1s
 
-# Quit the diff view
-Type "Q"
-Sleep 500ms
-
-# Exit Neovim
-Type ":qa!"
-Enter
-Sleep 500ms
