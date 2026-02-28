@@ -1,3 +1,5 @@
 .worktrees/
 .codereview.nvim
 demo/.deps/
+demo/*.gif
+demo/*.mp4
