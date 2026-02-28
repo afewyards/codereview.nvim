@@ -38,13 +38,30 @@ Enter
 Wait+Screen /auth\.ts/
 Sleep 2s
 
-# Trigger AI review (A = ai_review keymap)
+# ── Trigger AI review ──────────────────────────────────────
 Type "A"
+Sleep 1s
 
-# Wait for mock-claude to complete (3s sleep + render time)
-Sleep 5s
+# ── While AI loads: reply to existing discussion ───────────
+# Tab to Charlie's unresolved comment on token.ts (disc-002)
+Tab
+Sleep 500ms
+Tab
+Sleep 500ms
 
-# Navigate to first suggestion (error: module-level throw in token.ts)
+# Reply to the thread
+Type "r"
+Sleep 500ms
+Type "Good idea — I'll open a follow-up issue for multi-scheme support."
+Ctrl+S
+Sleep 1s
+
+# ── Wait for AI suggestions to finish appearing ───────────
+# auth.ts completes at ~2s, token.ts ~3s, login.ts ~4s, auth.test.ts ~5s
+Sleep 4s
+
+# ── Navigate and handle AI suggestions ────────────────────
+# Tab to first AI suggestion (error: module-level throw in token.ts)
 Tab
 Sleep 800ms
 
@@ -63,7 +80,7 @@ Type "e"
 Sleep 800ms
 Type "GA"
 Type " — update extractTokenFromHeader to use toLowerCase()."
-Ctrl+Enter
+Ctrl+S
 Sleep 1s
 
 # Navigate to next suggestion (suggestion: clock tolerance)
@@ -78,12 +95,18 @@ Sleep 800ms
 Type "ds"
 Sleep 800ms
 
-# Open submit float — type a review body and publish
+# ── Submit review ──────────────────────────────────────────
+# Open submit float — should show AI-generated summary as prefill
 Type "S"
 Sleep 1s
+# Clear the prefill and type custom review body
+Type "ggVGd"
+Sleep 300ms
+Type "i"
 Type "Security issues addressed. Bearer check and password hashing need follow-up."
+Escape
 Sleep 800ms
-Ctrl+Enter
+Ctrl+S
 Sleep 1s
 
 # Quit the diff view
