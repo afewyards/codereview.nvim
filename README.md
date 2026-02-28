@@ -17,7 +17,7 @@
 
 ## Review pull requests and merge requests without leaving Neovim
 
-https://github.com/user-attachments/assets/2e43170b-8cd4-414c-8757-3ac1209c65e4
+![AI Review Demo](https://github.com/afewyards/codereview.nvim/releases/latest/download/ai-review.gif)
 
 > **Note: This project is in active development.** Core features are operational, but some areas are still being refined. Please report issues or unexpected behavior via [GitHub Issues](https://github.com/afewyards/codereview.nvim/issues).
 

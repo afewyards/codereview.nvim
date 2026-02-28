@@ -34,10 +34,6 @@ jobs:
 
       - uses: charmbracelet/vhs-action@v2
         with:
-          path: demo/showcase.tape
-
-      - uses: charmbracelet/vhs-action@v2
-        with:
           path: demo/ai-review.tape
 
       - name: Upload demo assets to release
@@ -45,8 +41,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release upload "v${{ needs.release.outputs.version }}" \
-            demo/showcase.gif demo/showcase.mp4 \
-            demo/ai-review.gif demo/ai-review.mp4 \
+            demo/ai-review.gif \
             --clobber
 
   # Uncomment when ready to publish to LuaRocks:
