@@ -484,3 +484,110 @@ describe("delete_draft_note", function()
     assert.truthy(deleted_url:find("/draft_notes/101"))
   end)
 end)
+
+describe("pipeline methods", function()
+  local mock_client
+
+  before_each(function()
+    package.loaded["codereview.api.auth"] = {
+      get_token = function() return "glpat-test", "pat" end,
+    }
+    mock_client = {
+      get = function() return { data = {}, status = 200 } end,
+      post = function() return { data = {}, status = 200 } end,
+    }
+  end)
+
+  after_each(function()
+    package.loaded["codereview.api.auth"] = nil
+  end)
+
+  local ctx = { base_url = "https://gitlab.com", project = "foo/bar" }
+  local review = { id = 42, head_sha = "abc123", pipeline_status = "running" }
+
+  it("get_pipeline fetches head pipeline", function()
+    mock_client.get = function(_, path, _)
+      assert.truthy(path:match("/merge_requests/42$"))
+      return {
+        data = {
+          iid = 42, title = "T", author = { username = "a" },
+          source_branch = "b", target_branch = "main", state = "opened",
+          diff_refs = {}, approved_by = {},
+          head_pipeline = { id = 99, status = "running", ref = "main", sha = "abc", web_url = "url", duration = 120 },
+        },
+        status = 200,
+      }
+    end
+    local pipeline, err = gitlab.get_pipeline(mock_client, ctx, review)
+    assert.is_nil(err)
+    assert.equal(99, pipeline.id)
+    assert.equal("running", pipeline.status)
+  end)
+
+  it("get_pipeline_jobs fetches jobs for pipeline", function()
+    mock_client.get = function(_, path, _)
+      assert.truthy(path:match("/pipelines/99/jobs"))
+      return {
+        data = {
+          { id = 1, name = "build", stage = "build", status = "success", duration = 60, web_url = "url1", allow_failure = false },
+          { id = 2, name = "test", stage = "test", status = "running", duration = 30, web_url = "url2", allow_failure = false },
+        },
+        status = 200,
+      }
+    end
+    local jobs, err = gitlab.get_pipeline_jobs(mock_client, ctx, review, 99)
+    assert.is_nil(err)
+    assert.equal(2, #jobs)
+    assert.equal("build", jobs[1].name)
+    assert.equal("test", jobs[2].name)
+  end)
+
+  it("get_job_trace returns log string", function()
+    mock_client.get = function(_, path, _)
+      assert.truthy(path:match("/jobs/1/trace"))
+      return { data = "line 1\nline 2\n", status = 200 }
+    end
+    local trace, err = gitlab.get_job_trace(mock_client, ctx, review, 1)
+    assert.is_nil(err)
+    assert.equal("line 1\nline 2\n", trace)
+  end)
+
+  it("retry_job posts to retry endpoint", function()
+    local posted = false
+    mock_client.post = function(_, path, _)
+      assert.truthy(path:match("/jobs/1/retry"))
+      posted = true
+      return { data = { id = 1 }, status = 201 }
+    end
+    local ok, err = gitlab.retry_job(mock_client, ctx, review, 1)
+    assert.is_nil(err)
+    assert.is_truthy(ok)
+    assert.is_true(posted)
+  end)
+
+  it("cancel_job posts to cancel endpoint", function()
+    local posted = false
+    mock_client.post = function(_, path, _)
+      assert.truthy(path:match("/jobs/1/cancel"))
+      posted = true
+      return { data = { id = 1 }, status = 201 }
+    end
+    local ok, err = gitlab.cancel_job(mock_client, ctx, review, 1)
+    assert.is_nil(err)
+    assert.is_truthy(ok)
+    assert.is_true(posted)
+  end)
+
+  it("play_job posts to play endpoint", function()
+    local posted = false
+    mock_client.post = function(_, path, _)
+      assert.truthy(path:match("/jobs/1/play"))
+      posted = true
+      return { data = { id = 1 }, status = 200 }
+    end
+    local ok, err = gitlab.play_job(mock_client, ctx, review, 1)
+    assert.is_nil(err)
+    assert.is_truthy(ok)
+    assert.is_true(posted)
+  end)
+end)

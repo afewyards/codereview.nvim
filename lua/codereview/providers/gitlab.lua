@@ -473,4 +473,70 @@ function M.create_review(client, ctx, params)
   })
 end
 
+--- Fetch the head pipeline for an MR.
+function M.get_pipeline(client, ctx, review)
+  local headers, err = get_headers()
+  if not headers then return nil, err end
+  local result, err2 = client.get(ctx.base_url, mr_base(ctx, review.id), { headers = headers })
+  if not result then return nil, err2 end
+  local hp = result.data and result.data.head_pipeline
+  if not hp then return nil, "No pipeline found for this review" end
+  return types.normalize_pipeline(hp)
+end
+
+--- Fetch jobs for a pipeline.
+function M.get_pipeline_jobs(client, ctx, review, pipeline_id)
+  local headers, err = get_headers()
+  if not headers then return nil, err end
+  local path = "/api/v4/projects/" .. encoded_project(ctx)
+    .. "/pipelines/" .. pipeline_id .. "/jobs"
+  local result, err2 = client.get(ctx.base_url, path, {
+    headers = headers, query = { per_page = 100 },
+  })
+  if not result then return nil, err2 end
+  local jobs = {}
+  for _, j in ipairs(result.data or {}) do
+    table.insert(jobs, types.normalize_pipeline_job(j))
+  end
+  return jobs
+end
+
+--- Fetch the trace (log) for a job.
+function M.get_job_trace(client, ctx, review, job_id)
+  local headers, err = get_headers()
+  if not headers then return nil, err end
+  local path = "/api/v4/projects/" .. encoded_project(ctx)
+    .. "/jobs/" .. job_id .. "/trace"
+  local result, err2 = client.get(ctx.base_url, path, { headers = headers })
+  if not result then return nil, err2 end
+  return type(result.data) == "string" and result.data or vim.json.encode(result.data)
+end
+
+--- Retry a failed job.
+function M.retry_job(client, ctx, review, job_id)
+  local headers, err = get_headers()
+  if not headers then return nil, err end
+  local path = "/api/v4/projects/" .. encoded_project(ctx)
+    .. "/jobs/" .. job_id .. "/retry"
+  return client.post(ctx.base_url, path, { body = {}, headers = headers })
+end
+
+--- Cancel a running job.
+function M.cancel_job(client, ctx, review, job_id)
+  local headers, err = get_headers()
+  if not headers then return nil, err end
+  local path = "/api/v4/projects/" .. encoded_project(ctx)
+    .. "/jobs/" .. job_id .. "/cancel"
+  return client.post(ctx.base_url, path, { body = {}, headers = headers })
+end
+
+--- Play a manual job.
+function M.play_job(client, ctx, review, job_id)
+  local headers, err = get_headers()
+  if not headers then return nil, err end
+  local path = "/api/v4/projects/" .. encoded_project(ctx)
+    .. "/jobs/" .. job_id .. "/play"
+  return client.post(ctx.base_url, path, { body = {}, headers = headers })
+end
+
 return M
