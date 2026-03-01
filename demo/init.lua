@@ -54,6 +54,22 @@ providers.detect = function()
 		nil
 end
 
+-- Monkey-patch MR creation git functions (skip real git for demo)
+local create = require("codereview.mr.create")
+create.get_current_branch = function()
+	return "feat/user-settings"
+end
+create.ensure_pushed = function(branch)
+	vim.notify("Pushed " .. branch .. " to origin", vim.log.levels.INFO)
+	return true
+end
+create.detect_target_branch = function()
+	return "main"
+end
+create.get_branch_diff = function()
+	return "diff --git a/src/settings.ts b/src/settings.ts\n+// user settings implementation"
+end
+
 -- Configure plugin
 require("codereview").setup({
 	platform = "demo",
