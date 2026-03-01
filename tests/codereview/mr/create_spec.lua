@@ -226,30 +226,43 @@ end)
 
 describe("open_editor", function()
   local captured_lines
+  local orig_api, orig_o, orig_bo, orig_keymap, orig_notify, orig_log
 
   before_each(function()
     captured_lines = nil
-    vim.api = vim.api or {}
-    vim.api.nvim_create_buf = function() return 1 end
-    vim.api.nvim_buf_set_lines = function(_, _, _, _, lines)
-      captured_lines = lines
-    end
-    vim.api.nvim_open_win = function() return 1 end
-    vim.api.nvim_win_close = function() end
-    vim.api.nvim_buf_get_lines = function() return {} end
-    vim.o = vim.o or {}
-    vim.o.columns = 100
-    vim.o.lines = 40
+    orig_api = vim.api
+    orig_o = vim.o
+    orig_bo = vim.bo
+    orig_keymap = vim.keymap
+    orig_notify = vim.notify
+    orig_log = vim.log
+
+    vim.api = {
+      nvim_create_buf = function() return 1 end,
+      nvim_buf_set_lines = function(_, _, _, _, lines) captured_lines = lines end,
+      nvim_open_win = function() return 1 end,
+      nvim_win_close = function() end,
+      nvim_buf_get_lines = function() return {} end,
+    }
+    vim.o = { columns = 100, lines = 40 }
     vim.bo = setmetatable({}, {
       __index = function(t, k)
         if not rawget(t, k) then rawset(t, k, {}) end
         return rawget(t, k)
       end,
     })
-    vim.keymap = vim.keymap or {}
-    vim.keymap.set = function() end
-    vim.notify = vim.notify or function() end
-    vim.log = vim.log or { levels = { INFO = 2, WARN = 3, ERROR = 4 } }
+    vim.keymap = { set = function() end }
+    vim.notify = function() end
+    vim.log = { levels = { INFO = 2, WARN = 3, ERROR = 4 } }
+  end)
+
+  after_each(function()
+    vim.api = orig_api
+    vim.o = orig_o
+    vim.bo = orig_bo
+    vim.keymap = orig_keymap
+    vim.notify = orig_notify
+    vim.log = orig_log
   end)
 
   it("sets buffer lines with Title:, Target:, Draft:, and separator", function()
