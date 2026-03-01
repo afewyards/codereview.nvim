@@ -298,6 +298,29 @@ function M.get_discussions(client, ctx, review)
   return M.normalize_graphql_threads(all_threads)
 end
 
+--- Fetch commits for a PR, normalized to the Commit shape.
+function M.get_commits(client, ctx, review)
+  local headers, err = get_headers()
+  if not headers then return nil, err end
+  local owner, repo = parse_owner_repo(ctx)
+  local url = string.format("%s/repos/%s/%s/pulls/%d/commits", ctx.base_url, owner, repo, review.id)
+  local raw = client.paginate_all_url(url, { headers = headers })
+  if not raw then return nil, "Failed to fetch commits" end
+  local commits = {}
+  for _, c in ipairs(raw) do
+    local msg = (c.commit and c.commit.message) or ""
+    local title = msg:match("^([^\n]+)") or msg
+    table.insert(commits, types.normalize_commit({
+      sha = c.sha or "",
+      short_sha = (c.sha or ""):sub(1, 8),
+      title = title,
+      author = (c.author and c.author.login) or (c.commit and c.commit.author and c.commit.author.name) or "",
+      created_at = (c.commit and c.commit.author and c.commit.author.date) or "",
+    }))
+  end
+  return commits
+end
+
 --- Post an inline comment or general PR comment.
 --- @param position table|nil { new_path, old_path, new_line, old_line, side, commit_sha } or nil for general comment
 function M.post_comment(client, ctx, review, body, position)

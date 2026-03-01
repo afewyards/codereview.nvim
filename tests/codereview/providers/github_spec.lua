@@ -755,6 +755,36 @@ describe("discard_pending_review", function()
   end)
 end)
 
+describe("get_commits", function()
+  before_each(function()
+    package.loaded["codereview.api.auth"] = {
+      get_token = function() return "ghp_test", "pat" end,
+    }
+  end)
+  after_each(function()
+    package.loaded["codereview.api.auth"] = nil
+  end)
+
+  it("fetches and normalizes PR commits", function()
+    local raw_commits = {
+      { sha = "sha1full1234", commit = { message = "First commit\n\nMore details", author = { name = "Alice", date = "2026-03-01T10:00:00Z" } }, author = { login = "alice" } },
+      { sha = "sha2full5678", commit = { message = "Second commit", author = { name = "Bob", date = "2026-03-01T11:00:00Z" } }, author = { login = "bob" } },
+    }
+    local mock_client = {
+      paginate_all_url = function(_, _) return raw_commits end,
+    }
+    local ctx = { base_url = "https://api.github.com", project = "owner/repo" }
+    local review = { id = 99 }
+    local result, err = github.get_commits(mock_client, ctx, review)
+    assert.is_nil(err)
+    assert.equals(2, #result)
+    assert.equals("sha1full1234", result[1].sha)
+    assert.equals("sha1full", result[1].short_sha)
+    assert.equals("First commit", result[1].title) -- first line only
+    assert.equals("alice", result[1].author)
+  end)
+end)
+
 describe("get_file_content", function()
   it("returns decoded file content from base64 API response", function()
     local mock_client = {
