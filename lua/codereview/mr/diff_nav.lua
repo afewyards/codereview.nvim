@@ -25,7 +25,7 @@ function M.nav_file(layout, state, delta)
   state.current_file = next_idx
   state.row_selection = {}
   diff_sidebar.render_sidebar(layout.sidebar_buf, state)
-  local line_data, row_disc, row_ai = diff_render.render_file_diff(layout.main_buf, files[next_idx], state.review, state.discussions, state.context, state.ai_suggestions, state.row_selection, state.current_user, nil, state.git_diff_cache)
+  local line_data, row_disc, row_ai = diff_render.render_file_diff(layout.main_buf, files[next_idx], state.review, state.discussions, state.context, state.ai_suggestions, state.row_selection, state.current_user, nil, state.git_diff_cache, state.commit_filter)
   diff_state.apply_file_result(state, next_idx, line_data, row_disc, row_ai)
   vim.api.nvim_win_set_cursor(layout.main_win, { 1, 0 })
 end
@@ -39,7 +39,7 @@ function M.switch_to_file(layout, state, idx)
   state.row_selection = {}
   diff_sidebar.render_sidebar(layout.sidebar_buf, state)
   local ld, rd, ra = diff_render.render_file_diff(
-    layout.main_buf, state.files[idx], state.review, state.discussions, state.context, state.ai_suggestions, state.row_selection, state.current_user, nil, state.git_diff_cache)
+    layout.main_buf, state.files[idx], state.review, state.discussions, state.context, state.ai_suggestions, state.row_selection, state.current_user, nil, state.git_diff_cache, state.commit_filter)
   diff_state.apply_file_result(state, idx, ld, rd, ra)
 end
 
@@ -70,7 +70,7 @@ function M.jump_to_file(layout, state, file_idx)
     else
       diff_sidebar.render_sidebar(layout.sidebar_buf, state)
       local ld, rd, ra = diff_render.render_file_diff(
-        layout.main_buf, state.files[file_idx], state.review, state.discussions, state.context, state.ai_suggestions, state.row_selection, state.current_user, nil, state.git_diff_cache)
+        layout.main_buf, state.files[file_idx], state.review, state.discussions, state.context, state.ai_suggestions, state.row_selection, state.current_user, nil, state.git_diff_cache, state.commit_filter)
       diff_state.apply_file_result(state, file_idx, ld, rd, ra)
       vim.api.nvim_win_set_cursor(layout.main_win, { 1, 0 })
     end
@@ -285,7 +285,7 @@ function M.adjust_context(layout, state, delta)
     if not file then return end
     diff_state.clear_diff_cache(state, file.new_path or file.old_path)
     local ld, row_disc, row_ai = diff_render.render_file_diff(
-      layout.main_buf, file, state.review, state.discussions, state.context, state.ai_suggestions, state.row_selection, state.current_user, nil, state.git_diff_cache)
+      layout.main_buf, file, state.review, state.discussions, state.context, state.ai_suggestions, state.row_selection, state.current_user, nil, state.git_diff_cache, state.commit_filter)
     diff_state.apply_file_result(state, state.current_file, ld, row_disc, row_ai)
     local row = M.find_row_for_anchor(ld, anchor, state.current_file)
     vim.api.nvim_win_set_cursor(layout.main_win, { row, 0 })
@@ -331,7 +331,7 @@ function M.toggle_scroll_mode(layout, state)
 
     local file = state.files[state.current_file]
     if file then
-      local ld, rd, ra = diff_render.render_file_diff(layout.main_buf, file, state.review, state.discussions, state.context, state.ai_suggestions, state.row_selection, state.current_user, nil, state.git_diff_cache)
+      local ld, rd, ra = diff_render.render_file_diff(layout.main_buf, file, state.review, state.discussions, state.context, state.ai_suggestions, state.row_selection, state.current_user, nil, state.git_diff_cache, state.commit_filter)
       diff_state.apply_file_result(state, state.current_file, ld, rd, ra)
       local row = M.find_row_for_anchor(ld, anchor, state.current_file)
       vim.api.nvim_win_set_cursor(layout.main_win, { row, 0 })

@@ -326,6 +326,98 @@ describe("mr.diff_render", function()
     end)
   end)
 
+  describe("render_file_diff commit_filter", function()
+    it("uses filter SHAs instead of review SHAs when commit_filter is active", function()
+      local buf = vim.api.nvim_create_buf(false, true)
+      local file_diff = {
+        new_path = "src/foo.lua", old_path = "src/foo.lua",
+        diff = "@@ -1,1 +1,1 @@\n-old\n+new\n",
+      }
+      local review = { base_sha = "review_base", head_sha = "review_head" }
+      local commit_filter = { from_sha = "filter_from", to_sha = "filter_to" }
+
+      local captured_cmd = nil
+      local orig_system = vim.fn.system
+      vim.fn.system = function(cmd)
+        if type(cmd) == "table" and cmd[1] == "git" and cmd[2] == "diff" then
+          captured_cmd = cmd
+        end
+        return ""
+      end
+
+      diff_render.render_file_diff(buf, file_diff, review, {}, 3, nil, nil, nil, nil, nil, commit_filter)
+
+      vim.fn.system = orig_system
+      vim.api.nvim_buf_delete(buf, { force = true })
+
+      assert.truthy(captured_cmd, "git diff should have been called")
+      local found_from = false
+      local found_to = false
+      for _, v in ipairs(captured_cmd) do
+        if v == "filter_from" then found_from = true end
+        if v == "filter_to" then found_to = true end
+      end
+      assert.truthy(found_from, "git diff should use filter from_sha")
+      assert.truthy(found_to, "git diff should use filter to_sha")
+    end)
+
+    it("does not use filter SHAs when commit_filter is nil", function()
+      local buf = vim.api.nvim_create_buf(false, true)
+      local file_diff = {
+        new_path = "src/bar.lua", old_path = "src/bar.lua",
+        diff = "@@ -1,1 +1,1 @@\n-old\n+new\n",
+      }
+      local review = { base_sha = "review_base", head_sha = "review_head" }
+
+      local captured_cmd = nil
+      local orig_system = vim.fn.system
+      vim.fn.system = function(cmd)
+        if type(cmd) == "table" and cmd[1] == "git" and cmd[2] == "diff" then
+          captured_cmd = cmd
+        end
+        return ""
+      end
+
+      diff_render.render_file_diff(buf, file_diff, review, {}, 3, nil, nil, nil, nil, nil, nil)
+
+      vim.fn.system = orig_system
+      vim.api.nvim_buf_delete(buf, { force = true })
+
+      assert.truthy(captured_cmd, "git diff should have been called")
+      local found_base = false
+      local found_head = false
+      for _, v in ipairs(captured_cmd) do
+        if v == "review_base" then found_base = true end
+        if v == "review_head" then found_head = true end
+      end
+      assert.truthy(found_base, "git diff should use review base_sha")
+      assert.truthy(found_head, "git diff should use review head_sha")
+    end)
+
+    it("uses different cache keys for filter vs no-filter", function()
+      local buf = vim.api.nvim_create_buf(false, true)
+      local file_diff = {
+        new_path = "cached.lua", old_path = "cached.lua",
+        diff = "@@ -1,1 +1,1 @@\n-old\n+new\n",
+      }
+      local review = {}
+      local commit_filter = { from_sha = "sha_a", to_sha = "sha_b" }
+      local diff_cache = {}
+
+      local orig_system = vim.fn.system
+      vim.fn.system = function() return "" end
+
+      diff_render.render_file_diff(buf, file_diff, review, {}, 3, nil, nil, nil, nil, diff_cache, nil)
+      diff_render.render_file_diff(buf, file_diff, review, {}, 3, nil, nil, nil, nil, diff_cache, commit_filter)
+
+      vim.fn.system = orig_system
+      vim.api.nvim_buf_delete(buf, { force = true })
+
+      assert.truthy(diff_cache["cached.lua:3"], "cache entry without filter should exist")
+      assert.truthy(diff_cache["cached.lua:3:sha_a..sha_b"], "cache entry with filter should exist")
+    end)
+  end)
+
   describe("render_all_files diff_cache", function()
     it("populates cache on first call with per-file entries", function()
       local buf = vim.api.nvim_create_buf(false, true)
