@@ -812,6 +812,7 @@ function M.setup_keymaps(state, layout, active_states)
 
       submit_float.open({
         prefill = state.ai_review_summary or "",
+        diff_state = state,
         on_submit = function(body, event)
           submit_mod.submit_and_publish(state.review, state.ai_suggestions, { body = body, event = event })
           state.local_drafts = {}
