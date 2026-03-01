@@ -86,10 +86,16 @@ function M.detect_target_branch()
   return "main"
 end
 
-function M.open_editor(title, description, callback)
+function M.open_editor(title, description, target, callback)
   local buf = vim.api.nvim_create_buf(false, true)
-  local lines = { title, "" }
-  for _, line in ipairs(vim.split(description, "\n")) do
+  local separator = string.rep("─", 60)
+  local lines = {
+    "Title: " .. (title or ""),
+    "Target: " .. (target or "main"),
+    "Draft: no",
+    separator,
+  }
+  for _, line in ipairs(vim.split(description or "", "\n")) do
     table.insert(lines, line)
   end
 
@@ -97,7 +103,7 @@ function M.open_editor(title, description, callback)
   vim.bo[buf].filetype = "markdown"
   vim.bo[buf].bufhidden = "wipe"
 
-  local width = math.min(80, vim.o.columns - 10)
+  local width = math.min(90, vim.o.columns - 10)
   local height = math.min(#lines + 5, vim.o.lines - 6)
   local win = vim.api.nvim_open_win(buf, true, {
     relative = "editor",
@@ -107,20 +113,21 @@ function M.open_editor(title, description, callback)
     row = math.floor((vim.o.lines - height) / 2),
     style = "minimal",
     border = "rounded",
-    title = " New MR — line 1 = title, rest = description — <CR> submit, q cancel ",
+    title = " Create MR/PR ",
     title_pos = "center",
+    footer = " <C-s> submit  q cancel ",
+    footer_pos = "center",
   })
 
-  vim.keymap.set("n", "<CR>", function()
+  vim.keymap.set("n", "<C-s>", function()
     local buf_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-    local new_title = buf_lines[1] or title
-    local desc_start = 2
-    while desc_start <= #buf_lines and vim.trim(buf_lines[desc_start]) == "" do
-      desc_start = desc_start + 1
+    local fields = M.parse_editor_fields(buf_lines)
+    if not fields.title or fields.title == "" then
+      vim.notify("Title cannot be empty", vim.log.levels.WARN)
+      return
     end
-    local new_desc = table.concat(buf_lines, "\n", desc_start)
     vim.api.nvim_win_close(win, true)
-    callback(vim.trim(new_title), vim.trim(new_desc))
+    callback(fields)
   end, { buffer = buf })
 
   vim.keymap.set("n", "q", function()

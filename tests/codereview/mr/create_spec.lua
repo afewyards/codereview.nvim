@@ -224,6 +224,65 @@ describe("ensure_pushed", function()
   end)
 end)
 
+describe("open_editor", function()
+  local captured_lines
+
+  before_each(function()
+    captured_lines = nil
+    vim.api = vim.api or {}
+    vim.api.nvim_create_buf = function() return 1 end
+    vim.api.nvim_buf_set_lines = function(_, _, _, _, lines)
+      captured_lines = lines
+    end
+    vim.api.nvim_open_win = function() return 1 end
+    vim.api.nvim_win_close = function() end
+    vim.api.nvim_buf_get_lines = function() return {} end
+    vim.o = vim.o or {}
+    vim.o.columns = 100
+    vim.o.lines = 40
+    vim.bo = setmetatable({}, {
+      __index = function(t, k)
+        if not rawget(t, k) then rawset(t, k, {}) end
+        return rawget(t, k)
+      end,
+    })
+    vim.keymap = vim.keymap or {}
+    vim.keymap.set = function() end
+    vim.notify = vim.notify or function() end
+    vim.log = vim.log or { levels = { INFO = 2, WARN = 3, ERROR = 4 } }
+  end)
+
+  it("sets buffer lines with Title:, Target:, Draft:, and separator", function()
+    create.open_editor("My feature", "Some description", "main", function() end)
+
+    assert.is_not_nil(captured_lines)
+    assert.truthy(captured_lines[1]:find("^Title:"))
+    assert.truthy(captured_lines[2]:find("^Target:"))
+    assert.truthy(captured_lines[3]:find("^Draft:"))
+    local has_sep = false
+    for _, line in ipairs(captured_lines) do
+      if line:match("^[─━─-][─━─-][─━─-]") then
+        has_sep = true
+        break
+      end
+    end
+    assert.is_true(has_sep)
+  end)
+
+  it("includes provided title and target in header", function()
+    create.open_editor("Fix bug", "desc", "develop", function() end)
+
+    assert.truthy(captured_lines[1]:find("Fix bug"))
+    assert.truthy(captured_lines[2]:find("develop"))
+  end)
+
+  it("defaults target to main when nil", function()
+    create.open_editor("Title", "desc", nil, function() end)
+
+    assert.truthy(captured_lines[2]:find("main"))
+  end)
+end)
+
 describe("mr.create prompts", function()
   describe("build_mr_prompt", function()
     it("includes branch name and diff", function()
