@@ -101,7 +101,7 @@ function M.render(buf, state)
 
   -- ── 1. Header ──────────────────────────────────────────────────────────────
   -- API: render(review, width) → { lines, highlights, row_map }
-  local header_res = header_comp.render(state.review or {}, WIDTH)
+  local header_res = header_comp.render(state, WIDTH)
   local header_offset = #all_lines
   record_range(state, "header", header_offset, #header_res.lines)
   for _, l in ipairs(header_res.lines) do table.insert(all_lines, l) end

@@ -44,6 +44,41 @@ describe("sidebar_components.header", function()
       end
     end)
 
+    it("shows commit filter indicator when state has commit_filter", function()
+      local state = {
+        review = {
+          id = 1, title = "Test MR",
+          source_branch = "feature", target_branch = "main",
+          pipeline_status = nil,
+          approved_by = {}, approvals_required = 0,
+          merge_status = "can_be_merged",
+        },
+        commit_filter = { label = "Fix login redirect" },
+      }
+      local result = header.render(state, 40)
+      assert.equals(5, #result.lines)
+      local found = false
+      for _, line in ipairs(result.lines) do
+        if line:match("Fix login redirect") then found = true end
+      end
+      assert.is_true(found, "Expected commit filter label in header")
+    end)
+
+    it("renders 4 lines when no commit_filter", function()
+      local state = {
+        review = {
+          id = 1, title = "Test MR",
+          source_branch = "feature", target_branch = "main",
+          pipeline_status = nil,
+          approved_by = {}, approvals_required = 0,
+          merge_status = "can_be_merged",
+        },
+        commit_filter = nil,
+      }
+      local result = header.render(state, 40)
+      assert.equals(4, #result.lines)
+    end)
+
     it("shows approvals and conflict indicators", function()
       -- With required approvals and conflicts
       local review = {

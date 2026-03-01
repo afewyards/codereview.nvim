@@ -19,15 +19,22 @@ local CI_HLS = {
 }
 
 --- Render the sidebar MR header.
---- @param review table  review/MR data (id, title, source_branch, target_branch,
----                      pipeline_status, approved_by, approvals_required, merge_status)
+--- @param state_or_review table  either a diff state (with .review) or a review object directly
 --- @param width  integer  sidebar column width (default 30)
 --- @return table  { lines: string[], highlights: table[], row_map: table }
-function M.render(review, width)
+function M.render(state_or_review, width)
   width = width or 30
   local lines      = {}
   local highlights = {}
   local row_map    = {}
+
+  local review, commit_filter
+  if state_or_review.review then
+    review = state_or_review.review
+    commit_filter = state_or_review.commit_filter
+  else
+    review = state_or_review
+  end
 
   -- Line 1: #ID title  (title truncated so total fits in width)
   local id_prefix  = string.format("#%d ", review.id or 0)
@@ -39,6 +46,16 @@ function M.render(review, width)
   local src = review.source_branch or ""
   local tgt = review.target_branch or "main"
   table.insert(lines, src .. " → " .. tgt)
+
+  -- Optional filter indicator line
+  if commit_filter and commit_filter.label then
+    local indicator = " 🔍 " .. commit_filter.label
+    if vim.fn.strdisplaywidth(indicator) > width then
+      indicator = indicator:sub(1, width - 2) .. "…"
+    end
+    table.insert(lines, indicator)
+    table.insert(highlights, { #lines - 1, 0, #indicator, "CodeReviewCommitFilter" })
+  end
 
   -- Line 3: compact status indicators
   local parts   = {}
