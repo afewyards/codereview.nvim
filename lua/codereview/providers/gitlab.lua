@@ -204,6 +204,41 @@ function M.get_discussions(client, ctx, review)
   return discussions
 end
 
+--- Find the MR head SHA at the time of the user's last approval.
+--- Returns the head_commit_sha of the latest version created before the user approved.
+function M.get_last_reviewed_sha(client, ctx, review, username)
+  local headers, err = get_headers()
+  if not headers then return nil end
+  local base = mr_base(ctx, review.id)
+
+  local approval_res = client.get(ctx.base_url, base .. "/approval_state", { headers = headers })
+  if not approval_res or not approval_res.data then return nil end
+
+  local approved_at
+  for _, rule in ipairs(approval_res.data.rules or {}) do
+    for _, approver in ipairs(rule.approved_by or {}) do
+      if approver.username == username then
+        if not approved_at or (approver.approved_at and approver.approved_at > approved_at) then
+          approved_at = approver.approved_at
+        end
+      end
+    end
+  end
+  if not approved_at then return nil end
+
+  local versions_res = client.get(ctx.base_url, base .. "/versions", { headers = headers })
+  if not versions_res or not versions_res.data then return nil end
+
+  local best_sha, best_time = nil, ""
+  for _, v in ipairs(versions_res.data) do
+    if v.created_at and v.created_at <= approved_at and v.created_at > best_time then
+      best_time = v.created_at
+      best_sha = v.head_commit_sha
+    end
+  end
+  return best_sha
+end
+
 --- Get all commits for an MR.
 function M.get_commits(client, ctx, review)
   local headers, err = get_headers()

@@ -516,6 +516,54 @@ describe("get_commits", function()
   end)
 end)
 
+describe("get_last_reviewed_sha", function()
+  before_each(function()
+    package.loaded["codereview.api.auth"] = {
+      get_token = function() return "glpat-test", "pat" end,
+    }
+  end)
+
+  after_each(function()
+    package.loaded["codereview.api.auth"] = nil
+  end)
+
+  it("returns SHA from latest approval by current user", function()
+    local mock_client = {
+      get = function(_, path, _)
+        if path:match("/approval_state$") then
+          return { data = { rules = { {
+            approved_by = { { username = "me", approved_at = "2026-03-01T10:00:00Z" } }
+          } } } }
+        end
+        if path:match("/versions$") then
+          return { data = {
+            { id = 1, head_commit_sha = "sha_v1", created_at = "2026-02-28T12:00:00Z" },
+            { id = 2, head_commit_sha = "sha_v2", created_at = "2026-03-01T09:00:00Z" },
+            { id = 3, head_commit_sha = "sha_v3", created_at = "2026-03-01T11:00:00Z" },
+          } }
+        end
+      end,
+    }
+    local ctx = { base_url = "https://gitlab.example.com", project = "group/project" }
+    local review = { id = 42 }
+    local sha = gitlab.get_last_reviewed_sha(mock_client, ctx, review, "me")
+    assert.equals("sha_v2", sha)
+  end)
+
+  it("returns nil when user has not approved", function()
+    local mock_client = {
+      get = function(_, path, _)
+        if path:match("/approval_state$") then
+          return { data = { rules = { { approved_by = {} } } } }
+        end
+      end,
+    }
+    local ctx = { base_url = "https://gitlab.example.com", project = "group/project" }
+    local sha = gitlab.get_last_reviewed_sha(mock_client, ctx, { id = 42 }, "me")
+    assert.is_nil(sha)
+  end)
+end)
+
 describe("pipeline methods", function()
   local mock_client
 
