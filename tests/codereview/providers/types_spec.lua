@@ -57,4 +57,52 @@ describe("providers.types", function()
       assert.equal("foo.lua", f.new_path)
     end)
   end)
+
+  describe("normalize_pipeline", function()
+    it("normalizes pipeline data with defaults", function()
+      local p = types.normalize_pipeline({
+        id = 123, status = "running", ref = "main", sha = "abc",
+        web_url = "https://example.com/pipeline/123",
+        created_at = "2026-01-01", updated_at = "2026-01-02",
+        duration = 120,
+      })
+      assert.equal(123, p.id)
+      assert.equal("running", p.status)
+      assert.equal("main", p.ref)
+      assert.equal("abc", p.sha)
+      assert.equal(120, p.duration)
+    end)
+
+    it("defaults missing fields", function()
+      local p = types.normalize_pipeline({ id = 1 })
+      assert.equal("unknown", p.status)
+      assert.equal("", p.ref)
+      assert.equal("", p.web_url)
+      assert.equal(0, p.duration)
+    end)
+  end)
+
+  describe("normalize_pipeline_job", function()
+    it("normalizes job data", function()
+      local j = types.normalize_pipeline_job({
+        id = 456, name = "test", stage = "test", status = "success",
+        duration = 60, web_url = "https://example.com/job/456",
+        allow_failure = false, started_at = "2026-01-01", finished_at = "2026-01-02",
+      })
+      assert.equal(456, j.id)
+      assert.equal("test", j.name)
+      assert.equal("test", j.stage)
+      assert.equal(60, j.duration)
+      assert.is_false(j.allow_failure)
+    end)
+
+    it("defaults missing fields", function()
+      local j = types.normalize_pipeline_job({ id = 1 })
+      assert.equal("", j.name)
+      assert.equal("", j.stage)
+      assert.equal("unknown", j.status)
+      assert.equal(0, j.duration)
+      assert.is_false(j.allow_failure)
+    end)
+  end)
 end)

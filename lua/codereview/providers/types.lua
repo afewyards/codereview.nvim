@@ -54,4 +54,31 @@ function M.normalize_file_diff(raw)
   }
 end
 
+function M.normalize_pipeline(raw)
+  return {
+    id = raw.id,
+    status = raw.status or "unknown",
+    ref = raw.ref or "",
+    sha = raw.sha or "",
+    web_url = raw.web_url or "",
+    created_at = raw.created_at or "",
+    updated_at = raw.updated_at or "",
+    duration = raw.duration or 0,
+  }
+end
+
+function M.normalize_pipeline_job(raw)
+  return {
+    id = raw.id,
+    name = raw.name or "",
+    stage = raw.stage or "",
+    status = raw.status or "unknown",
+    duration = raw.duration or 0,
+    web_url = raw.web_url or "",
+    allow_failure = raw.allow_failure or false,
+    started_at = raw.started_at or "",
+    finished_at = raw.finished_at or "",
+  }
+end
+
 return M
