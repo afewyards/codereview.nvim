@@ -693,4 +693,140 @@ function M.create_review(client, ctx, params)
   })
 end
 
+-- Pipeline methods -------------------------------------------------------
+
+--- Map GitHub check suite status + conclusion to a unified status string.
+local function map_check_status(status, conclusion)
+  if status == "completed" then
+    return conclusion or "unknown"
+  elseif status == "in_progress" then
+    return "running"
+  elseif status == "queued" then
+    return "pending"
+  end
+  return status or "unknown"
+end
+
+--- Map GitHub check-run status/conclusion to a job status string.
+local function map_job_status(cr)
+  if cr.status == "completed" then
+    return cr.conclusion or "unknown"
+  end
+  return cr.status or "unknown"
+end
+
+--- Extract workflow run ID from a check-run's details_url.
+local function extract_run_id(details_url)
+  if not details_url then return nil end
+  return details_url:match("/actions/runs/(%d+)")
+end
+
+--- Fetch pipeline (check-suite) status for the PR's head SHA.
+function M.get_pipeline(client, ctx, review)
+  local headers, err = get_headers()
+  if not headers then return nil, err end
+  local owner, repo = parse_owner_repo(ctx)
+  local sha = review.head_sha or review.sha
+  if not sha then return nil, "No head SHA available" end
+  local path = string.format("/repos/%s/%s/commits/%s/check-suites", owner, repo, sha)
+  local result, err2 = client.get(ctx.base_url, path, { headers = headers })
+  if not result then return nil, err2 end
+  local suites = result.data and result.data.check_suites or {}
+  if #suites == 0 then return nil, "No check suites found" end
+  -- Use the first (most recent) suite
+  local s = suites[1]
+  local types_mod = require("codereview.providers.types")
+  return types_mod.normalize_pipeline({
+    id = s.id,
+    status = map_check_status(s.status, s.conclusion),
+    ref = sha,
+    sha = sha,
+    web_url = s.url or "",
+    created_at = s.created_at or "",
+    updated_at = s.updated_at or "",
+    duration = 0,
+  })
+end
+
+--- Fetch check-runs (jobs) for a check-suite.
+function M.get_pipeline_jobs(client, ctx, review, suite_id) -- luacheck: ignore suite_id
+  local headers, err = get_headers()
+  if not headers then return nil, err end
+  local owner, repo = parse_owner_repo(ctx)
+  local sha = review.head_sha or review.sha
+  local path = string.format("/repos/%s/%s/commits/%s/check-runs", owner, repo, sha)
+  local result, err2 = client.get(ctx.base_url, path, {
+    headers = headers, query = { per_page = 100 },
+  })
+  if not result then return nil, err2 end
+  local types_mod = require("codereview.providers.types")
+  local jobs = {}
+  for _, cr in ipairs(result.data and result.data.check_runs or {}) do
+    table.insert(jobs, types_mod.normalize_pipeline_job({
+      id = cr.id,
+      name = cr.name,
+      stage = type(cr.app) == "table" and cr.app.name or "checks",
+      status = map_job_status(cr),
+      duration = 0,
+      web_url = cr.html_url or "",
+      allow_failure = false,
+      started_at = cr.started_at or "",
+      finished_at = cr.completed_at or "",
+    }))
+  end
+  return jobs
+end
+
+--- Fetch job log. GitHub requires downloading workflow run logs as a ZIP.
+--- Falls back to "not available" when run ID cannot be determined.
+function M.get_job_trace(client, ctx, review, job_id)
+  local headers, err = get_headers()
+  if not headers then return nil, err end
+  local owner, repo = parse_owner_repo(ctx)
+  -- Fetch the check run to find the workflow run ID
+  local cr_path = string.format("/repos/%s/%s/check-runs/%d", owner, repo, job_id)
+  local cr_result, cr_err = client.get(ctx.base_url, cr_path, { headers = headers })
+  if not cr_result then return nil, cr_err end
+  local run_id = extract_run_id(cr_result.data and cr_result.data.details_url)
+  if not run_id then return nil, "Cannot determine workflow run for log download" end
+  -- Download logs
+  local log_path = string.format("/repos/%s/%s/actions/runs/%s/logs", owner, repo, run_id)
+  local log_result, log_err = client.get(ctx.base_url, log_path, { headers = headers })
+  if not log_result then return nil, log_err end
+  return type(log_result.data) == "string" and log_result.data or "Log download returned non-text data"
+end
+
+--- Retry a job by re-running its workflow.
+function M.retry_job(client, ctx, review, job_id)
+  local headers, err = get_headers()
+  if not headers then return nil, err end
+  local owner, repo = parse_owner_repo(ctx)
+  local cr_path = string.format("/repos/%s/%s/check-runs/%d", owner, repo, job_id)
+  local cr_result, cr_err = client.get(ctx.base_url, cr_path, { headers = headers })
+  if not cr_result then return nil, cr_err end
+  local run_id = extract_run_id(cr_result.data and cr_result.data.details_url)
+  if not run_id then return nil, "Cannot determine workflow run" end
+  local path = string.format("/repos/%s/%s/actions/runs/%s/rerun", owner, repo, run_id)
+  return client.post(ctx.base_url, path, { body = {}, headers = headers })
+end
+
+--- Cancel a running workflow.
+function M.cancel_job(client, ctx, review, job_id)
+  local headers, err = get_headers()
+  if not headers then return nil, err end
+  local owner, repo = parse_owner_repo(ctx)
+  local cr_path = string.format("/repos/%s/%s/check-runs/%d", owner, repo, job_id)
+  local cr_result, cr_err = client.get(ctx.base_url, cr_path, { headers = headers })
+  if not cr_result then return nil, cr_err end
+  local run_id = extract_run_id(cr_result.data and cr_result.data.details_url)
+  if not run_id then return nil, "Cannot determine workflow run" end
+  local path = string.format("/repos/%s/%s/actions/runs/%s/cancel", owner, repo, run_id)
+  return client.post(ctx.base_url, path, { body = {}, headers = headers })
+end
+
+--- GitHub does not support triggering manual jobs directly.
+function M.play_job(client, ctx, review, job_id) -- luacheck: ignore ctx review job_id
+  return nil, "Manual job trigger not supported on GitHub"
+end
+
 return M
