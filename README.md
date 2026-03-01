@@ -30,6 +30,13 @@
 - **AI-powered review** — multi-provider support (Claude CLI, Anthropic API, OpenAI, Ollama, custom) with accept/dismiss/edit suggestions
 - **Review sessions** — accumulate draft comments, submit in batch
 - **MR actions** — approve, merge, open in browser, create new MR/PR
+
+![Create MR/PR](https://github.com/afewyards/codereview.nvim/releases/latest/download/open-mr.gif)
+
+- **Pipeline view** — monitor CI/CD status, view job logs, retry failed jobs
+
+![Pipeline View](https://github.com/afewyards/codereview.nvim/releases/latest/download/pipeline.gif)
+
 - **Picker integration** — Telescope, FZF, or Snacks
 - **Fully remappable keybindings** — override or disable any binding
 

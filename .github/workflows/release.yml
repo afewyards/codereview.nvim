@@ -44,6 +44,9 @@ jobs:
     needs: release
     runs-on: ubuntu-latest
     if: ${{ needs.release.outputs.version != '' }}
+    strategy:
+      matrix:
+        tape: [ai-review, open-mr, pipeline]
     steps:
       - uses: actions/checkout@v4
 
@@ -63,14 +66,14 @@ jobs:
           sudo install /tmp/ttyd /usr/local/bin/ttyd
 
       - name: Generate demo GIF
-        run: vhs demo/ai-review.tape
+        run: vhs demo/${{ matrix.tape }}.tape
 
       - name: Upload demo assets to release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release upload "v${{ needs.release.outputs.version }}" \
-            demo/ai-review.gif \
+            demo/${{ matrix.tape }}.gif \
             --clobber
 
   # Uncomment when ready to publish to LuaRocks:
