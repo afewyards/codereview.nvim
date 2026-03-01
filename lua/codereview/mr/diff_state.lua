@@ -43,6 +43,8 @@ function M.create_state(opts)
     scroll_row_disc = {},
     file_contexts = {},
     ai_suggestions = nil,
+    ai_summary_pending = false,
+    ai_summary_callbacks = {},
     row_ai_cache = {},
     scroll_row_ai = {},
     local_drafts = {},
