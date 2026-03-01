@@ -118,10 +118,14 @@ end
 function M.open_editor(title, description, target, callback)
   local buf = vim.api.nvim_create_buf(false, true)
   local separator = string.rep("─", 60)
+  local state = {
+    draft = false,
+    target = target or "main",
+  }
+
   local lines = {
     "Title: " .. (title or ""),
-    "Target: " .. (target or "main"),
-    "Draft: no",
+    "Target: " .. state.target,
     separator,
   }
   for _, line in ipairs(vim.split(description or "", "\n")) do
@@ -144,24 +148,62 @@ function M.open_editor(title, description, target, callback)
     border = "rounded",
     title = " Create MR/PR ",
     title_pos = "center",
-    footer = " <C-s> submit  q cancel ",
+    footer = M.build_mr_footer(state.draft),
     footer_pos = "center",
   })
+
+  local function update_footer()
+    if vim.api.nvim_win_is_valid(win) then
+      vim.api.nvim_win_set_config(win, {
+        footer = M.build_mr_footer(state.draft),
+        footer_pos = "center",
+      })
+    end
+  end
+
+  local function toggle_draft()
+    state.draft = not state.draft
+    update_footer()
+  end
+
+  local function pick_target()
+    local branches = M.fetch_remote_branches()
+    if #branches == 0 then
+      vim.notify("No remote branches found", vim.log.levels.WARN)
+      return
+    end
+    vim.ui.select(branches, { prompt = "Target branch:" }, function(choice)
+      if not choice then return end
+      state.target = choice
+      -- Update the Target: line in the buffer (line 2, 0-indexed = 1)
+      if vim.api.nvim_win_is_valid(win) then
+        vim.api.nvim_buf_set_lines(buf, 1, 2, false, { "Target: " .. choice })
+      end
+    end)
+  end
+
+  local map_opts = { buffer = buf, nowait = true }
+
+  vim.keymap.set({ "n", "i" }, "<Tab>", toggle_draft, map_opts)
+  vim.keymap.set({ "n", "i" }, "<S-Tab>", toggle_draft, map_opts)
+  vim.keymap.set({ "n", "i" }, "<C-t>", pick_target, map_opts)
 
   vim.keymap.set("n", "<C-s>", function()
     local buf_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
     local fields = M.parse_editor_fields(buf_lines)
+    fields.draft = state.draft
+    fields.target = state.target
     if not fields.title or fields.title == "" then
       vim.notify("Title cannot be empty", vim.log.levels.WARN)
       return
     end
     vim.api.nvim_win_close(win, true)
     callback(fields)
-  end, { buffer = buf })
+  end, map_opts)
 
   vim.keymap.set("n", "q", function()
     vim.api.nvim_win_close(win, true)
-  end, { buffer = buf })
+  end, map_opts)
 end
 
 function M.create()

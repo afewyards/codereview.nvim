@@ -253,11 +253,13 @@ describe("build_mr_footer", function()
 end)
 
 describe("open_editor", function()
-  local captured_lines
+  local captured_lines, captured_win_config, captured_keymaps
   local orig_api, orig_o, orig_bo, orig_keymap, orig_notify, orig_log
 
   before_each(function()
     captured_lines = nil
+    captured_win_config = {}
+    captured_keymaps = {}
     orig_api = vim.api
     orig_o = vim.o
     orig_bo = vim.bo
@@ -271,6 +273,10 @@ describe("open_editor", function()
       nvim_open_win = function() return 1 end,
       nvim_win_close = function() end,
       nvim_buf_get_lines = function() return {} end,
+      nvim_win_is_valid = function() return true end,
+      nvim_win_set_config = function(_, config)
+        table.insert(captured_win_config, config)
+      end,
     }
     vim.o = { columns = 100, lines = 40 }
     vim.bo = setmetatable({}, {
@@ -279,9 +285,14 @@ describe("open_editor", function()
         return rawget(t, k)
       end,
     })
-    vim.keymap = { set = function() end }
+    vim.keymap = {
+      set = function(mode, lhs, rhs, opts)
+        table.insert(captured_keymaps, { mode = mode, lhs = lhs, rhs = rhs })
+      end,
+    }
     vim.notify = function() end
     vim.log = { levels = { INFO = 2, WARN = 3, ERROR = 4 } }
+    vim.ui = vim.ui or {}
   end)
 
   after_each(function()
@@ -293,21 +304,34 @@ describe("open_editor", function()
     vim.log = orig_log
   end)
 
-  it("sets buffer lines with Title:, Target:, Draft:, and separator", function()
+  it("sets buffer with Title, Target, separator — no Draft line", function()
     create.open_editor("My feature", "Some description", "main", function() end)
 
     assert.is_not_nil(captured_lines)
     assert.truthy(captured_lines[1]:find("^Title:"))
     assert.truthy(captured_lines[2]:find("^Target:"))
-    assert.truthy(captured_lines[3]:find("^Draft:"))
-    local has_sep = false
-    for _, line in ipairs(captured_lines) do
-      if line:match("^[─━─-][─━─-][─━─-]") then
-        has_sep = true
-        break
-      end
+    -- No Draft line — separator should be line 3
+    assert.truthy(captured_lines[3]:match("^[─━─-][─━─-][─━─-]"))
+  end)
+
+  it("registers Tab keymap for draft toggle", function()
+    create.open_editor("Title", "desc", "main", function() end)
+
+    local has_tab = false
+    for _, km in ipairs(captured_keymaps) do
+      if km.lhs == "<Tab>" then has_tab = true end
     end
-    assert.is_true(has_sep)
+    assert.is_true(has_tab)
+  end)
+
+  it("registers <C-t> keymap for branch picker", function()
+    create.open_editor("Title", "desc", "main", function() end)
+
+    local has_ct = false
+    for _, km in ipairs(captured_keymaps) do
+      if km.lhs == "<C-t>" then has_ct = true end
+    end
+    assert.is_true(has_ct)
   end)
 
   it("includes provided title and target in header", function()
