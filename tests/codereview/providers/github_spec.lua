@@ -533,8 +533,57 @@ describe("providers.github", function()
   end)
 
   describe("create_review", function()
+    before_each(function()
+      package.loaded["codereview.api.auth"] = {
+        get_token = function() return "ghp_test", "pat" end,
+      }
+    end)
+    after_each(function()
+      package.loaded["codereview.api.auth"] = nil
+    end)
+
+    local cr_ctx = { base_url = "https://api.github.com", project = "owner/repo" }
+
     it("exists as a function", function()
       assert.is_function(github.create_review)
+    end)
+
+    it("includes draft=true in body when params.draft is true", function()
+      local called_path, called_body
+      local mock_client = {
+        post = function(_, path, opts)
+          called_path = path
+          called_body = opts.body
+          return { data = { number = 1 } }, nil
+        end,
+      }
+      github.create_review(mock_client, cr_ctx, {
+        source_branch = "feature/x",
+        target_branch = "main",
+        title = "My PR",
+        description = "desc",
+        draft = true,
+      })
+      assert.equal("/repos/owner/repo/pulls", called_path)
+      assert.is_true(called_body.draft)
+    end)
+
+    it("does NOT include draft key in body when params.draft is false", function()
+      local called_body
+      local mock_client = {
+        post = function(_, path, opts)
+          called_body = opts.body
+          return { data = { number = 2 } }, nil
+        end,
+      }
+      github.create_review(mock_client, cr_ctx, {
+        source_branch = "feature/y",
+        target_branch = "main",
+        title = "My PR",
+        description = "desc",
+        draft = false,
+      })
+      assert.is_nil(called_body.draft)
     end)
   end)
 

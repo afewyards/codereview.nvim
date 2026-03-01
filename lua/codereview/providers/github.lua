@@ -672,19 +672,23 @@ function M.publish_review(client, ctx, review, opts)
 end
 
 --- Create a new pull request.
---- @param params table { source_branch, target_branch, title, description }
+--- @param params table { source_branch, target_branch, title, description, draft? }
 function M.create_review(client, ctx, params)
   local headers, err = get_headers()
   if not headers then return nil, err end
   local owner, repo = parse_owner_repo(ctx)
   local path_url = string.format("/repos/%s/%s/pulls", owner, repo)
+  local body = {
+    head = params.source_branch,
+    base = params.target_branch,
+    title = params.title,
+    body = params.description,
+  }
+  if params.draft then
+    body.draft = true
+  end
   return client.post(ctx.base_url, path_url, {
-    body = {
-      head = params.source_branch,
-      base = params.target_branch,
-      title = params.title,
-      body = params.description,
-    },
+    body = body,
     headers = headers,
   })
 end
