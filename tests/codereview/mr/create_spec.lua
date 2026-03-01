@@ -224,6 +224,34 @@ describe("ensure_pushed", function()
   end)
 end)
 
+describe("build_mr_footer", function()
+  it("shows No Draft when draft is false", function()
+    local footer = create.build_mr_footer(false)
+    local text = ""
+    for _, tuple in ipairs(footer) do text = text .. tuple[1] end
+    assert.truthy(text:find("No Draft"))
+    assert.is_nil(text:find("Draft ▶"))  -- should not match just "Draft"
+  end)
+
+  it("shows Draft when draft is true", function()
+    local footer = create.build_mr_footer(true)
+    local text = ""
+    for _, tuple in ipairs(footer) do text = text .. tuple[1] end
+    -- Match " Draft " but not "No Draft"
+    assert.truthy(text:find("◀ Draft ▶"))
+    assert.is_nil(text:find("No Draft"))
+  end)
+
+  it("returns table of {text, highlight} tuples", function()
+    local footer = create.build_mr_footer(false)
+    assert.is_table(footer)
+    for _, tuple in ipairs(footer) do
+      assert.is_string(tuple[1])
+      assert.is_string(tuple[2])
+    end
+  end)
+end)
+
 describe("open_editor", function()
   local captured_lines
   local orig_api, orig_o, orig_bo, orig_keymap, orig_notify, orig_log
@@ -293,6 +321,42 @@ describe("open_editor", function()
     create.open_editor("Title", "desc", nil, function() end)
 
     assert.truthy(captured_lines[2]:find("main"))
+  end)
+end)
+
+describe("fetch_remote_branches", function()
+  local orig_systemlist, orig_shell_error
+
+  before_each(function()
+    orig_systemlist = vim.fn.systemlist
+    orig_shell_error = vim.v.shell_error
+  end)
+
+  after_each(function()
+    vim.fn.systemlist = orig_systemlist
+    vim.v.shell_error = orig_shell_error
+  end)
+
+  it("returns branch names stripped of refs/heads/ prefix", function()
+    vim.fn.systemlist = function()
+      vim.v.shell_error = 0
+      return {
+        "abc123\trefs/heads/main",
+        "def456\trefs/heads/develop",
+        "ghi789\trefs/heads/feature/auth",
+      }
+    end
+    local branches = create.fetch_remote_branches()
+    assert.same({ "main", "develop", "feature/auth" }, branches)
+  end)
+
+  it("returns empty table on git failure", function()
+    vim.fn.systemlist = function()
+      vim.v.shell_error = 1
+      return {}
+    end
+    local branches = create.fetch_remote_branches()
+    assert.same({}, branches)
   end)
 end)
 

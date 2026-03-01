@@ -86,6 +86,35 @@ function M.detect_target_branch()
   return "main"
 end
 
+function M.fetch_remote_branches()
+  local result = vim.fn.systemlist({ "git", "ls-remote", "--heads", "origin" })
+  if vim.v.shell_error ~= 0 then return {} end
+  local branches = {}
+  for _, line in ipairs(result) do
+    local branch = line:match("\trefs/heads/(.+)$")
+    if branch then table.insert(branches, branch) end
+  end
+  return branches
+end
+
+local DRAFT_LABELS = { "No Draft", "Draft" }
+
+function M.build_mr_footer(is_draft)
+  local label = is_draft and DRAFT_LABELS[2] or DRAFT_LABELS[1]
+  return {
+    { " ", "CodeReviewFloatFooterText" },
+    { "◀", "CodeReviewFloatFooterKey" },
+    { " " .. label .. " ", "CodeReviewFloatFooterText" },
+    { "▶", "CodeReviewFloatFooterKey" },
+    { "  ", "CodeReviewFloatFooterText" },
+    { "<C-t>", "CodeReviewFloatFooterKey" },
+    { " target ", "CodeReviewFloatFooterText" },
+    { " ", "CodeReviewFloatFooterText" },
+    { "<C-s>", "CodeReviewFloatFooterKey" },
+    { " submit ", "CodeReviewFloatFooterText" },
+  }
+end
+
 function M.open_editor(title, description, target, callback)
   local buf = vim.api.nvim_create_buf(false, true)
   local separator = string.rep("─", 60)
