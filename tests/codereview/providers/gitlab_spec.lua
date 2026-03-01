@@ -485,6 +485,37 @@ describe("delete_draft_note", function()
   end)
 end)
 
+describe("get_commits", function()
+  before_each(function()
+    package.loaded["codereview.api.auth"] = {
+      get_token = function() return "glpat-test", "pat" end,
+    }
+  end)
+
+  after_each(function()
+    package.loaded["codereview.api.auth"] = nil
+  end)
+
+  it("fetches and normalizes MR commits", function()
+    local raw_commits = {
+      { id = "sha1full", short_id = "sha1", title = "First commit", author_name = "alice", created_at = "2026-03-01T10:00:00Z" },
+      { id = "sha2full", short_id = "sha2", title = "Second commit", author_name = "bob", created_at = "2026-03-01T11:00:00Z" },
+    }
+    local mock_client = {
+      paginate_all = function(_, _, _) return raw_commits end,
+    }
+    local ctx = { base_url = "https://gitlab.example.com", project = "group/project" }
+    local review = { id = 42 }
+    local result, err = gitlab.get_commits(mock_client, ctx, review)
+    assert.is_nil(err)
+    assert.equals(2, #result)
+    assert.equals("sha1full", result[1].sha)
+    assert.equals("sha1", result[1].short_sha)
+    assert.equals("First commit", result[1].title)
+    assert.equals("alice", result[1].author)
+  end)
+end)
+
 describe("pipeline methods", function()
   local mock_client
 

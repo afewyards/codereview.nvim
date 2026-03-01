@@ -204,6 +204,19 @@ function M.get_discussions(client, ctx, review)
   return discussions
 end
 
+--- Get all commits for an MR.
+function M.get_commits(client, ctx, review)
+  local headers, err = get_headers()
+  if not headers then return nil, err end
+  local raw = client.paginate_all(ctx.base_url, mr_base(ctx, review.id) .. "/commits", { headers = headers })
+  if not raw then return nil, "Failed to fetch commits" end
+  local commits = {}
+  for _, c in ipairs(raw) do
+    table.insert(commits, types.normalize_commit(c))
+  end
+  return commits
+end
+
 --- Post an inline comment or general comment.
 --- @param position table|nil { old_path, new_path, old_line, new_line } or nil for general comment
 function M.post_comment(client, ctx, review, body, position)
