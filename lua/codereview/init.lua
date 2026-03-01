@@ -153,4 +153,18 @@ function M.files()
   require("codereview.picker.files").pick(active.state, active.layout)
 end
 
+function M.commits()
+  local buf = vim.api.nvim_get_current_buf()
+  local diff_mod = require("codereview.mr.diff")
+  local active = diff_mod.get_state(buf)
+  if not active then
+    vim.notify("Open a diff view first with :CodeReview", vim.log.levels.WARN)
+    return
+  end
+  local commit_filter = require("codereview.mr.commit_filter")
+  require("codereview.picker.commits").pick(active.state, function(entry)
+    commit_filter.select(active.state, active.layout, entry)
+  end)
+end
+
 return M

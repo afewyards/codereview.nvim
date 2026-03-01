@@ -42,3 +42,7 @@ end, { desc = "Browse comments and suggestions" })
 vim.api.nvim_create_user_command("CodeReviewFiles", function()
   require("codereview").files()
 end, { desc = "Browse changed files" })
+
+vim.api.nvim_create_user_command("CodeReviewCommits", function()
+  require("codereview").commits()
+end, { desc = "Browse commits" })

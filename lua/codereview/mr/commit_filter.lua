@@ -110,4 +110,63 @@ function M.get_changed_paths(from_sha, to_sha)
   return paths
 end
 
+--- Handle a commit picker/sidebar entry selection.
+--- Applies or clears the commit filter, re-renders sidebar and diff.
+--- @param state table diff viewer state
+--- @param layout table { sidebar_buf, main_buf, ... }
+--- @param entry table picker entry { type, sha, title, from_sha, ... }
+function M.select(state, layout, entry)
+  local diff = require("codereview.mr.diff")
+  local diff_render = require("codereview.mr.diff_render")
+  local diff_state = require("codereview.mr.diff_state")
+
+  local function render_current_file()
+    if state.scroll_mode then
+      local result = diff_render.render_all_files(layout.main_buf, state.files, state.review, state.discussions, state.context, state.file_contexts, state.ai_suggestions, state.row_selection, state.current_user, state.editing_note, state.git_diff_cache)
+      diff_state.apply_scroll_result(state, result)
+    else
+      local file = state.files and state.files[state.current_file]
+      if file then
+        local ld, rd, ra = diff_render.render_file_diff(layout.main_buf, file, state.review, state.discussions, state.context, state.ai_suggestions, state.row_selection, state.current_user, state.editing_note, state.git_diff_cache, state.commit_filter)
+        diff_state.apply_file_result(state, state.current_file, ld, rd, ra)
+      end
+    end
+  end
+
+  if entry.type == "all" then
+    if M.is_active(state) then
+      M.clear(state)
+      diff.render_sidebar(layout.sidebar_buf, state)
+      if state.view_mode == "diff" then
+        render_current_file()
+      end
+    end
+  elseif entry.type == "since_last_review" then
+    local paths = M.get_changed_paths(entry.from_sha, state.review.head_sha)
+    M.apply(state, {
+      from_sha = entry.from_sha, to_sha = state.review.head_sha,
+      label = "Since last review", changed_paths = paths,
+    })
+    state.view_mode = "diff"
+    diff.render_sidebar(layout.sidebar_buf, state)
+    render_current_file()
+  elseif entry.type == "commit" then
+    local parent_sha
+    for i, c in ipairs(state.commits) do
+      if c.sha == entry.sha then
+        parent_sha = i > 1 and state.commits[i - 1].sha or state.review.base_sha
+        break
+      end
+    end
+    local paths = M.get_changed_paths(parent_sha, entry.sha)
+    M.apply(state, {
+      from_sha = parent_sha, to_sha = entry.sha,
+      label = entry.title or entry.sha:sub(1, 8), changed_paths = paths,
+    })
+    state.view_mode = "diff"
+    diff.render_sidebar(layout.sidebar_buf, state)
+    render_current_file()
+  end
+end
+
 return M

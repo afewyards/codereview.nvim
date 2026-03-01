@@ -305,42 +305,7 @@ function M.setup_keymaps(state, layout, active_states)
   -- ── Commit selection shared helper ───────────────────────────────────────────
 
   local function select_commit_entry(entry)
-    local commit_filter_mod = require("codereview.mr.commit_filter")
-    local diff = require("codereview.mr.diff")
-    if entry.type == "all" then
-      if commit_filter_mod.is_active(state) then
-        commit_filter_mod.clear(state)
-        diff.render_sidebar(layout.sidebar_buf, state)
-        if state.view_mode == "diff" then
-          diff.render_file_diff_at_current(layout.main_buf, state)
-        end
-      end
-    elseif entry.type == "since_last_review" then
-      local paths = commit_filter_mod.get_changed_paths(entry.from_sha, state.review.head_sha)
-      commit_filter_mod.apply(state, {
-        from_sha = entry.from_sha, to_sha = state.review.head_sha,
-        label = "Since last review", changed_paths = paths,
-      })
-      state.view_mode = "diff"
-      diff.render_sidebar(layout.sidebar_buf, state)
-      diff.render_file_diff_at_current(layout.main_buf, state)
-    elseif entry.type == "commit" then
-      local parent_sha
-      for i, c in ipairs(state.commits) do
-        if c.sha == entry.sha then
-          parent_sha = i > 1 and state.commits[i - 1].sha or state.review.base_sha
-          break
-        end
-      end
-      local paths = commit_filter_mod.get_changed_paths(parent_sha, entry.sha)
-      commit_filter_mod.apply(state, {
-        from_sha = parent_sha, to_sha = entry.sha,
-        label = entry.title or entry.sha:sub(1, 8), changed_paths = paths,
-      })
-      state.view_mode = "diff"
-      diff.render_sidebar(layout.sidebar_buf, state)
-      diff.render_file_diff_at_current(layout.main_buf, state)
-    end
+    require("codereview.mr.commit_filter").select(state, layout, entry)
   end
 
   -- ── Main buffer callbacks (all 26 remappable actions) ───────────────────────
