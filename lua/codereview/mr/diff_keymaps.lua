@@ -55,7 +55,7 @@ function M.setup_keymaps(state, layout, active_states)
     else
       local file = state.files and state.files[state.current_file]
       if file then
-        local ld, rd, ra = diff_render.render_file_diff(layout.main_buf, file, state.review, state.discussions, state.context, state.ai_suggestions, state.row_selection, state.current_user, state.editing_note, state.git_diff_cache)
+        local ld, rd, ra = diff_render.render_file_diff(layout.main_buf, file, state.review, state.discussions, state.context, state.ai_suggestions, state.row_selection, state.current_user, state.editing_note, state.git_diff_cache, state.commit_filter)
         diff_state.apply_file_result(state, state.current_file, ld, rd, ra)
       end
     end
@@ -205,7 +205,7 @@ function M.setup_keymaps(state, layout, active_states)
     else
       local file = state.files and state.files[state.current_file]
       if not file then return end
-      local ld, rd, ra = diff_render.render_file_diff(layout.main_buf, file, state.review, state.discussions, state.context, state.ai_suggestions, state.row_selection, state.current_user, nil, state.git_diff_cache)
+      local ld, rd, ra = diff_render.render_file_diff(layout.main_buf, file, state.review, state.discussions, state.context, state.ai_suggestions, state.row_selection, state.current_user, nil, state.git_diff_cache, state.commit_filter)
       diff_state.apply_file_result(state, state.current_file, ld, rd, ra)
     end
     diff_sidebar.render_sidebar(layout.sidebar_buf, state)
@@ -300,6 +300,47 @@ function M.setup_keymaps(state, layout, active_states)
     local split = require("codereview.ui.split")
     split.close(layout)
     pcall(vim.api.nvim_buf_delete, layout.main_buf, { force = true })
+  end
+
+  -- ── Commit selection shared helper ───────────────────────────────────────────
+
+  local function select_commit_entry(entry)
+    local commit_filter_mod = require("codereview.mr.commit_filter")
+    local diff = require("codereview.mr.diff")
+    if entry.type == "all" then
+      if commit_filter_mod.is_active(state) then
+        commit_filter_mod.clear(state)
+        diff.render_sidebar(layout.sidebar_buf, state)
+        if state.view_mode == "diff" then
+          diff.render_file_diff_at_current(layout.main_buf, state)
+        end
+      end
+    elseif entry.type == "since_last_review" then
+      local paths = commit_filter_mod.get_changed_paths(entry.from_sha, state.review.head_sha)
+      commit_filter_mod.apply(state, {
+        from_sha = entry.from_sha, to_sha = state.review.head_sha,
+        label = "Since last review", changed_paths = paths,
+      })
+      state.view_mode = "diff"
+      diff.render_sidebar(layout.sidebar_buf, state)
+      diff.render_file_diff_at_current(layout.main_buf, state)
+    elseif entry.type == "commit" then
+      local parent_sha
+      for i, c in ipairs(state.commits) do
+        if c.sha == entry.sha then
+          parent_sha = i > 1 and state.commits[i - 1].sha or state.review.base_sha
+          break
+        end
+      end
+      local paths = commit_filter_mod.get_changed_paths(parent_sha, entry.sha)
+      commit_filter_mod.apply(state, {
+        from_sha = parent_sha, to_sha = entry.sha,
+        label = entry.title or entry.sha:sub(1, 8), changed_paths = paths,
+      })
+      state.view_mode = "diff"
+      diff.render_sidebar(layout.sidebar_buf, state)
+      diff.render_file_diff_at_current(layout.main_buf, state)
+    end
   end
 
   -- ── Main buffer callbacks (all 26 remappable actions) ───────────────────────
@@ -679,7 +720,7 @@ function M.setup_keymaps(state, layout, active_states)
         end
         local file = state.files and state.files[state.current_file]
         if not file then return end
-        local ld, rd, ra = diff_render.render_file_diff(layout.main_buf, file, state.review, state.discussions, state.context, state.ai_suggestions, state.row_selection, state.current_user, nil, state.git_diff_cache)
+        local ld, rd, ra = diff_render.render_file_diff(layout.main_buf, file, state.review, state.discussions, state.context, state.ai_suggestions, state.row_selection, state.current_user, nil, state.git_diff_cache, state.commit_filter)
         diff_state.apply_file_result(state, state.current_file, ld, rd, ra)
         local row = diff_nav.find_row_for_anchor(ld, anchor, state.current_file)
         vim.api.nvim_win_set_cursor(layout.main_win, { row, 0 })
@@ -1320,6 +1361,9 @@ function M.setup_keymaps(state, layout, active_states)
     pick_files = function()
       require("codereview.picker.files").pick(state, layout)
     end,
+    pick_commits = function()
+      require("codereview.picker.commits").pick(state, select_commit_entry)
+    end,
     refresh = refresh,
     quit    = quit,
   }
@@ -1360,6 +1404,9 @@ function M.setup_keymaps(state, layout, active_states)
     end,
     pick_files = function()
       require("codereview.picker.files").pick(state, layout)
+    end,
+    pick_commits = function()
+      require("codereview.picker.commits").pick(state, select_commit_entry)
     end,
     refresh = refresh,
     quit    = quit,
@@ -1494,10 +1541,18 @@ function M.setup_keymaps(state, layout, active_states)
       else
         diff_sidebar.render_sidebar(layout.sidebar_buf, state)
         local line_data, row_disc, row_ai = diff_render.render_file_diff(
-          layout.main_buf, state.files[entry.idx], state.review, state.discussions, state.context, state.ai_suggestions, state.row_selection, state.current_user, nil, state.git_diff_cache)
+          layout.main_buf, state.files[entry.idx], state.review, state.discussions, state.context, state.ai_suggestions, state.row_selection, state.current_user, nil, state.git_diff_cache, state.commit_filter)
         diff_state.apply_file_result(state, entry.idx, line_data, row_disc, row_ai)
       end
       vim.api.nvim_set_current_win(layout.main_win)
+
+    elseif entry.type == "commits_header" then
+      state.collapsed_commits = not state.collapsed_commits
+      local diff_sidebar_mod = require("codereview.mr.diff_sidebar")
+      diff_sidebar_mod.render_sidebar(layout.sidebar_buf, state)
+
+    elseif entry.type == "commit" or entry.type == "since_last_review" then
+      select_commit_entry(entry)
     end
   end)
 

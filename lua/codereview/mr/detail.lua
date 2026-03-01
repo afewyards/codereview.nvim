@@ -417,7 +417,7 @@ function M._apply_resumed_drafts(state, server_drafts)
 end
 
 function M.open(entry)
-  local ok, provider, ctx, review, discussions, files = pcall(function()
+  local ok, provider, ctx, review, discussions, files, commits = pcall(function()
     local prov, pctx, perr = providers.detect()
     if not prov then error(perr or "Could not detect platform") end
 
@@ -436,7 +436,13 @@ function M.open(entry)
       f = {}
     end
 
-    return prov, pctx, rev, disc, f
+    local c = {}
+    if prov.get_commits then
+      local fetched, _ = prov.get_commits(client, pctx, rev)
+      c = fetched or {}
+    end
+
+    return prov, pctx, rev, disc, f, c
   end)
 
   if not ok then
@@ -459,12 +465,18 @@ function M.open(entry)
     files = files,
     layout = layout,
     discussions = discussions,
+    commits = commits,
   })
 
   -- Fetch current user for note authorship checks (edit/delete guards)
   local client_mod = require("codereview.api.client")
   local user = provider.get_current_user(client_mod, ctx)
   if user then state.current_user = user end
+
+  if user and provider.get_last_reviewed_sha then
+    local sha = provider.get_last_reviewed_sha(client_mod, ctx, review, user)
+    if sha then state.last_reviewed_sha = sha end
+  end
 
   diff.render_sidebar(layout.sidebar_buf, state)
   diff.render_summary(layout.main_buf, state)
