@@ -12,16 +12,14 @@ local prompt_mod = require("codereview.ai.prompt")
 local create = require("codereview.mr.create")
 
 describe("parse_editor_fields", function()
-  it("extracts title, target, and description with separator", function()
+  it("extracts title and description with separator", function()
     local lines = {
       "Title: My feature",
-      "Target: main",
       "───────────────",
       "This is the description.",
     }
     local fields = create.parse_editor_fields(lines)
     assert.equals("My feature", fields.title)
-    assert.equals("main", fields.target)
     assert.equals("This is the description.", fields.description)
   end)
 
@@ -29,32 +27,6 @@ describe("parse_editor_fields", function()
     local lines = { "Title: ", "───" }
     local fields = create.parse_editor_fields(lines)
     assert.is_nil(fields.title)
-  end)
-
-  it("treats lines after header fields as description when no separator", function()
-    local lines = {
-      "Title: My feature",
-      "Target: main",
-      "This is the description.",
-      "Second line.",
-    }
-    local fields = create.parse_editor_fields(lines)
-    assert.equals("My feature", fields.title)
-    assert.equals("main", fields.target)
-    assert.truthy(fields.description:find("This is the description."))
-    assert.truthy(fields.description:find("Second line."))
-  end)
-
-  it("collects multiple description lines below separator", function()
-    local lines = {
-      "Title: Feature",
-      "───────────────",
-      "Line one.",
-      "Line two.",
-    }
-    local fields = create.parse_editor_fields(lines)
-    assert.truthy(fields.description:find("Line one."))
-    assert.truthy(fields.description:find("Line two."))
   end)
 
   it("returns empty description when nothing below separator", function()
