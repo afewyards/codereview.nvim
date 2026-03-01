@@ -4,6 +4,66 @@ local ai_providers = require("codereview.ai.providers")
 local prompt_mod = require("codereview.ai.prompt")
 local M = {}
 
+local SEPARATOR_PATTERN = "^[─━─-][─━─-][─━─-]"
+
+function M.parse_editor_fields(lines)
+  local fields = { draft = false }
+  local sep_idx = nil
+  for i, line in ipairs(lines) do
+    if line:match(SEPARATOR_PATTERN) then
+      sep_idx = i
+      break
+    end
+    local key, value = line:match("^(%w+):%s*(.*)$")
+    if key then
+      key = key:lower()
+      value = vim.trim(value)
+      if key == "title" then
+        fields.title = value ~= "" and value or nil
+      elseif key == "target" then
+        fields.target = value
+      elseif key == "draft" then
+        fields.draft = value:lower() == "yes" or value:lower() == "true"
+      end
+    end
+  end
+  local desc_start = sep_idx and sep_idx + 1 or (#lines + 1)
+  if not sep_idx then
+    for i, line in ipairs(lines) do
+      if not line:match("^%w+:%s") then
+        desc_start = i
+        break
+      end
+    end
+  end
+  local desc_lines = {}
+  for i = desc_start, #lines do
+    table.insert(desc_lines, lines[i])
+  end
+  fields.description = vim.trim(table.concat(desc_lines, "\n"))
+  return fields
+end
+
+function M.ensure_pushed(branch)
+  local upstream = vim.fn.systemlist({ "git", "rev-parse", "--abbrev-ref", branch .. "@{upstream}" })
+  local has_upstream = vim.v.shell_error == 0 and #upstream > 0
+  if not has_upstream then
+    vim.notify("Pushing " .. branch .. " to origin...", vim.log.levels.INFO)
+    vim.fn.systemlist({ "git", "push", "--set-upstream", "origin", branch })
+    if vim.v.shell_error ~= 0 then return false, "Failed to push branch" end
+    return true
+  end
+  local head = vim.fn.systemlist({ "git", "rev-parse", "HEAD" })
+  local up_rev = vim.fn.systemlist({ "git", "rev-parse", "@{upstream}" })
+  if vim.v.shell_error == 0 and #head > 0 and #up_rev > 0 and head[1] == up_rev[1] then
+    return true
+  end
+  vim.notify("Pushing " .. branch .. "...", vim.log.levels.INFO)
+  vim.fn.systemlist({ "git", "push" })
+  if vim.v.shell_error ~= 0 then return false, "Failed to push branch" end
+  return true
+end
+
 function M.get_current_branch()
   local result = vim.fn.systemlist({ "git", "branch", "--show-current" })
   if vim.v.shell_error ~= 0 or #result == 0 then return nil end
