@@ -400,7 +400,9 @@ function M.approve(_client, _ctx, _review) return true, nil end
 function M.unapprove(_client, _ctx, _review) return true, nil end
 function M.merge(_client, _ctx, _review) return true, nil end
 function M.close(_client, _ctx, _review) return true, nil end
-function M.create_review(_client, _ctx, _review) return { id = 1 }, nil end
+function M.create_review(_client, _ctx, _opts)
+  return { data = { iid = 99, web_url = "https://gitlab.com/acme/api-server/-/merge_requests/99" } }, nil
+end
 function M.get_pending_review_drafts(_client, _ctx, _review) return {}, nil end
 function M.get_draft_notes(_client, _ctx, _review, _review_id) return {}, nil end
 function M.delete_draft_note(_client, _ctx, _review, _note_id) return true, nil end
