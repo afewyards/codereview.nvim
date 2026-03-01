@@ -131,14 +131,14 @@ function M.open_editor(title, description, target, callback)
 
   -- Virtual separator after line 1 (title)
   local ns = vim.api.nvim_create_namespace("codereview_mr_separator")
-  local sep_width = math.min(88, vim.o.columns - 12)
+  local width = math.min(120, vim.o.columns - 10)
+  local height = math.min(#lines + 10, vim.o.lines - 6)
+
+  local sep_width = width - 2
   vim.api.nvim_buf_set_extmark(buf, ns, 0, 0, {
     virt_lines = { { { string.rep("─", sep_width), "CodeReviewFloatBorder" } } },
     virt_lines_above = false,
   })
-
-  local width = math.min(90, vim.o.columns - 10)
-  local height = math.min(#lines + 6, vim.o.lines - 6)
   local win = vim.api.nvim_open_win(buf, true, {
     relative = "editor",
     width = width,
