@@ -230,7 +230,7 @@ describe("build_mr_footer", function()
     local text = ""
     for _, tuple in ipairs(footer) do text = text .. tuple[1] end
     assert.truthy(text:find("No Draft"))
-    assert.is_nil(text:find("Draft ▶"))  -- should not match just "Draft"
+    assert.is_nil(text:find("◀ Draft ▶"))  -- "◀ No Draft ▶" does not contain "◀ Draft ▶"
   end)
 
   it("shows Draft when draft is true", function()
