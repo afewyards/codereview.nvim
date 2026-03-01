@@ -33,7 +33,16 @@ function M.open()
     end)
   end)
 end
-function M.pipeline() vim.notify("Pipeline not yet implemented (Stage 4)", vim.log.levels.WARN) end
+function M.pipeline()
+  local buf = vim.api.nvim_get_current_buf()
+  local diff_mod = require("codereview.mr.diff")
+  local active = diff_mod.get_state(buf)
+  if not active then
+    vim.notify("Open a diff view first with :CodeReview", vim.log.levels.WARN)
+    return
+  end
+  require("codereview.pipeline").open(active.state)
+end
 function M.ai_review()
   local buf = vim.api.nvim_get_current_buf()
   local diff_mod = require("codereview.mr.diff")

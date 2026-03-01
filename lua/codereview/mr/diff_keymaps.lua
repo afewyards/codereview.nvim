@@ -855,8 +855,8 @@ function M.setup_keymaps(state, layout, active_states)
     end,
 
     show_pipeline = function()
-      if state.view_mode ~= "summary" then return end
-      vim.notify("Pipeline view (Stage 4)", vim.log.levels.WARN)
+      if state.view_mode ~= "summary" and state.view_mode ~= "diff" then return end
+      require("codereview.pipeline").open(state)
     end,
 
     ai_review = function()
