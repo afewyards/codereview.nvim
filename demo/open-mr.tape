@@ -45,12 +45,13 @@ Sleep 2s
 # Contents:
 #   Title: feat: add user preferences and settings page
 #   Target: main
-#   Draft: no
 #   ────────────────────────────────────────────────────────
 #   - Add `/settings` route with preference form ...
 #   - New `UserPreferences` model with defaults and validation
 #   - Settings persist to database via `PATCH /api/preferences`
 #   - Unit tests for preference validation and API endpoint
+#
+# Footer: ◀ No Draft ▶  <C-t> target  <C-s> submit
 
 # ── 1. Edit the title ────────────────────────────────────
 # Go to Title line, find colon, move right, change to end of line
@@ -60,27 +61,18 @@ Type " feat: add user settings page"
 Escape
 Sleep 1s
 
-# ── 2. Change target branch ──────────────────────────────
-Type "j0f:lC"
-Sleep 300ms
-Type " develop"
-Escape
-Sleep 1s
+# ── 2. Toggle draft via footer ─────────────────────────
+# Tab cycles draft mode in the footer (No Draft → Draft)
+Tab
+Sleep 1500ms
 
-# ── 3. Toggle draft to yes ───────────────────────────────
-Type "j0f:lC"
-Sleep 300ms
-Type " yes"
-Escape
-Sleep 1s
-
-# ── 4. Add a line to description ─────────────────────────
+# ── 3. Add a line to description ─────────────────────────
 # Jump to end of buffer, open new line
 Type "Go"
 Type "- Closes #127"
 Escape
 Sleep 1500ms
 
-# ── 5. Submit ────────────────────────────────────────────
+# ── 4. Submit ────────────────────────────────────────────
 Ctrl+S
 Sleep 3s
