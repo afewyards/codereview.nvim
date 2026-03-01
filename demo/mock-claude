@@ -127,6 +127,22 @@ RESPONSE
   fi
 fi
 
+# --- MR creation (title + description for :CodeReviewOpen) ---
+if echo "$INPUT" | grep -q "creating a merge request"; then
+  sleep 2
+  cat <<'RESPONSE'
+## Title
+feat: add user preferences and settings page
+
+## Description
+- Add `/settings` route with preference form (theme, locale, notifications)
+- New `UserPreferences` model with defaults and validation
+- Settings persist to database via `PATCH /api/preferences`
+- Unit tests for preference validation and API endpoint
+RESPONSE
+  exit 0
+fi
+
 # --- Default fallback: all suggestions (single-file review mode) ---
 sleep 2
 cat <<'RESPONSE'
