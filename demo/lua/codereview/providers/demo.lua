@@ -9,7 +9,7 @@ local reviews = {
     source_branch = "refactor/auth-middleware", target_branch = "main",
     state = "opened", web_url = "https://github.com/demo/showcase/pull/42",
     description = "Extract token validation into a utility module.\n\nThis PR:\n- Moves JWT logic out of the middleware\n- Adds proper error types\n- Adds unit tests",
-    pipeline_status = "success",
+    pipeline_status = "failed",
     base_sha = "abc1234", head_sha = "def5678", sha = "def5678",
     approved_by = {}, approvals_required = 1, merge_status = "can_be_merged",
   },
@@ -407,5 +407,72 @@ function M.get_pending_review_drafts(_client, _ctx, _review) return {}, nil end
 function M.get_draft_notes(_client, _ctx, _review, _review_id) return {}, nil end
 function M.delete_draft_note(_client, _ctx, _review, _note_id) return true, nil end
 function M.publish_review(_client, _ctx, _review, _review_id, _body) return true, nil end
+
+-- ── Pipeline mock data (PR #42) ──────────────────────────────
+local mock_pipeline = {
+  id = 847293,
+  status = "failed",
+  ref = "refactor/auth-middleware",
+  sha = "def5678",
+  web_url = "https://github.com/demo/showcase/actions/runs/847293",
+  created_at = "2026-03-01T08:00:00Z",
+  updated_at = "2026-03-01T08:05:42Z",
+  duration = 342,
+}
+
+local mock_jobs = {
+  { id = 1001, name = "compile",            stage = "build",    status = "success", duration = 45,  allow_failure = false, web_url = "", started_at = "", finished_at = "" },
+  { id = 1002, name = "lint",               stage = "build",    status = "success", duration = 12,  allow_failure = false, web_url = "", started_at = "", finished_at = "" },
+  { id = 1003, name = "unit-tests",         stage = "test",     status = "failed",  duration = 125, allow_failure = false, web_url = "", started_at = "", finished_at = "" },
+  { id = 1004, name = "integration-tests",  stage = "test",     status = "success", duration = 198, allow_failure = false, web_url = "", started_at = "", finished_at = "" },
+  { id = 1005, name = "sast-scan",          stage = "security", status = "success", duration = 67,  allow_failure = false, web_url = "", started_at = "", finished_at = "" },
+  { id = 1006, name = "staging",            stage = "deploy",   status = "skipped", duration = 0,   allow_failure = false, web_url = "", started_at = "", finished_at = "" },
+  { id = 1007, name = "production",         stage = "deploy",   status = "skipped", duration = 0,   allow_failure = false, web_url = "", started_at = "", finished_at = "" },
+}
+
+-- ANSI-colored fake test output for the failed unit-tests job.
+-- Uses SGR codes: \27[32m = green, \27[31m = red, \27[1m = bold, \27[0m = reset.
+local unit_test_trace = table.concat({
+  "\27[1m$ vitest run src/\27[0m",
+  "",
+  "\27[32m ✓\27[0m src/utils/token.test.ts (3 tests) 42ms",
+  "\27[32m   ✓\27[0m extractTokenFromHeader returns null for missing header",
+  "\27[32m   ✓\27[0m extractTokenFromHeader extracts Bearer token",
+  "\27[32m   ✓\27[0m verifyToken returns valid for good token",
+  "",
+  "\27[31m ✗\27[0m src/middleware/auth.test.ts (2 tests) 125ms",
+  "\27[32m   ✓\27[0m returns 401 when no authorization header",
+  "\27[31m   ✗\27[0m calls next with valid token",
+  "",
+  "\27[1m\27[31m  FAIL \27[0m src/middleware/auth.test.ts > authMiddleware > calls next with valid token",
+  "",
+  "\27[31m  AssertionError: expected \"spy\" to be called with valid payload\27[0m",
+  "",
+  "    \27[2m  at tests/middleware/auth.test.ts:22:12\27[0m",
+  "    \27[2m  at processTicksAndRejections (node:internal/process/task_queues:95:5)\27[0m",
+  "",
+  "\27[31m Tests  1 failed\27[0m | \27[32m4 passed\27[0m (5)",
+  "\27[31m Duration  167ms\27[0m",
+}, "\n")
+
+local fallback_trace = "No log output available."
+
+function M.get_pipeline(_client, _ctx, review)
+  if review.id == 42 then return mock_pipeline, nil end
+  return nil, "No pipeline"
+end
+
+function M.get_pipeline_jobs(_client, _ctx, _review, _pipeline_id)
+  return mock_jobs, nil
+end
+
+function M.get_job_trace(_client, _ctx, _review, job_id)
+  if job_id == 1003 then return unit_test_trace, nil end
+  return fallback_trace, nil
+end
+
+function M.retry_job(_client, _ctx, _review, _job_id) return true, nil end
+function M.cancel_job(_client, _ctx, _review, _job_id) return true, nil end
+function M.play_job(_client, _ctx, _review, _job_id) return true, nil end
 
 return M
