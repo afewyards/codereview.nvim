@@ -81,7 +81,6 @@ function M.bulk_publish(review, opts)
     vim.notify("Failed to publish: " .. pub_err, vim.log.levels.ERROR)
     return false
   end
-  vim.notify("Review published!", vim.log.levels.INFO)
   return true
 end
 
