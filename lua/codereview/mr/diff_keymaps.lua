@@ -838,21 +838,13 @@ function M.setup_keymaps(state, layout, active_states)
 
     merge = function()
       if state.view_mode ~= "summary" then return end
-      vim.ui.select({ "Merge", "Merge when pipeline succeeds", "Cancel" }, {
-        prompt = string.format("Merge MR #%d?", state.review.id),
-      }, function(choice)
-        if not choice or choice == "Cancel" then return end
-        local ok, actions = pcall(require, "codereview.mr.actions")
-        if not ok then
-          vim.notify("Merge actions not yet implemented", vim.log.levels.WARN)
-          return
-        end
-        if choice == "Merge when pipeline succeeds" then
-          actions.merge(state.review, { auto_merge = true })
-        else
-          actions.merge(state.review)
-        end
-      end)
+      local providers = require("codereview.providers")
+      local _, ctx, err = providers.detect()
+      if not ctx then
+        vim.notify(err or "Could not detect provider", vim.log.levels.WARN)
+        return
+      end
+      require("codereview.mr.merge_float").open(state.review, ctx.platform)
     end,
 
     show_pipeline = function()
