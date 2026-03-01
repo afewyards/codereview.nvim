@@ -97,7 +97,7 @@ end
 
 local DRAFT_LABELS = { "No Draft", "Draft" }
 
-function M.build_mr_footer(is_draft)
+function M.build_mr_footer(is_draft, target)
   local label = is_draft and DRAFT_LABELS[2] or DRAFT_LABELS[1]
   return {
     { " ", "CodeReviewFloatFooterText" },
@@ -106,7 +106,7 @@ function M.build_mr_footer(is_draft)
     { "▶", "CodeReviewFloatFooterKey" },
     { "  ", "CodeReviewFloatFooterText" },
     { "<C-t>", "CodeReviewFloatFooterKey" },
-    { " target ", "CodeReviewFloatFooterText" },
+    { " " .. (target or "main") .. " ", "CodeReviewFloatFooterText" },
     { " ", "CodeReviewFloatFooterText" },
     { "<C-s>", "CodeReviewFloatFooterKey" },
     { " submit ", "CodeReviewFloatFooterText" },
