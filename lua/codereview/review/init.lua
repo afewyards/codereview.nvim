@@ -111,15 +111,26 @@ local function start_single(review, diff_state, layout)
     render_file_suggestions(diff_state, layout, suggestions)
 
     local summary_mod = require("codereview.ai.summary")
+    diff_state.ai_summary_pending = true
     summary_mod.generate(review, diffs, diff_state.ai_suggestions, function(text, gen_err)
       if gen_err then
         vim.schedule(function()
           vim.notify("AI summary failed: " .. gen_err, vim.log.levels.WARN)
         end)
+        diff_state.ai_summary_pending = false
+        for _, cb in ipairs(diff_state.ai_summary_callbacks or {}) do
+          cb(nil)
+        end
+        diff_state.ai_summary_callbacks = {}
         return
       end
       vim.schedule(function()
         diff_state.ai_review_summary = text
+        diff_state.ai_summary_pending = false
+        for _, cb in ipairs(diff_state.ai_summary_callbacks or {}) do
+          cb(text)
+        end
+        diff_state.ai_summary_callbacks = {}
       end)
     end)
   end)
@@ -200,15 +211,26 @@ local function start_multi(review, diff_state, layout)
             end)
           end
           local summary_mod = require("codereview.ai.summary")
+          diff_state.ai_summary_pending = true
           summary_mod.generate(review, diffs, diff_state.ai_suggestions, function(text, gen_err)
             if gen_err then
               vim.schedule(function()
                 vim.notify("AI summary failed: " .. gen_err, vim.log.levels.WARN)
               end)
+              diff_state.ai_summary_pending = false
+              for _, cb in ipairs(diff_state.ai_summary_callbacks or {}) do
+                cb(nil)
+              end
+              diff_state.ai_summary_callbacks = {}
               return
             end
             vim.schedule(function()
               diff_state.ai_review_summary = text
+              diff_state.ai_summary_pending = false
+              for _, cb in ipairs(diff_state.ai_summary_callbacks or {}) do
+                cb(text)
+              end
+              diff_state.ai_summary_callbacks = {}
             end)
           end)
         end
@@ -290,15 +312,26 @@ function M.start_file(review, diff_state, layout)
       render_file_suggestions(diff_state, layout, suggestions)
 
       local summary_mod = require("codereview.ai.summary")
+      diff_state.ai_summary_pending = true
       summary_mod.generate(review, diffs, diff_state.ai_suggestions, function(text, gen_err)
         if gen_err then
           vim.schedule(function()
             vim.notify("AI summary failed: " .. gen_err, vim.log.levels.WARN)
           end)
+          diff_state.ai_summary_pending = false
+          for _, cb in ipairs(diff_state.ai_summary_callbacks or {}) do
+            cb(nil)
+          end
+          diff_state.ai_summary_callbacks = {}
           return
         end
         vim.schedule(function()
           diff_state.ai_review_summary = text
+          diff_state.ai_summary_pending = false
+          for _, cb in ipairs(diff_state.ai_summary_callbacks or {}) do
+            cb(text)
+          end
+          diff_state.ai_summary_callbacks = {}
         end)
       end)
     end)
