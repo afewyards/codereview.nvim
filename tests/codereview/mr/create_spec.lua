@@ -206,25 +206,25 @@ describe("ensure_pushed", function()
 end)
 
 describe("build_mr_footer", function()
-  it("shows No Draft when draft is false", function()
-    local footer = create.build_mr_footer(false)
+  it("shows No Draft and target branch when draft is false", function()
+    local footer = create.build_mr_footer(false, "main")
     local text = ""
     for _, tuple in ipairs(footer) do text = text .. tuple[1] end
     assert.truthy(text:find("No Draft"))
-    assert.is_nil(text:find("◀ Draft ▶"))  -- "◀ No Draft ▶" does not contain "◀ Draft ▶"
+    assert.truthy(text:find("main"))
   end)
 
-  it("shows Draft when draft is true", function()
-    local footer = create.build_mr_footer(true)
+  it("shows Draft and target branch when draft is true", function()
+    local footer = create.build_mr_footer(true, "develop")
     local text = ""
     for _, tuple in ipairs(footer) do text = text .. tuple[1] end
-    -- Match " Draft " but not "No Draft"
     assert.truthy(text:find("◀ Draft ▶"))
     assert.is_nil(text:find("No Draft"))
+    assert.truthy(text:find("develop"))
   end)
 
   it("returns table of {text, highlight} tuples", function()
-    local footer = create.build_mr_footer(false)
+    local footer = create.build_mr_footer(false, "main")
     assert.is_table(footer)
     for _, tuple in ipairs(footer) do
       assert.is_string(tuple[1])
@@ -234,13 +234,14 @@ describe("build_mr_footer", function()
 end)
 
 describe("open_editor", function()
-  local captured_lines, captured_win_config, captured_keymaps
+  local captured_lines, captured_win_config, captured_keymaps, captured_extmarks
   local orig_api, orig_o, orig_bo, orig_keymap, orig_notify, orig_log
 
   before_each(function()
     captured_lines = nil
     captured_win_config = {}
     captured_keymaps = {}
+    captured_extmarks = {}
     orig_api = vim.api
     orig_o = vim.o
     orig_bo = vim.bo
@@ -257,6 +258,10 @@ describe("open_editor", function()
       nvim_win_is_valid = function() return true end,
       nvim_win_set_config = function(_, config)
         table.insert(captured_win_config, config)
+      end,
+      nvim_create_namespace = function() return 1 end,
+      nvim_buf_set_extmark = function(_, _, line, col, opts)
+        table.insert(captured_extmarks, { line = line, col = col, opts = opts })
       end,
     }
     vim.o = { columns = 100, lines = 40 }
@@ -285,14 +290,20 @@ describe("open_editor", function()
     vim.log = orig_log
   end)
 
-  it("sets buffer with Title, Target, separator — no Draft line", function()
+  it("buffer contains only title and description — no prefix, no Target, no separator", function()
     create.open_editor("My feature", "Some description", "main", function() end)
 
     assert.is_not_nil(captured_lines)
-    assert.truthy(captured_lines[1]:find("^Title:"))
-    assert.truthy(captured_lines[2]:find("^Target:"))
-    -- No Draft line — separator should be line 3
-    assert.truthy(captured_lines[3]:match("^[─━─-][─━─-][─━─-]"))
+    assert.equals("My feature", captured_lines[1])
+    assert.equals("Some description", captured_lines[2])
+  end)
+
+  it("adds virtual separator extmark after line 1", function()
+    create.open_editor("Title", "desc", "main", function() end)
+
+    assert.equals(1, #captured_extmarks)
+    assert.equals(0, captured_extmarks[1].line) -- after line 0 (first line)
+    assert.is_table(captured_extmarks[1].opts.virt_lines)
   end)
 
   it("registers Tab keymap for draft toggle", function()
@@ -315,17 +326,18 @@ describe("open_editor", function()
     assert.is_true(has_ct)
   end)
 
-  it("includes provided title and target in header", function()
+  it("includes provided title directly without prefix", function()
     create.open_editor("Fix bug", "desc", "develop", function() end)
 
-    assert.truthy(captured_lines[1]:find("Fix bug"))
-    assert.truthy(captured_lines[2]:find("develop"))
+    assert.equals("Fix bug", captured_lines[1])
   end)
 
-  it("defaults target to main when nil", function()
-    create.open_editor("Title", "desc", nil, function() end)
+  it("splits multiline description into buffer lines", function()
+    create.open_editor("Title", "Line one\nLine two", "main", function() end)
 
-    assert.truthy(captured_lines[2]:find("main"))
+    assert.equals("Title", captured_lines[1])
+    assert.equals("Line one", captured_lines[2])
+    assert.equals("Line two", captured_lines[3])
   end)
 end)
 

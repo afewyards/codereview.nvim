@@ -115,17 +115,12 @@ end
 
 function M.open_editor(title, description, target, callback)
   local buf = vim.api.nvim_create_buf(false, true)
-  local separator = string.rep("─", 60)
   local state = {
     draft = false,
     target = target or "main",
   }
 
-  local lines = {
-    "Title: " .. (title or ""),
-    "Target: " .. state.target,
-    separator,
-  }
+  local lines = { title or "" }
   for _, line in ipairs(vim.split(description or "", "\n")) do
     table.insert(lines, line)
   end
@@ -134,8 +129,16 @@ function M.open_editor(title, description, target, callback)
   vim.bo[buf].filetype = "markdown"
   vim.bo[buf].bufhidden = "wipe"
 
+  -- Virtual separator after line 1 (title)
+  local ns = vim.api.nvim_create_namespace("codereview_mr_separator")
+  local sep_width = math.min(88, vim.o.columns - 12)
+  vim.api.nvim_buf_set_extmark(buf, ns, 0, 0, {
+    virt_lines = { { { string.rep("─", sep_width), "CodeReviewFloatBorder" } } },
+    virt_lines_above = false,
+  })
+
   local width = math.min(90, vim.o.columns - 10)
-  local height = math.min(#lines + 5, vim.o.lines - 6)
+  local height = math.min(#lines + 6, vim.o.lines - 6)
   local win = vim.api.nvim_open_win(buf, true, {
     relative = "editor",
     width = width,
@@ -146,14 +149,14 @@ function M.open_editor(title, description, target, callback)
     border = "rounded",
     title = " Create MR/PR ",
     title_pos = "center",
-    footer = M.build_mr_footer(state.draft),
+    footer = M.build_mr_footer(state.draft, state.target),
     footer_pos = "center",
   })
 
   local function update_footer()
     if vim.api.nvim_win_is_valid(win) then
       vim.api.nvim_win_set_config(win, {
-        footer = M.build_mr_footer(state.draft),
+        footer = M.build_mr_footer(state.draft, state.target),
         footer_pos = "center",
       })
     end
@@ -173,10 +176,7 @@ function M.open_editor(title, description, target, callback)
     vim.ui.select(branches, { prompt = "Target branch:" }, function(choice)
       if not choice then return end
       state.target = choice
-      -- Update the Target: line in the buffer (line 2, 0-indexed = 1)
-      if vim.api.nvim_win_is_valid(win) then
-        vim.api.nvim_buf_set_lines(buf, 1, 2, false, { "Target: " .. choice })
-      end
+      update_footer()
     end)
   end
 
@@ -188,15 +188,22 @@ function M.open_editor(title, description, target, callback)
 
   vim.keymap.set("n", "<C-s>", function()
     local buf_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-    local fields = M.parse_editor_fields(buf_lines)
-    fields.draft = state.draft
-    fields.target = state.target
-    if not fields.title or fields.title == "" then
+    local title_text = vim.trim(buf_lines[1] or "")
+    if title_text == "" then
       vim.notify("Title cannot be empty", vim.log.levels.WARN)
       return
     end
+    local desc_lines = {}
+    for i = 2, #buf_lines do
+      table.insert(desc_lines, buf_lines[i])
+    end
     vim.api.nvim_win_close(win, true)
-    callback(fields)
+    callback({
+      title = title_text,
+      description = vim.trim(table.concat(desc_lines, "\n")),
+      target = state.target,
+      draft = state.draft,
+    })
   end, map_opts)
 
   vim.keymap.set("n", "q", function()
