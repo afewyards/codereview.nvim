@@ -81,4 +81,14 @@ function M.normalize_pipeline_job(raw)
   }
 end
 
+function M.normalize_commit(raw)
+  return {
+    sha = raw.id or raw.sha or "",
+    short_sha = raw.short_id or raw.short_sha or "",
+    title = raw.title or raw.message or "",
+    author = raw.author_name or raw.author or "",
+    created_at = raw.created_at or "",
+  }
+end
+
 return M

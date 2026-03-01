@@ -105,4 +105,31 @@ describe("providers.types", function()
       assert.is_false(j.allow_failure)
     end)
   end)
+
+  describe("normalize_commit", function()
+    it("normalizes a raw commit into standard shape", function()
+      local raw = {
+        id = "abc123def456",
+        short_id = "abc123de",
+        title = "Fix login redirect",
+        author_name = "alice",
+        created_at = "2026-03-01T12:00:00Z",
+      }
+      local result = types.normalize_commit(raw)
+      assert.equals("abc123def456", result.sha)
+      assert.equals("abc123de", result.short_sha)
+      assert.equals("Fix login redirect", result.title)
+      assert.equals("alice", result.author)
+      assert.equals("2026-03-01T12:00:00Z", result.created_at)
+    end)
+
+    it("handles missing fields with defaults", function()
+      local result = types.normalize_commit({})
+      assert.equals("", result.sha)
+      assert.equals("", result.short_sha)
+      assert.equals("", result.title)
+      assert.equals("", result.author)
+      assert.equals("", result.created_at)
+    end)
+  end)
 end)
