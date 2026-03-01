@@ -54,6 +54,10 @@ function M.create_state(opts)
     current_user = nil,
     git_diff_cache = {},
     file_review_status = {},
+    commits = opts.commits or {},
+    commit_filter = nil,
+    original_files = nil,
+    original_discussions = nil,
   }
 end
 

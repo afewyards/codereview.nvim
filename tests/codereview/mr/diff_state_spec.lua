@@ -222,6 +222,27 @@ describe("mr.diff_state", function()
     end)
   end)
 
+  describe("commit fields", function()
+    before_each(function()
+      local config = require("codereview.config")
+      config.reset()
+    end)
+
+    it("initializes commit-related fields", function()
+      local state = diff_state.create_state({ files = {} })
+      assert.same({}, state.commits)
+      assert.is_nil(state.commit_filter)
+      assert.is_nil(state.original_files)
+      assert.is_nil(state.original_discussions)
+    end)
+
+    it("accepts commits via opts", function()
+      local commits = { { sha = "abc", title = "test" } }
+      local state = diff_state.create_state({ files = {}, commits = commits })
+      assert.same(commits, state.commits)
+    end)
+  end)
+
   describe("file_has_annotations", function()
     it("returns false when no discussions or suggestions", function()
       local state = { discussions = {}, ai_suggestions = {}, files = { { new_path = "a.lua", old_path = "a.lua" } } }
