@@ -45,6 +45,7 @@ function M.create_state(opts)
     ai_suggestions = nil,
     ai_summary_pending = false,
     ai_summary_callbacks = {},
+    ai_review_summary = nil,
     row_ai_cache = {},
     scroll_row_ai = {},
     local_drafts = {},

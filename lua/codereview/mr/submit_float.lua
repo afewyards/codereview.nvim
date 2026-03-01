@@ -1,4 +1,5 @@
 local comment_float = require("codereview.mr.comment_float")
+local spinner = require("codereview.ui.spinner")
 local M = {}
 
 local ACTIONS = { "Comment", "Approve", "Request Changes" }
@@ -7,8 +8,6 @@ local ACTION_EVENTS = {
 	["Approve"] = "APPROVE",
 	["Request Changes"] = "REQUEST_CHANGES",
 }
-
-local FRAMES = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" }
 
 --- Build footer tuples for the current action and summary state.
 local function build_footer(action_idx, summary_state)
@@ -52,6 +51,7 @@ function M.open(opts)
 	local pending_summary = nil
 	local timer = nil
 	local frame_idx = 1
+	local summary_cb = nil
 
 	local handle = comment_float.open("Submit Review", {
 		prefill = opts.prefill,
@@ -71,15 +71,15 @@ function M.open(opts)
 		-- Insert spinner as first line
 		if vim.api.nvim_buf_is_valid(handle.buf) then
 			vim.api.nvim_buf_set_lines(handle.buf, 0, 0, false,
-				{ " " .. FRAMES[frame_idx] .. " Generating summary..." })
+				{ " " .. spinner.FRAMES[frame_idx] .. " Generating summary..." })
 		end
 		timer = vim.uv.new_timer()
 		timer:start(0, 80, function()
 			vim.schedule(function()
 				if not vim.api.nvim_buf_is_valid(handle.buf) then return end
-				frame_idx = (frame_idx % #FRAMES) + 1
+				frame_idx = (frame_idx % #spinner.FRAMES) + 1
 				vim.api.nvim_buf_set_lines(handle.buf, 0, 1, false,
-					{ " " .. FRAMES[frame_idx] .. " Generating summary..." })
+					{ " " .. spinner.FRAMES[frame_idx] .. " Generating summary..." })
 			end)
 		end)
 	end
@@ -132,6 +132,7 @@ function M.open(opts)
 				opts.diff_state.ai_suggestions or {},
 				function(text, gen_err)
 					vim.schedule(function()
+						if handle.closed then return end
 						if timer then timer:stop(); timer:close(); timer = nil end
 						if gen_err or not text then
 							summary_state = "idle"
@@ -159,15 +160,41 @@ function M.open(opts)
 			vim.api.nvim_buf_set_lines(handle.buf, 0, 1, false, lines)
 			pending_summary = nil
 			update_footer()
+		elseif summary_state == "idle" then
+			vim.notify("No review context available for summary generation", vim.log.levels.INFO)
 		end
 	end, map_opts)
 
-	-- Cleanup timer on buffer wipeout
+	-- Cleanup timer and stale callbacks on buffer wipeout
 	vim.api.nvim_create_autocmd("BufWipeout", {
 		buffer = handle.buf,
 		once = true,
 		callback = function()
+			handle.closed = true
 			if timer then timer:stop(); timer:close(); timer = nil end
+			if opts.diff_state then
+				local cbs = opts.diff_state.ai_summary_callbacks
+				for i = #cbs, 1, -1 do
+					if cbs[i] == summary_cb then
+						table.remove(cbs, i)
+						break
+					end
+				end
+			end
+		end,
+	})
+
+	-- Prevent cursor from landing on spinner line (line 1) while generating/ready
+	vim.api.nvim_create_autocmd("CursorMoved", {
+		buffer = handle.buf,
+		callback = function()
+			if handle.closed then return true end
+			if summary_state ~= "generating" and summary_state ~= "ready" then return end
+			local row = vim.api.nvim_win_get_cursor(handle.win)[1]
+			if row == 1 then
+				local line_count = vim.api.nvim_buf_line_count(handle.buf)
+				vim.api.nvim_win_set_cursor(handle.win, { math.min(2, line_count), 0 })
+			end
 		end,
 	})
 
@@ -176,8 +203,9 @@ function M.open(opts)
 		start_spinner()
 		-- Register callback for background generation completing
 		if opts.diff_state and opts.diff_state.ai_summary_callbacks then
-			table.insert(opts.diff_state.ai_summary_callbacks, function(text)
+			summary_cb = function(text)
 				vim.schedule(function()
+					if handle.closed then return end
 					if timer then timer:stop(); timer:close(); timer = nil end
 					if text then
 						pending_summary = text
@@ -194,7 +222,8 @@ function M.open(opts)
 					end
 					update_footer()
 				end)
-			end)
+			end
+			table.insert(opts.diff_state.ai_summary_callbacks, summary_cb)
 		end
 	end
 

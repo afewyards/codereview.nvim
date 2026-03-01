@@ -2,7 +2,7 @@
 -- Persistent top-right spinner float shown while AI review is running.
 local M = {}
 
-local FRAMES = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" }
+M.FRAMES = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" }
 local DEFAULT_LABEL = " AI reviewing… "
 local INTERVAL_MS = 80
 
@@ -41,14 +41,14 @@ function M.open()
       M.close()
       return
     end
-    local text = " " .. FRAMES[frame_idx] .. current_label
+    local text = " " .. M.FRAMES[frame_idx] .. current_label
     vim.api.nvim_buf_set_lines(buf_id, 0, -1, false, { text })
     -- Resize window to fit new label
     if win_id and vim.api.nvim_win_is_valid(win_id) then
       local new_width = #text + 1
       vim.api.nvim_win_set_width(win_id, new_width)
     end
-    frame_idx = frame_idx % #FRAMES + 1
+    frame_idx = frame_idx % #M.FRAMES + 1
   end
 
   update()
