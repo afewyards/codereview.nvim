@@ -145,49 +145,48 @@ function M.create()
     vim.notify("Cannot create MR from " .. branch, vim.log.levels.ERROR)
     return
   end
-
+  local ok, push_err = M.ensure_pushed(branch)
+  if not ok then
+    vim.notify("Push failed: " .. (push_err or ""), vim.log.levels.ERROR)
+    return
+  end
   local target = M.detect_target_branch()
   local diff = M.get_branch_diff(target)
   if not diff or diff == "" then
     vim.notify("No diff found against " .. target, vim.log.levels.WARN)
     return
   end
-
   local mr_prompt = prompt_mod.build_mr_prompt(branch, diff)
   vim.notify("Generating MR description...", vim.log.levels.INFO)
-
   ai_providers.get().run(mr_prompt, function(output, err)
     if err then
-      vim.notify("Claude CLI failed: " .. err, vim.log.levels.ERROR)
+      vim.notify("AI failed: " .. err, vim.log.levels.ERROR)
       return
     end
-
     local title, description = prompt_mod.parse_mr_draft(output)
-    M.open_editor(title, description, function(final_title, final_desc)
-      M.submit_mr(branch, target, final_title, final_desc)
+    M.open_editor(title, description, target, function(fields)
+      M.submit_mr(branch, fields)
     end)
   end)
 end
 
-function M.submit_mr(source_branch, target_branch, title, description)
+function M.submit_mr(source_branch, fields)
   local provider, ctx, err = providers.detect()
   if not provider then
     vim.notify("Could not detect platform: " .. (err or ""), vim.log.levels.ERROR)
     return
   end
-
   local result, post_err = provider.create_review(client, ctx, {
     source_branch = source_branch,
-    target_branch = target_branch,
-    title = title,
-    description = description,
+    target_branch = fields.target,
+    title = fields.title,
+    description = fields.description,
+    draft = fields.draft,
   })
-
   if not result then
     vim.notify("Failed to create MR: " .. (post_err or ""), vim.log.levels.ERROR)
     return
   end
-
   local mr = result.data
   if mr then
     local url = mr.web_url or mr.html_url or ""
