@@ -4,7 +4,6 @@
 Require nvim
 
 Output demo/open-mr.gif
-Output demo/open-mr.mp4
 
 Set Shell "bash"
 Set FontSize 16
