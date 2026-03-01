@@ -23,25 +23,6 @@ describe("parse_editor_fields", function()
     assert.equals("My feature", fields.title)
     assert.equals("main", fields.target)
     assert.equals("This is the description.", fields.description)
-    assert.equals(false, fields.draft)
-  end)
-
-  it("defaults draft to false", function()
-    local lines = { "Title: Test", "───" }
-    local fields = create.parse_editor_fields(lines)
-    assert.equals(false, fields.draft)
-  end)
-
-  it("parses draft = yes as true", function()
-    local lines = { "Title: Test", "Draft: yes", "───" }
-    local fields = create.parse_editor_fields(lines)
-    assert.equals(true, fields.draft)
-  end)
-
-  it("parses draft = true as true", function()
-    local lines = { "Title: Test", "Draft: true", "───" }
-    local fields = create.parse_editor_fields(lines)
-    assert.equals(true, fields.draft)
   end)
 
   it("returns nil title for empty title", function()

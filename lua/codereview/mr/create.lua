@@ -7,7 +7,7 @@ local M = {}
 local SEPARATOR_PATTERN = "^[─━─-][─━─-][─━─-]"
 
 function M.parse_editor_fields(lines)
-  local fields = { draft = false }
+  local fields = {}
   local sep_idx = nil
   for i, line in ipairs(lines) do
     if line:match(SEPARATOR_PATTERN) then
@@ -22,8 +22,6 @@ function M.parse_editor_fields(lines)
         fields.title = value ~= "" and value or nil
       elseif key == "target" then
         fields.target = value
-      elseif key == "draft" then
-        fields.draft = value:lower() == "yes" or value:lower() == "true"
       end
     end
   end
