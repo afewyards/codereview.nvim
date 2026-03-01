@@ -109,6 +109,10 @@ Type "i"
 Type "Security issues addressed. Bearer check and password hashing need follow-up."
 Escape
 Sleep 800ms
+Tab
+Sleep 800ms
+Tab
+Sleep 800ms
 Ctrl+S
 Sleep 4s
 

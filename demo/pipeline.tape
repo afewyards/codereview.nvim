@@ -23,7 +23,6 @@ Sleep 10s
 # Open Neovim
 Type "./demo/run-nvim"
 Enter
-Show
 
 # Open CodeReview picker
 Type ":CodeReview"
@@ -35,6 +34,7 @@ Sleep 1s
 Enter
 Wait+Screen /auth\.ts/
 Sleep 2s
+Show
 
 # ── Open pipeline view ────────────────────────────────────
 Type "p"
@@ -79,8 +79,5 @@ Sleep 1s
 # ── Retry the failed job ─────────────────────────────────
 # Cursor should be back on unit-tests row
 Type "r"
-Sleep 2s
+Sleep 3s
 
-# ── Close pipeline view ──────────────────────────────────
-Type "q"
-Sleep 2s
