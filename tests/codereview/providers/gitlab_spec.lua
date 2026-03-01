@@ -219,8 +219,55 @@ describe("providers.gitlab", function()
   end)
 
   describe("create_review", function()
+    before_each(function()
+      package.loaded["codereview.api.auth"] = {
+        get_token = function() return "glpat-test", "pat" end,
+      }
+    end)
+    after_each(function()
+      package.loaded["codereview.api.auth"] = nil
+    end)
+
     it("exists as a function", function()
       assert.is_function(gitlab.create_review)
+    end)
+
+    it("prefixes title with 'Draft: ' when draft=true", function()
+      local posted_body
+      local mock_client = {
+        post = function(_, _, opts)
+          posted_body = opts.body
+          return { status = 201, data = { iid = 1 } }, nil
+        end,
+      }
+      local ctx = { base_url = "https://gitlab.com", project = "owner/repo" }
+      gitlab.create_review(mock_client, ctx, {
+        source_branch = "feature",
+        target_branch = "main",
+        title = "My MR",
+        description = "desc",
+        draft = true,
+      })
+      assert.equals("Draft: My MR", posted_body.title)
+    end)
+
+    it("leaves title unchanged when draft=false", function()
+      local posted_body
+      local mock_client = {
+        post = function(_, _, opts)
+          posted_body = opts.body
+          return { status = 201, data = { iid = 1 } }, nil
+        end,
+      }
+      local ctx = { base_url = "https://gitlab.com", project = "owner/repo" }
+      gitlab.create_review(mock_client, ctx, {
+        source_branch = "feature",
+        target_branch = "main",
+        title = "My MR",
+        description = "desc",
+        draft = false,
+      })
+      assert.equals("My MR", posted_body.title)
     end)
   end)
 
