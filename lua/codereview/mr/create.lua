@@ -173,9 +173,12 @@ function M.open_editor(title, description, target, callback)
       vim.notify("No remote branches found", vim.log.levels.WARN)
       return
     end
-    vim.ui.select(branches, { prompt = "Target branch:" }, function(choice)
-      if not choice then return end
+    local picker = require("codereview.picker")
+    picker.pick_branches(branches, function(choice)
       state.target = choice
+      if vim.api.nvim_win_is_valid(win) then
+        vim.api.nvim_set_current_win(win)
+      end
       update_footer()
     end)
   end

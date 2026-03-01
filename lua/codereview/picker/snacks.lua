@@ -119,4 +119,26 @@ function M.pick_comments(entries, on_select, _opts)
 	})
 end
 
+function M.pick_branches(branches, on_select)
+	local snacks = require("snacks")
+	local items = {}
+	for _, branch in ipairs(branches) do
+		table.insert(items, { text = branch })
+	end
+
+	snacks.picker({
+		title = "Target Branch",
+		items = items,
+		format = function(item)
+			return { { item.text } }
+		end,
+		confirm = function(picker, item)
+			picker:close()
+			if item then
+				on_select(item.text)
+			end
+		end,
+	})
+end
+
 return M

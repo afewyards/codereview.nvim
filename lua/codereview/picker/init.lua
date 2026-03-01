@@ -65,4 +65,16 @@ function M.pick_files(entries, on_select)
   adapter.pick_files(entries, on_select)
 end
 
+function M.pick_branches(branches, on_select)
+  local name = M.detect()
+  if not name then
+    vim.ui.select(branches, { prompt = "Target branch:" }, function(choice)
+      if choice then on_select(choice) end
+    end)
+    return
+  end
+  local adapter = M.get_adapter(name)
+  adapter.pick_branches(branches, on_select)
+end
+
 return M

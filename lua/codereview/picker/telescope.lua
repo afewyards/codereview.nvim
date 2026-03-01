@@ -190,4 +190,30 @@ function M.pick_comments(entries, on_select, opts)
     :find()
 end
 
+function M.pick_branches(branches, on_select)
+  local pickers = require("telescope.pickers")
+  local finders = require("telescope.finders")
+  local conf = require("telescope.config").values
+  local actions = require("telescope.actions")
+  local action_state = require("telescope.actions.state")
+
+  pickers
+    .new({}, {
+      prompt_title = "Target Branch",
+      finder = finders.new_table({ results = branches }),
+      sorter = conf.generic_sorter({}),
+      attach_mappings = function(prompt_bufnr)
+        actions.select_default:replace(function()
+          actions.close(prompt_bufnr)
+          local selection = action_state.get_selected_entry()
+          if selection then
+            on_select(selection[1])
+          end
+        end)
+        return true
+      end,
+    })
+    :find()
+end
+
 return M
