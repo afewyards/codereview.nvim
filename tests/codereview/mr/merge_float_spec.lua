@@ -63,4 +63,40 @@ describe("merge_float", function()
       assert.is_true(opts.remove_source_branch)
     end)
   end)
+
+  describe("open", function()
+    it("creates a float window and buffer", function()
+      local review = { id = 42 }
+      local handle = merge_float.open(review, "gitlab")
+      assert.is_true(vim.api.nvim_win_is_valid(handle.win))
+      assert.is_true(vim.api.nvim_buf_is_valid(handle.buf))
+      -- Verify buffer content
+      local lines = vim.api.nvim_buf_get_lines(handle.buf, 0, -1, false)
+      -- Should have: blank, 3 checkboxes, blank, button, blank = 7 lines
+      assert.equals(7, #lines)
+      assert.truthy(lines[2]:find("%[ %] Squash commits"))
+      assert.truthy(lines[3]:find("%[ %] Delete source branch"))
+      assert.truthy(lines[4]:find("%[ %] Merge when pipeline succeeds"))
+      assert.truthy(lines[6]:find("%[ Merge %]"))
+      handle.close()
+    end)
+
+    it("github float has method cycle and one checkbox", function()
+      local handle = merge_float.open({ id = 10 }, "github")
+      local lines = vim.api.nvim_buf_get_lines(handle.buf, 0, -1, false)
+      -- blank, method cycle, checkbox, blank, button, blank = 6 lines
+      assert.equals(6, #lines)
+      assert.truthy(lines[2]:find("Method:"))
+      assert.truthy(lines[3]:find("%[ %] Delete source branch"))
+      handle.close()
+    end)
+
+    it("calls on_merge callback with collected opts on CR", function()
+      pending("requires nvim_feedkeys — verify manually in Neovim")
+    end)
+
+    it("closes on q without calling merge", function()
+      pending("requires nvim_feedkeys — verify manually in Neovim")
+    end)
+  end)
 end)
