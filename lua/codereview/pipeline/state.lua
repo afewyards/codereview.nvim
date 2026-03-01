@@ -106,9 +106,9 @@ function M.start_polling(pstate, interval_ms, on_update)
       local changed = M.fetch(pstate)
       if changed then
         on_update(pstate)
-        if pstate.pipeline and M.is_terminal(pstate.pipeline.status) then
-          M.stop_polling(pstate)
-        end
+      end
+      if pstate.pipeline and M.is_terminal(pstate.pipeline.status) then
+        M.stop_polling(pstate)
       end
     end)
   end, { ["repeat"] = -1 })
