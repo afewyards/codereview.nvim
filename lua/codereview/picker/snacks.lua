@@ -129,6 +129,7 @@ function M.pick_branches(branches, on_select)
 	snacks.picker({
 		title = "Target Branch",
 		items = items,
+		preview = false,
 		format = function(item)
 			return { { item.text } }
 		end,

@@ -201,6 +201,7 @@ function M.pick_branches(branches, on_select)
     .new({}, {
       prompt_title = "Target Branch",
       finder = finders.new_table({ results = branches }),
+      previewer = false,
       sorter = conf.generic_sorter({}),
       attach_mappings = function(prompt_bufnr)
         actions.select_default:replace(function()

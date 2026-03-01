@@ -134,6 +134,7 @@ function M.pick_branches(branches, on_select)
   local fzf = require("fzf-lua")
   fzf.fzf_exec(branches, {
     prompt = "Target branch> ",
+    previewer = false,
     actions = {
       ["default"] = function(selected)
         if selected and selected[1] then
