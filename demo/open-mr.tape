@@ -42,22 +42,21 @@ Wait+Screen /Create MR/
 Sleep 2s
 
 # ── Editor float is now visible with AI-generated content ──
-# Contents:
-#   Title: feat: add user preferences and settings page
-#   Target: main
-#   ────────────────────────────────────────────────────────
-#   - Add `/settings` route with preference form ...
+# Buffer contains:
+#   feat: add user preferences and settings page    (title, no prefix)
+#   ──────────────────────────────────────────────── (virtual separator)
+#   - Add `/settings` route with preference form ... (description)
 #   - New `UserPreferences` model with defaults and validation
 #   - Settings persist to database via `PATCH /api/preferences`
 #   - Unit tests for preference validation and API endpoint
 #
-# Footer: ◀ No Draft ▶  <C-t> target  <C-s> submit
+# Footer: ◀ No Draft ▶  <C-t> main  <C-s> submit
 
 # ── 1. Edit the title ────────────────────────────────────
-# Go to Title line, find colon, move right, change to end of line
-Type "gg0f:lC"
+# Cursor starts on title line, change entire line
+Type "gg0C"
 Sleep 300ms
-Type " feat: add user settings page"
+Type "feat: add user settings page"
 Escape
 Sleep 1s
 
