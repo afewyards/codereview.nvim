@@ -1,0 +1,18 @@
+local keymaps = require("codereview.pipeline.keymaps")
+
+describe("pipeline.keymaps", function()
+  it("exports setup function", function()
+    assert.is_function(keymaps.setup)
+  end)
+
+  it("exports KEYS table", function()
+    assert.is_table(keymaps.KEYS)
+    assert.truthy(keymaps.KEYS.toggle)
+    assert.truthy(keymaps.KEYS.retry)
+    assert.truthy(keymaps.KEYS.cancel)
+    assert.truthy(keymaps.KEYS.play)
+    assert.truthy(keymaps.KEYS.open_browser)
+    assert.truthy(keymaps.KEYS.refresh)
+    assert.truthy(keymaps.KEYS.close)
+  end)
+end)
