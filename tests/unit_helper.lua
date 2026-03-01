@@ -490,6 +490,22 @@ _G.vim = {
   NIL = setmetatable({}, {
     __tostring = function() return "vim.NIL" end
   }),
+  inspect = function(t)
+    -- Simple inspect function for table serialization in testing
+    if t == nil then return "nil" end
+    if type(t) == "boolean" then return tostring(t) end
+    if type(t) == "number" then return tostring(t) end
+    if type(t) == "string" then return '"' .. t .. '"' end
+    if type(t) == "table" then
+      local items = {}
+      for k, v in pairs(t) do
+        local key_str = type(k) == "string" and k or "[" .. tostring(k) .. "]"
+        table.insert(items, key_str .. " = " .. vim.inspect(v))
+      end
+      return "{ " .. table.concat(items, ", ") .. " }"
+    end
+    return tostring(t)
+  end,
   base64 = (function()
     local b64chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
     local function encode(data)
