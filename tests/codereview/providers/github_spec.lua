@@ -785,6 +785,41 @@ describe("get_commits", function()
   end)
 end)
 
+describe("get_last_reviewed_sha", function()
+  before_each(function()
+    package.loaded["codereview.api.auth"] = {
+      get_token = function() return "ghp_test", "pat" end,
+    }
+  end)
+  after_each(function()
+    package.loaded["codereview.api.auth"] = nil
+  end)
+
+  it("returns commit_id from latest review by current user", function()
+    local mock_client = {
+      paginate_all_url = function(url, _)
+        return {
+          { user = { login = "me" }, commit_id = "old_sha", submitted_at = "2026-02-28T12:00:00Z", state = "APPROVED" },
+          { user = { login = "other" }, commit_id = "other_sha", submitted_at = "2026-03-01T12:00:00Z", state = "APPROVED" },
+          { user = { login = "me" }, commit_id = "latest_sha", submitted_at = "2026-03-01T10:00:00Z", state = "CHANGES_REQUESTED" },
+        }
+      end,
+    }
+    local ctx = { base_url = "https://api.github.com", project = "owner/repo" }
+    local sha = github.get_last_reviewed_sha(mock_client, ctx, { id = 99 }, "me")
+    assert.equals("latest_sha", sha)
+  end)
+
+  it("returns nil when user has no reviews", function()
+    local mock_client = {
+      paginate_all_url = function(_, _) return {} end,
+    }
+    local ctx = { base_url = "https://api.github.com", project = "owner/repo" }
+    local sha = github.get_last_reviewed_sha(mock_client, ctx, { id = 99 }, "me")
+    assert.is_nil(sha)
+  end)
+end)
+
 describe("get_file_content", function()
   it("returns decoded file content from base64 API response", function()
     local mock_client = {

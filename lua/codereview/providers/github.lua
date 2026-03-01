@@ -321,6 +321,28 @@ function M.get_commits(client, ctx, review)
   return commits
 end
 
+--- Return the commit_id of the most recent review submitted by username.
+function M.get_last_reviewed_sha(client, ctx, review, username)
+  local headers, err = get_headers()
+  if not headers then return nil end
+  local owner, repo = parse_owner_repo(ctx)
+  local url = string.format("%s/repos/%s/%s/pulls/%d/reviews", ctx.base_url, owner, repo, review.id)
+  local reviews = client.paginate_all_url(url, { headers = headers })
+  if not reviews then return nil end
+
+  local best_sha, best_time = nil, ""
+  for _, r in ipairs(reviews) do
+    if r.user and r.user.login == username then
+      local t = r.submitted_at or ""
+      if t > best_time then
+        best_time = t
+        best_sha = r.commit_id
+      end
+    end
+  end
+  return best_sha
+end
+
 --- Post an inline comment or general PR comment.
 --- @param position table|nil { new_path, old_path, new_line, old_line, side, commit_sha } or nil for general comment
 function M.post_comment(client, ctx, review, body, position)

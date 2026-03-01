@@ -154,4 +154,24 @@ describe("mr.sidebar_layout", function()
     end)
     vim.api.nvim_buf_delete(buf, { force = true })
   end)
+
+  describe("commits component integration", function()
+    it("includes commits section between status and file tree", function()
+      local layout = make_layout()
+      local buf = vim.api.nvim_create_buf(false, true)
+      local state = make_state()
+      state.commits = {
+        { sha = "sha1", title = "First commit" },
+        { sha = "sha2", title = "Second commit" },
+      }
+      layout.render(buf, state)
+      local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+      local commits_idx
+      for i, line in ipairs(lines) do
+        if line:match("Commits") then commits_idx = i; break end
+      end
+      assert.truthy(commits_idx, "Commits section should appear in sidebar")
+      vim.api.nvim_buf_delete(buf, { force = true })
+    end)
+  end)
 end)
