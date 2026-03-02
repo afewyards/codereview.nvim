@@ -1267,7 +1267,8 @@ function M.setup_keymaps(state, layout, active_states)
           local new_items = diff_comments.build_row_items(row_ai[new_row] or {}, row_disc_map[new_row] or {})
           if #new_items > 0 then
             state.row_selection = { [new_row] = new_items[1] }
-            diff_nav.ensure_virt_lines_visible(layout.main_win, layout.main_buf, new_row)
+            local sel_offset = diff_render.update_selection_at_row(layout.main_buf, new_row, state.row_selection, row_ai, row_disc_map, state.current_user, state.review, state.editing_note)
+            state._pending_scroll = { row = new_row, focus_offset = sel_offset }
             rerender_view()
           end
         end
@@ -1280,6 +1281,8 @@ function M.setup_keymaps(state, layout, active_states)
         local next_sel = diff_comments.cycle_row_selection(items, state.row_selection[cursor_row], 1)
         if next_sel then
           state.row_selection = { [cursor_row] = next_sel }
+          local sel_offset = diff_render.update_selection_at_row(layout.main_buf, cursor_row, state.row_selection, row_ai, row_disc_map, state.current_user, state.review, state.editing_note)
+          state._pending_scroll = { row = cursor_row, focus_offset = sel_offset }
           rerender_view()
           return
         end
@@ -1294,7 +1297,8 @@ function M.setup_keymaps(state, layout, active_states)
         local new_items = diff_comments.build_row_items(row_ai[new_row] or {}, row_disc_map[new_row] or {})
         if #new_items > 0 then
           state.row_selection = { [new_row] = new_items[1] }
-          diff_nav.ensure_virt_lines_visible(layout.main_win, layout.main_buf, new_row)
+          local sel_offset = diff_render.update_selection_at_row(layout.main_buf, new_row, state.row_selection, row_ai, row_disc_map, state.current_user, state.review, state.editing_note)
+          state._pending_scroll = { row = new_row, focus_offset = sel_offset }
           rerender_view()
           return
         end
@@ -1325,7 +1329,8 @@ function M.setup_keymaps(state, layout, active_states)
           local new_items = diff_comments.build_row_items(row_ai[new_row] or {}, row_disc_map[new_row] or {})
           if #new_items > 0 then
             state.row_selection = { [new_row] = new_items[#new_items] }
-            diff_nav.ensure_virt_lines_visible(layout.main_win, layout.main_buf, new_row)
+            local sel_offset = diff_render.update_selection_at_row(layout.main_buf, new_row, state.row_selection, row_ai, row_disc_map, state.current_user, state.review, state.editing_note)
+            state._pending_scroll = { row = new_row, focus_offset = sel_offset }
             rerender_view()
           end
         end
@@ -1338,6 +1343,8 @@ function M.setup_keymaps(state, layout, active_states)
         local next_sel = diff_comments.cycle_row_selection(items, state.row_selection[cursor_row], -1)
         if next_sel then
           state.row_selection = { [cursor_row] = next_sel }
+          local sel_offset = diff_render.update_selection_at_row(layout.main_buf, cursor_row, state.row_selection, row_ai, row_disc_map, state.current_user, state.review, state.editing_note)
+          state._pending_scroll = { row = cursor_row, focus_offset = sel_offset }
           rerender_view()
           return
         end
@@ -1352,7 +1359,8 @@ function M.setup_keymaps(state, layout, active_states)
         local new_items = diff_comments.build_row_items(row_ai[new_row] or {}, row_disc_map[new_row] or {})
         if #new_items > 0 then
           state.row_selection = { [new_row] = new_items[#new_items] }
-          diff_nav.ensure_virt_lines_visible(layout.main_win, layout.main_buf, new_row)
+          local sel_offset = diff_render.update_selection_at_row(layout.main_buf, new_row, state.row_selection, row_ai, row_disc_map, state.current_user, state.review, state.editing_note)
+          state._pending_scroll = { row = new_row, focus_offset = sel_offset }
           rerender_view()
           return
         end
