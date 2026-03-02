@@ -97,7 +97,7 @@ function M.build(disc, opts)
   local pad = string.rep(" ", gutter)
 
   local notes = disc.notes
-  if not notes or #notes == 0 then return { virt_lines = {}, spacer_offset = nil } end
+  if not notes or #notes == 0 then return { virt_lines = {}, spacer_offset = nil, sel_line_offset = nil } end
 
   local editing_this = editing_note and editing_note.disc_id == disc.id
   local editing_note_idx = editing_this and editing_note.note_idx or nil
@@ -127,6 +127,8 @@ function M.build(disc, opts)
 
   local virt_lines = {}
   local spacer_offset = nil
+  local sel_start = nil -- virt_line index where selected note starts
+  local sel_end = nil   -- virt_line index where selected note ends (exclusive)
 
   -- Helper: build prefix chunks for a line. When selected, prepend ██ in status_hl
   -- then remaining pad + suffix in suffix_hl. When not selected, pad + suffix in suffix_hl.
@@ -143,6 +145,7 @@ function M.build(disc, opts)
 
   -- Header: ┏ @author · 2h ago                       ● Unresolved
   local n1_sel = (sel_idx == 1)
+  if n1_sel then sel_start = 0 end
 
   local header_chunks = {}
   if n1_sel then
@@ -215,6 +218,11 @@ function M.build(disc, opts)
         end
       else
         -- Separator line (never highlighted — visual gap between replies)
+        -- Close previous note's range at the separator boundary
+        if sel_start ~= nil and sel_end == nil and not ri_sel then
+          sel_end = #virt_lines
+        end
+        if ri_sel then sel_start = #virt_lines end
         table.insert(virt_lines, { { pad .. "┃", bdr } })
         -- Reply header
         local reply_header = {}
@@ -234,6 +242,11 @@ function M.build(disc, opts)
         end
       end
     end
+  end
+
+  -- Close selected note range if it was the last note
+  if sel_start ~= nil and sel_end == nil then
+    sel_end = #virt_lines
   end
 
   -- Footer
@@ -262,7 +275,13 @@ function M.build(disc, opts)
     table.insert(virt_lines, { { pad .. "┗━━", bdr } })
   end
 
-  return { virt_lines = virt_lines, spacer_offset = spacer_offset }
+  -- Return the vertical center of the selected note for scroll centering
+  local sel_line_offset = nil
+  if sel_start ~= nil and sel_end ~= nil then
+    sel_line_offset = sel_start + math.floor((sel_end - sel_start) / 2)
+  end
+
+  return { virt_lines = virt_lines, spacer_offset = spacer_offset, sel_line_offset = sel_line_offset }
 end
 
 M.format_time_relative = format_time_relative

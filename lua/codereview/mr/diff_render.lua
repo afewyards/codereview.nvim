@@ -216,6 +216,7 @@ local function render_ai_suggestions_at_row(buf, row, sugs, row_selection)
   local sel_ai_idx = sel and sel.type == "ai" and sel.index or nil
   local sug_count = #sugs
   local virt_lines = {}
+  local sel_ai_offset = nil
 
   for i, suggestion in ipairs(sugs) do
     local is_selected = (sel_ai_idx == i)
@@ -251,6 +252,8 @@ local function render_ai_suggestions_at_row(buf, row, sugs, row_selection)
 
     local sel_pre = is_selected and "██  " or COMMENT_PAD  -- luacheck: ignore
     local sel_blk = is_selected and { "██", ai_status_hl } or nil
+
+    if is_selected then sel_ai_offset = #virt_lines end
 
     -- Header line
     local header_line = {}
@@ -292,6 +295,7 @@ local function render_ai_suggestions_at_row(buf, row, sugs, row_selection)
     virt_lines = virt_lines,
     virt_lines_above = false,
   })
+  return #virt_lines, sel_ai_offset
 end
 
 M.render_ai_suggestions_at_row = render_ai_suggestions_at_row
@@ -323,9 +327,14 @@ function M.update_selection_at_row(buf, row, row_selection, row_ai, row_disc, cu
     end
   end
 
+  local virt_offset = 0
+  local sel_virt_offset = nil
+
   -- Re-render AI suggestions at row
   if row_ai and row_ai[row] then
-    render_ai_suggestions_at_row(buf, row, row_ai[row], row_selection)
+    local ai_count, ai_sel = render_ai_suggestions_at_row(buf, row, row_ai[row], row_selection)
+    virt_offset = ai_count or 0
+    if ai_sel then sel_virt_offset = ai_sel end
   end
 
   -- Re-render comment threads at row
@@ -344,6 +353,10 @@ function M.update_selection_at_row(buf, row, row_selection, row_ai, row_disc, cu
           spacer_height = editing_note and editing_note.spacer_height or 0,
           gutter = 4,
         })
+        if result.sel_line_offset ~= nil then
+          sel_virt_offset = virt_offset + result.sel_line_offset
+        end
+        virt_offset = virt_offset + #result.virt_lines
         pcall(vim.api.nvim_buf_set_extmark, buf, DIFF_NS, row - 1, 0, {
           virt_lines = result.virt_lines,
           virt_lines_above = false,
@@ -351,6 +364,8 @@ function M.update_selection_at_row(buf, row, row_selection, row_ai, row_disc, cu
       end
     end
   end
+
+  return sel_virt_offset
 end
 
 -- ─── Lookup map builders ──────────────────────────────────────────────────────

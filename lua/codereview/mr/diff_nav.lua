@@ -238,28 +238,43 @@ end
 -- ─── Virtual-line visibility ─────────────────────────────────────────────────
 
 --- Scroll the window so that the virt_lines attached to `row` are visible.
+--- When focus_offset is provided, center on that specific virt_line within the block.
 --- @param win number window handle
 --- @param buf number buffer handle
 --- @param row number 1-indexed buffer row
-function M.ensure_virt_lines_visible(win, buf, row)
+--- @param focus_offset number|nil virt_line index of the note to center on (0-based)
+function M.ensure_virt_lines_visible(win, buf, row, focus_offset)
   if not vim.api.nvim_win_is_valid(win) then return end
-  local virt_count = 0
-  for _, ns in ipairs({ DIFF_NS, AIDRAFT_NS }) do
-    local marks = vim.api.nvim_buf_get_extmarks(buf, ns, { row - 1, 0 }, { row - 1, -1 }, { details = true })
-    for _, mark in ipairs(marks) do
-      local details = mark[4]
-      if details and details.virt_lines then
-        virt_count = virt_count + #details.virt_lines
-      end
-    end
-  end
 
   local win_height = vim.api.nvim_win_get_height(win)
-  local total_height = 1 + virt_count -- comment row + virtual lines
-  local new_topline = row - math.floor((win_height - total_height) / 2)
-  if new_topline < 1 then new_topline = 1 end
-  if new_topline > row then new_topline = row end
-  vim.fn.winrestview({ topline = new_topline })
+  local half = math.floor(win_height / 2)
+
+  if focus_offset ~= nil then
+    -- Center on the selected note's virt_line position.
+    -- ideal_topline puts (row + focus_offset) at the vertical center.
+    -- Requires scrolloff=0 on the diff window to prevent Neovim override.
+    local new_topline = row + focus_offset - half + 1
+    if new_topline < 1 then new_topline = 1 end
+    if new_topline > row then new_topline = row end
+    vim.fn.winrestview({ topline = new_topline })
+  else
+    -- No selection info: try to center the entire block
+    local virt_count = 0
+    for _, ns in ipairs({ DIFF_NS, AIDRAFT_NS }) do
+      local marks = vim.api.nvim_buf_get_extmarks(buf, ns, { row - 1, 0 }, { row - 1, -1 }, { details = true })
+      for _, mark in ipairs(marks) do
+        local details = mark[4]
+        if details and details.virt_lines then
+          virt_count = virt_count + #details.virt_lines
+        end
+      end
+    end
+    local total_height = 1 + virt_count
+    local new_topline = row - math.floor((win_height - total_height) / 2)
+    if new_topline < 1 then new_topline = 1 end
+    if new_topline > row then new_topline = row end
+    vim.fn.winrestview({ topline = new_topline })
+  end
 end
 
 -- ─── Context adjustment ──────────────────────────────────────────────────────
