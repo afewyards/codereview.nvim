@@ -249,5 +249,19 @@ describe("mr.thread_virt_lines", function()
       local result = tvl.build(disc)
       assert.is_nil(result.spacer_offset)
     end)
+
+    it("shows x:delete footer for draft comments when selected", function()
+      local disc = {
+        id = "draft-1",
+        is_draft = true,
+        notes = {
+          { id = nil, author = "You (draft)", body = "Draft comment",
+            created_at = "2026-01-01T00:00:00Z", resolvable = false },
+        },
+      }
+      local result = tvl.build(disc, { sel_idx = 1, current_user = "someuser" })
+      local flat = flatten_virt(result.virt_lines)
+      assert.truthy(flat:find("x:delete", 1, true))
+    end)
   end)
 end)

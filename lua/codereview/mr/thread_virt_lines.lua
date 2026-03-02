@@ -257,7 +257,9 @@ function M.build(disc, opts)
     footer_content = "posting…"
   elseif sel_idx and not editing_this then
     local sel_note = notes[sel_idx]
-    if sel_note and current_user and sel_note.author == current_user then
+    if disc.is_draft then
+      footer_content = "x:delete"
+    elseif sel_note and current_user and sel_note.author == current_user then
       footer_content = "r:reply  gt:un/resolve  e:edit  x:delete"
     else
       footer_content = "r:reply  gt:un/resolve"
