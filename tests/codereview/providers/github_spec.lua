@@ -248,7 +248,7 @@ describe("providers.github", function()
         .. '{"databaseId":1,"author":{"login":"a"},"body":"root",'
         .. '"createdAt":"2026-01-01T00:00:00Z","path":"f.lua","line":5,'
         .. '"startLine":null,'
-        .. '"commit":{"oid":"abc"}}]}}]}}}}}}'
+        .. '"commit":{"oid":"abc"}}]}}]}}}}}'
       package.loaded["plenary.curl"] = {
         request = function() return { status = 200, body = body } end,
       }
@@ -267,14 +267,14 @@ describe("providers.github", function()
         .. '{"databaseId":1,"author":{"login":"a"},"body":"first",'
         .. '"createdAt":"2026-01-01T00:00:00Z","path":"a.lua","line":1,'
         .. '"startLine":null,'
-        .. '"commit":{"oid":"abc"}}]}}]}}}}}}'
+        .. '"commit":{"oid":"abc"}}]}}]}}}}}'
       local page2 = '{"data":{"repository":{"pullRequest":{"reviewThreads":'
         .. '{"pageInfo":{"hasNextPage":false,"endCursor":"cursor2"},'
         .. '"nodes":[{"id":"PRRT_2","isResolved":true,"diffSide":"RIGHT","startDiffSide":null,"comments":{"nodes":['
         .. '{"databaseId":2,"author":{"login":"b"},"body":"second",'
         .. '"createdAt":"2026-01-01T00:01:00Z","path":"b.lua","line":5,'
         .. '"startLine":null,'
-        .. '"commit":{"oid":"def"}}]}}]}}}}}}'
+        .. '"commit":{"oid":"def"}}]}}]}}}}}'
       local call_count = 0
       package.loaded["plenary.curl"] = {
         request = function()

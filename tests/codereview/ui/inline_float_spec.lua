@@ -41,8 +41,8 @@ describe("inline_float", function()
     end)
 
     it("clamps to dynamic max (80% of window height)", function()
-      -- mock nvim_win_get_height returns 10, so max = floor(10 * 0.8) = 8
-      assert.equals(8, inline_float.compute_height(20, 1))
+      -- Pass ref_height=10 explicitly: max = floor(10 * 0.8) = 8
+      assert.equals(8, inline_float.compute_height(20, 1, 10))
     end)
 
     it("adds header lines to content lines", function()

@@ -7,12 +7,18 @@ describe("mr.comment_float", function()
     local orig_buf_set_extmark
     local orig_win_get_width
     local orig_open_win_sh
+    local orig_buf_is_valid_sh
+    local orig_schedule_sh
     local attached_callbacks
     local extmark_calls
 
     before_each(function()
       attached_callbacks = {}
       extmark_calls = {}
+
+      -- Run vim.schedule callbacks immediately so self-heal fires synchronously
+      orig_schedule_sh = vim.schedule
+      vim.schedule = function(fn) fn() end
 
       package.loaded["codereview.config"] = {
         get = function() return { diff = { comment_width = 60 } } end,
@@ -46,6 +52,13 @@ describe("mr.comment_float", function()
           relative = "editor", width = 60, height = 3, row = 1, col = 1,
         })
       end
+
+      -- Treat fake diff_buf (99) as valid so self-heal callback proceeds
+      orig_buf_is_valid_sh = vim.api.nvim_buf_is_valid
+      vim.api.nvim_buf_is_valid = function(b)
+        if b == 99 then return true end
+        return orig_buf_is_valid_sh(b)
+      end
     end)
 
     after_each(function()
@@ -54,6 +67,8 @@ describe("mr.comment_float", function()
       vim.api.nvim_buf_set_extmark = orig_buf_set_extmark
       vim.api.nvim_win_get_width = orig_win_get_width
       vim.api.nvim_open_win = orig_open_win_sh
+      vim.api.nvim_buf_is_valid = orig_buf_is_valid_sh
+      vim.schedule = orig_schedule_sh
       package.loaded["codereview.config"] = nil
     end)
 
@@ -226,6 +241,7 @@ describe("mr.comment_float", function()
     local orig_open_win_dr
     local orig_buf_is_valid
     local orig_buf_set_extmark_dr
+    local orig_screenpos_dr
     local buf_callbacks
 
     before_each(function()
@@ -275,6 +291,10 @@ describe("mr.comment_float", function()
       vim.api.nvim_buf_set_extmark = function(buf, ns, row, col, opts)
         return 1
       end
+
+      -- Stub screenpos to avoid "Invalid line number" when anchor_line exceeds real buf lines
+      orig_screenpos_dr = vim.fn.screenpos
+      vim.fn.screenpos = function() return { row = 0, col = 0 } end
     end)
 
     after_each(function()
@@ -285,6 +305,7 @@ describe("mr.comment_float", function()
       vim.api.nvim_open_win = orig_open_win_dr
       vim.api.nvim_buf_is_valid = orig_buf_is_valid
       vim.api.nvim_buf_set_extmark = orig_buf_set_extmark_dr
+      vim.fn.screenpos = orig_screenpos_dr
       package.loaded["codereview.config"] = nil
     end)
 

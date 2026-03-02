@@ -132,12 +132,15 @@ describe("review.init routing", function()
 end)
 
 describe("render_file_suggestions focus guard", function()
-  local orig_run, orig_get_current_win, orig_set_current_win
+  local orig_run, orig_get_current_win, orig_set_current_win, orig_schedule
 
   before_each(function()
     orig_run = package.loaded["codereview.ai.subprocess"].run
     orig_get_current_win = vim.api.nvim_get_current_win
     orig_set_current_win = vim.api.nvim_set_current_win
+    orig_schedule = vim.schedule
+    -- Run scheduled callbacks immediately so assertions see their effects synchronously
+    vim.schedule = function(fn) fn() end
     package.loaded["codereview.ai.subprocess"].run = function(prompt, callback)
       callback('```json\n[{"file":"a.lua","line":1,"severity":"suggestion","comment":"test note"}]\n```')
       return 1
@@ -148,6 +151,7 @@ describe("render_file_suggestions focus guard", function()
     package.loaded["codereview.ai.subprocess"].run = orig_run
     vim.api.nvim_get_current_win = orig_get_current_win
     vim.api.nvim_set_current_win = orig_set_current_win
+    vim.schedule = orig_schedule
   end)
 
   it("skips set_current_win when current window is a float", function()
@@ -182,8 +186,17 @@ describe("render_file_suggestions focus guard", function()
 end)
 
 describe("review.start_file", function()
+  local orig_schedule_sf
+
   before_each(function()
     captured_calls = {}
+    orig_schedule_sf = vim.schedule
+    -- Run scheduled callbacks immediately so assertions see their effects synchronously
+    vim.schedule = function(fn) fn() end
+  end)
+
+  after_each(function()
+    vim.schedule = orig_schedule_sf
   end)
 
   it("runs summary then single-file review with cross-file context", function()
