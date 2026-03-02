@@ -555,6 +555,7 @@ describe("mr.diff_render", function()
   describe("update_selection_at_row", function()
     it("clears AIDRAFT_NS extmarks on target row only", function()
       local buf = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "l1", "l2", "l3", "l4", "l5" })
       local aidraft_ns = vim.api.nvim_create_namespace("codereview_ai_draft")
       local diff_ns = vim.api.nvim_create_namespace("codereview_diff")
 
@@ -609,6 +610,7 @@ describe("mr.diff_render", function()
 
     it("does not touch extmarks on other rows", function()
       local buf = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "l1", "l2", "l3", "l4", "l5" })
       local aidraft_ns = vim.api.nvim_create_namespace("codereview_ai_draft")
 
       -- Place extmarks only on row 5 (0-indexed=4)
