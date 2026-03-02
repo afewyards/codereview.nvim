@@ -321,6 +321,32 @@ function M.get_commits(client, ctx, review)
   return commits
 end
 
+--- Get file diffs for a single commit via the commits API.
+--- @param client table HTTP client module
+--- @param ctx table { base_url, project }
+--- @param sha string commit SHA
+--- @return table[]|nil normalized file diffs, string|nil error
+function M.get_commit_diffs(client, ctx, sha)
+  local headers, err = get_headers()
+  if not headers then return nil, err end
+  local owner, repo = parse_owner_repo(ctx)
+  local url = string.format("%s/repos/%s/%s/commits/%s", ctx.base_url, owner, repo, sha)
+  local result, err2 = client.get_url(url, { headers = headers })
+  if not result then return nil, err2 end
+  local diffs = {}
+  for _, f in ipairs(result.data.files or {}) do
+    table.insert(diffs, {
+      new_path = f.filename,
+      old_path = f.previous_filename or f.filename,
+      new_file = (f.status == "added"),
+      renamed_file = (f.status == "renamed"),
+      deleted_file = (f.status == "removed"),
+      diff = f.patch or "",
+    })
+  end
+  return diffs
+end
+
 --- Return the commit_id of the most recent review submitted by username.
 function M.get_last_reviewed_sha(client, ctx, review, username)
   local headers, err = get_headers()

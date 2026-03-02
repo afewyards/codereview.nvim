@@ -52,8 +52,18 @@ function M.apply(state, filter)
   end
 
   local filtered_files = {}
+  local matched_paths = {}
   for _, f in ipairs(state.original_files) do
-    if path_set[f.new_path] then
+    if path_set[f.new_path] or path_set[f.old_path] then
+      table.insert(filtered_files, f)
+      if f.new_path then matched_paths[f.new_path] = true end
+      if f.old_path then matched_paths[f.old_path] = true end
+    end
+  end
+  -- Add files not in the MR-level diff (e.g. changed then reverted later).
+  -- Prefer commit_files (API data with real diffs) when available.
+  for _, f in ipairs(filter.commit_files or {}) do
+    if not matched_paths[f.new_path or ""] and not matched_paths[f.old_path or ""] then
       table.insert(filtered_files, f)
     end
   end
@@ -142,6 +152,7 @@ function M.select(state, layout, entry)
       end
     end
   elseif entry.type == "since_last_review" then
+    diff_render.ensure_git_objects(entry.from_sha, state.review.head_sha)
     local paths = M.get_changed_paths(entry.from_sha, state.review.head_sha)
     M.apply(state, {
       from_sha = entry.from_sha, to_sha = state.review.head_sha,
@@ -151,17 +162,26 @@ function M.select(state, layout, entry)
     diff.render_sidebar(layout.sidebar_buf, state)
     render_current_file()
   elseif entry.type == "commit" then
-    local parent_sha
-    for i, c in ipairs(state.commits) do
-      if c.sha == entry.sha then
-        parent_sha = i > 1 and state.commits[i - 1].sha or state.review.base_sha
-        break
+    -- Fetch per-commit file diffs from the provider API (authoritative source).
+    local client_mod = require("codereview.api.client")
+    local commit_diffs = state.provider.get_commit_diffs(client_mod, state.ctx, entry.sha) or {}
+    local paths = {}
+    for _, f in ipairs(commit_diffs) do
+      if f.new_path and f.new_path ~= "" then paths[#paths + 1] = f.new_path end
+      if f.old_path and f.old_path ~= "" and f.old_path ~= f.new_path then
+        paths[#paths + 1] = f.old_path
       end
     end
-    local paths = M.get_changed_paths(parent_sha, entry.sha)
+    -- Parent SHA still needed for commit_filter.from_sha (diff rendering context).
+    diff_render.ensure_git_objects(state.review.base_sha, entry.sha)
+    local parent_result = vim.fn.system({ "git", "rev-parse", entry.sha .. "~1" })
+    local parent_sha = vim.v.shell_error == 0
+      and parent_result:gsub("%s+", "")
+      or state.review.base_sha
     M.apply(state, {
       from_sha = parent_sha, to_sha = entry.sha,
-      label = entry.title or entry.sha:sub(1, 8), changed_paths = paths,
+      label = entry.title or entry.sha:sub(1, 8),
+      changed_paths = paths, commit_files = commit_diffs,
     })
     state.view_mode = "diff"
     diff.render_sidebar(layout.sidebar_buf, state)

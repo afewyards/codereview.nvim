@@ -28,7 +28,7 @@ local fetched_shas = {}
 
 --- Fetch git objects for the given SHAs if they're not available locally.
 --- Only attempts once per unique SHA pair.
-local function ensure_git_objects(base_sha, head_sha)
+function M.ensure_git_objects(base_sha, head_sha)
   local key = base_sha .. head_sha
   if fetched_shas[key] then return end
   fetched_shas[key] = true
@@ -826,7 +826,7 @@ function M.render_all_files(buf, files, review, discussions, context, file_conte
         })
         -- Only fetch missing objects when user explicitly changed context
         if vim.v.shell_error ~= 0 and file_ctx ~= context then
-          ensure_git_objects(review.base_sha, review.head_sha)
+          M.ensure_git_objects(review.base_sha, review.head_sha)
           result = vim.fn.system({
             "git", "diff", "-U" .. file_ctx,
             review.base_sha, review.head_sha, "--", fpath,

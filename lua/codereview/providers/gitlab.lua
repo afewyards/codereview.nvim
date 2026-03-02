@@ -252,6 +252,24 @@ function M.get_commits(client, ctx, review)
   return commits
 end
 
+--- Get file diffs for a single commit via the repository commits API.
+--- @param client table HTTP client module
+--- @param ctx table { base_url, project }
+--- @param sha string commit SHA
+--- @return table[]|nil normalized file diffs, string|nil error
+function M.get_commit_diffs(client, ctx, sha)
+  local headers, err = get_headers()
+  if not headers then return nil, err end
+  local path = "/api/v4/projects/" .. encoded_project(ctx) .. "/repository/commits/" .. sha .. "/diff"
+  local raw = client.paginate_all(ctx.base_url, path, { headers = headers })
+  if not raw then return nil, "Failed to fetch commit diffs" end
+  local diffs = {}
+  for _, f in ipairs(raw) do
+    table.insert(diffs, types.normalize_file_diff(f))
+  end
+  return diffs
+end
+
 --- Post an inline comment or general comment.
 --- @param position table|nil { old_path, new_path, old_line, new_line } or nil for general comment
 function M.post_comment(client, ctx, review, body, position)
