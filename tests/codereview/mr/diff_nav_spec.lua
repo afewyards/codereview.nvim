@@ -244,7 +244,8 @@ describe("mr.diff_nav", function()
     end
 
     local function make_win(buf, height, topline)
-      local win = vim.api.nvim_open_win(buf, true, {})
+      local win = vim.api.nvim_open_win(buf, true, { split = "left" })
+      _current_win = win
       _win_state[win] = { height = height, topline = topline or 1 }
       return win
     end
