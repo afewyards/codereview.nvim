@@ -318,6 +318,11 @@ function M.get_commits(client, ctx, review)
       created_at = (c.commit and c.commit.author and c.commit.author.date) or "",
     }))
   end
+  -- Reverse to newest-first (GitHub returns oldest-first, GitLab returns newest-first)
+  local n = #commits
+  for i = 1, math.floor(n / 2) do
+    commits[i], commits[n - i + 1] = commits[n - i + 1], commits[i]
+  end
   return commits
 end
 

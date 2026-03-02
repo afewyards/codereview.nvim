@@ -302,6 +302,54 @@ local function render_thread(result, disc, width, reply_key, resolve_key, is_las
   end
 end
 
+function M.build_commits_lines(commits, width, commit_filter)
+  width = width or 60
+  local result = { lines = {}, highlights = {} }
+  if not commits or #commits == 0 then return result end
+
+  local lines = result.lines
+  local highlights = result.highlights
+
+  table.insert(lines, "")
+  local sep = string.rep("─", width)
+  table.insert(lines, sep)
+  table.insert(highlights, { #lines - 1, 0, #sep, "CodeReviewMdHr" })
+  local hdr_row = #lines
+  table.insert(lines, string.format("## Commits (%d)", #commits))
+  table.insert(highlights, { hdr_row, 0, #lines[#lines], "CodeReviewMdH2" })
+  table.insert(lines, "")
+
+  for _, c in ipairs(commits) do
+    local short = c.short_sha or (c.sha or ""):sub(1, 8)
+    local is_active = commit_filter and commit_filter.to_sha == c.sha
+    local bullet = is_active and "● " or "  "
+    local stats = ""
+    if c.additions or c.deletions then
+      stats = string.format("  +%d -%d", c.additions or 0, c.deletions or 0)
+    end
+    local line = string.format("  %s%s  %s%s", bullet, short, c.title or "", stats)
+    local row = #lines
+    table.insert(lines, line)
+    -- highlight SHA
+    local sha_start = 2 + #bullet
+    table.insert(highlights, { row, sha_start, sha_start + #short, "TelescopeResultsIdentifier" })
+    -- highlight stats
+    if stats ~= "" then
+      local stats_start = #line - #stats
+      local plus_str = string.format("+%d", c.additions or 0)
+      local minus_str = string.format("-%d", c.deletions or 0)
+      table.insert(highlights, { row, stats_start + 2, stats_start + 2 + #plus_str, "diffAdded" })
+      local minus_start = stats_start + 2 + #plus_str + 1
+      table.insert(highlights, { row, minus_start, minus_start + #minus_str, "diffRemoved" })
+    end
+    if is_active then
+      table.insert(highlights, { row, 2, 2 + #"●", "CodeReviewCommentUnresolved" })
+    end
+  end
+
+  return result
+end
+
 function M.build_activity_lines(discussions, width)
   width = width or 60
   local result = { lines = {}, highlights = {}, row_map = {}, code_blocks = {} }

@@ -47,14 +47,21 @@ function M.render(state_or_review, width)
   local tgt = review.target_branch or "main"
   table.insert(lines, src .. " → " .. tgt)
 
-  -- Optional filter indicator line
+  -- Optional commit filter banner (full-width background highlight)
   if commit_filter and commit_filter.label then
-    local indicator = " 🔍 " .. commit_filter.label
-    if vim.fn.strdisplaywidth(indicator) > width then
-      indicator = indicator:sub(1, width - 2) .. "…"
+    local icon_label = "🔍 " .. commit_filter.label
+    -- Truncate if wider than sidebar
+    if vim.fn.strdisplaywidth(icon_label) > width - 2 then
+      icon_label = icon_label:sub(1, width - 3) .. "…"
     end
-    table.insert(lines, indicator)
-    table.insert(highlights, { #lines - 1, 0, #indicator, "CodeReviewCommitFilter" })
+    -- Centre-pad with spaces so the background highlight fills the row
+    local pad = width - vim.fn.strdisplaywidth(icon_label)
+    local left_pad = math.floor(pad / 2)
+    local right_pad = pad - left_pad
+    local banner = string.rep(" ", left_pad) .. icon_label .. string.rep(" ", right_pad)
+    table.insert(lines, banner)
+    -- Line highlight covers the full row (use named format)
+    table.insert(highlights, { row = #lines, line_hl = "CodeReviewCommitFilter" })
   end
 
   -- Line 3: compact status indicators
@@ -90,9 +97,9 @@ function M.render(state_or_review, width)
   local status_line = table.concat(parts, "  ")
   table.insert(lines, status_line)
 
-  -- Highlight CI icon on row 2 (0-indexed)
+  -- Highlight CI icon on the status line (0-indexed row = #lines - 1)
   if ci_icon and CI_HLS[ci_status] then
-    table.insert(highlights, { 2, 0, #ci_icon, CI_HLS[ci_status] })
+    table.insert(highlights, { #lines - 1, 0, #ci_icon, CI_HLS[ci_status] })
   end
 
   -- Line 4: full-width separator

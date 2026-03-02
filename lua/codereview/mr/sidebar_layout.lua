@@ -88,7 +88,6 @@ end
 function M.render(buf, state)
   local header_comp        = require("codereview.mr.sidebar_components.header")
   local status_comp        = require("codereview.mr.sidebar_components.status")
-  local commits_comp       = require("codereview.mr.sidebar_components.commits")
   local summary_button_comp = require("codereview.mr.sidebar_components.summary_button")
   local file_tree_comp     = require("codereview.mr.sidebar_components.file_tree")
   local footer_comp        = require("codereview.mr.sidebar_components.footer")
@@ -131,7 +130,6 @@ function M.render(buf, state)
   local mid_lines   = {}
   local mid_row_map = {}
 
-  commits_comp.render(state, mid_lines, mid_row_map, WIDTH)
   summary_button_comp.render(state, mid_lines, mid_row_map)
   local sb_count = #mid_lines   -- lines owned by summary_button (2)
 

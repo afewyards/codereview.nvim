@@ -31,6 +31,8 @@ create_comment       = { key = "cc",    mode = "n", desc = "New comment" },
   pick_comments        = { key = "<leader>fc", mode = "n", desc = "Pick comment/suggestion" },
   pick_files           = { key = "<leader>ff", mode = "n", desc = "Pick file" },
   pick_commits         = { key = "C",          mode = "n", desc = "Pick commit" },
+  next_commit          = { key = "]c",         mode = "n", desc = "Next commit" },
+  prev_commit          = { key = "[c",         mode = "n", desc = "Previous commit" },
   move_down = { key = "j", mode = "n", desc = "Move down / next comment" },
   move_up   = { key = "k", mode = "n", desc = "Move up / prev comment" },
 }

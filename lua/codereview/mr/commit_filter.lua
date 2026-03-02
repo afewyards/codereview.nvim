@@ -161,6 +161,9 @@ function M.select(state, layout, entry)
     state.view_mode = "diff"
     diff.render_sidebar(layout.sidebar_buf, state)
     render_current_file()
+    if layout.main_win and vim.api.nvim_win_is_valid(layout.main_win) then
+      vim.api.nvim_set_current_win(layout.main_win)
+    end
   elseif entry.type == "commit" then
     -- Fetch per-commit file diffs from the provider API (authoritative source).
     local client_mod = require("codereview.api.client")
@@ -186,6 +189,9 @@ function M.select(state, layout, entry)
     state.view_mode = "diff"
     diff.render_sidebar(layout.sidebar_buf, state)
     render_current_file()
+    if layout.main_win and vim.api.nvim_win_is_valid(layout.main_win) then
+      vim.api.nvim_set_current_win(layout.main_win)
+    end
   end
 end
 

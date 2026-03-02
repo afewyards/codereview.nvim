@@ -308,6 +308,25 @@ function M.setup_keymaps(state, layout, active_states)
     require("codereview.mr.commit_filter").select(state, layout, entry)
   end
 
+  local function nav_commit(delta)
+    local commits = state.commits or {}
+    if #commits == 0 then return end
+    local current_sha = state.commit_filter and state.commit_filter.to_sha
+    local idx
+    if current_sha then
+      for i, c in ipairs(commits) do
+        if c.sha == current_sha then idx = i; break end
+      end
+    end
+    if not idx then
+      idx = delta > 0 and 0 or #commits + 1
+    end
+    local next_idx = idx + delta
+    if next_idx < 1 or next_idx > #commits then return end
+    local c = commits[next_idx]
+    select_commit_entry({ type = "commit", sha = c.sha, title = c.title })
+  end
+
   -- ── Main buffer callbacks (all 26 remappable actions) ───────────────────────
 
   local main_callbacks = {
@@ -1329,6 +1348,8 @@ function M.setup_keymaps(state, layout, active_states)
     pick_commits = function()
       require("codereview.picker.commits").pick(state, select_commit_entry)
     end,
+    next_commit = function() nav_commit(-1) end,
+    prev_commit = function() nav_commit(1) end,
     refresh = refresh,
     quit    = quit,
   }
@@ -1373,6 +1394,8 @@ function M.setup_keymaps(state, layout, active_states)
     pick_commits = function()
       require("codereview.picker.commits").pick(state, select_commit_entry)
     end,
+    next_commit = function() nav_commit(-1) end,
+    prev_commit = function() nav_commit(1) end,
     refresh = refresh,
     quit    = quit,
   }

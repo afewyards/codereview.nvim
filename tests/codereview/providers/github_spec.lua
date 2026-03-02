@@ -778,10 +778,14 @@ describe("get_commits", function()
     local result, err = github.get_commits(mock_client, ctx, review)
     assert.is_nil(err)
     assert.equals(2, #result)
-    assert.equals("sha1full1234", result[1].sha)
-    assert.equals("sha1full", result[1].short_sha)
-    assert.equals("First commit", result[1].title) -- first line only
-    assert.equals("alice", result[1].author)
+    -- Commits are returned newest-first (reversed from GitHub's oldest-first API)
+    assert.equals("sha2full5678", result[1].sha)
+    assert.equals("sha2full", result[1].short_sha)
+    assert.equals("Second commit", result[1].title)
+    assert.equals("bob", result[1].author)
+    assert.equals("sha1full1234", result[2].sha)
+    assert.equals("First commit", result[2].title) -- first line only
+    assert.equals("alice", result[2].author)
   end)
 end)
 

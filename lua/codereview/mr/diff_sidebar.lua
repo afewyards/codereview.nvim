@@ -34,6 +34,9 @@ function M.render_summary(buf, state)
   local lines = {}
   for _, l in ipairs(header.lines) do table.insert(lines, l) end
 
+  local commits_section = detail.build_commits_lines(state.commits, pane_width, state.commit_filter)
+  for _, l in ipairs(commits_section.lines) do table.insert(lines, l) end
+
   local activity = detail.build_activity_lines(state.discussions, pane_width)
   for _, line in ipairs(activity.lines) do
     table.insert(lines, line)
@@ -46,6 +49,7 @@ function M.render_summary(buf, state)
   vim.api.nvim_buf_clear_namespace(buf, SUMMARY_NS, 0, -1)
 
   local header_count = #header.lines
+  local commits_count = #commits_section.lines
 
   -- Apply header (description) highlights
   for _, hl in ipairs(header.highlights) do
@@ -55,9 +59,18 @@ function M.render_summary(buf, state)
     })
   end
 
-  -- Activity lines start after header
+  -- Commits highlights start after header
+  for _, hl in ipairs(commits_section.highlights) do
+    local row = header_count + hl[1]
+    pcall(vim.api.nvim_buf_set_extmark, buf, SUMMARY_NS, row, hl[2], {
+      end_col = hl[3],
+      hl_group = hl[4],
+    })
+  end
+
+  -- Activity lines start after header + commits
   for _, hl in ipairs(activity.highlights) do
-    local row = header_count + hl[1]  -- 0-indexed row in buffer
+    local row = header_count + commits_count + hl[1]
     pcall(vim.api.nvim_buf_set_extmark, buf, SUMMARY_NS, row, hl[2], {
       end_col = hl[3],
       hl_group = hl[4],
@@ -74,8 +87,8 @@ function M.render_summary(buf, state)
   if activity.code_blocks then
     for _, cb in ipairs(activity.code_blocks) do
       table.insert(all_code_blocks, {
-        start_row = header_count + cb.start_row,
-        end_row = header_count + cb.end_row,
+        start_row = header_count + commits_count + cb.start_row,
+        end_row = header_count + commits_count + cb.end_row,
         lang = cb.lang,
         text = cb.text,
         indent = cb.indent,
@@ -108,7 +121,7 @@ function M.render_summary(buf, state)
   -- Build summary row map (buffer row -> discussion)
   state.summary_row_map = {}
   for offset, entry in pairs(activity.row_map) do
-    state.summary_row_map[header_count + offset + 1] = entry  -- +1 for 1-indexed rows
+    state.summary_row_map[header_count + commits_count + offset + 1] = entry  -- +1 for 1-indexed rows
   end
 
   vim.bo[buf].modifiable = false
