@@ -203,6 +203,34 @@ local discussions_42 = {
   },
 }
 
+-- Commits for PR #42 (newest-first, already normalized)
+local commits_42 = {
+  {
+    sha = "def5678def5678def5678", short_sha = "def5678d",
+    title = "Add auth middleware unit tests",
+    author = "alice", created_at = "2026-02-27T11:30:00Z",
+    additions = 28, deletions = 0,
+  },
+  {
+    sha = "ccc4444ccc4444ccc4444", short_sha = "ccc4444c",
+    title = "Update login route to use token utility",
+    author = "alice", created_at = "2026-02-27T10:15:00Z",
+    additions = 2, deletions = 2,
+  },
+  {
+    sha = "bbb3333bbb3333bbb3333", short_sha = "bbb3333b",
+    title = "Extract token validation into utils/token.ts",
+    author = "alice", created_at = "2026-02-27T09:45:00Z",
+    additions = 27, deletions = 0,
+  },
+  {
+    sha = "aaa2222aaa2222aaa2222", short_sha = "aaa2222a",
+    title = "Refactor auth middleware to use verifyToken",
+    author = "alice", created_at = "2026-02-27T09:00:00Z",
+    additions = 8, deletions = 12,
+  },
+}
+
 -- Full file content for "view full file" (Ctrl+F)
 local file_contents = {
   ["src/middleware/auth.ts"] = table.concat({
@@ -336,6 +364,15 @@ end
 
 function M.get_file_content(_client, _ctx, _ref, path)
   return file_contents[path] or "", nil
+end
+
+function M.get_commits(_client, _ctx, review)
+  if review.id == 42 then return commits_42, nil end
+  return {}, nil
+end
+
+function M.get_commit_stats(_client, _ctx, _commits)
+  -- Stats are already baked into the mock commits, nothing to fetch.
 end
 
 function M.get_current_user(_client, _ctx)
