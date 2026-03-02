@@ -1253,6 +1253,9 @@ function M.setup_keymaps(state, layout, active_states)
         return
       end
 
+      -- Clear stale pending scroll so a previous cycling press can't snap back
+      state._pending_scroll = nil
+
       local cursor_row = vim.api.nvim_win_get_cursor(layout.main_win)[1]
       local row_ai = state.scroll_mode and state.scroll_row_ai or (state.row_ai_cache[state.current_file] or {})
       local row_disc_map = state.scroll_mode and state.scroll_row_disc or (state.row_disc_cache[state.current_file] or {})
@@ -1314,6 +1317,9 @@ function M.setup_keymaps(state, layout, active_states)
         vim.cmd("normal! k")
         return
       end
+
+      -- Clear stale pending scroll so a previous cycling press can't snap back
+      state._pending_scroll = nil
 
       local cursor_row = vim.api.nvim_win_get_cursor(layout.main_win)[1]
       local row_ai = state.scroll_mode and state.scroll_row_ai or (state.row_ai_cache[state.current_file] or {})
