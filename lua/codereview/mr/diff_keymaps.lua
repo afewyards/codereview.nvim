@@ -974,12 +974,35 @@ function M.setup_keymaps(state, layout, active_states)
       if not sel_idx then return end  -- no note selected; let dismiss_suggestion handle "x"
       local note = disc.notes[sel_idx]
       if not note then return end
+      local comment = require("codereview.mr.comment")
+
+      -- Draft comments: use delete_draft path
+      if disc.is_draft then
+        comment.delete_draft(disc, state.review, function()
+          state.row_selection[cursor_row] = nil
+          for i, d in ipairs(state.discussions) do
+            if d == disc then
+              table.remove(state.discussions, i)
+              break
+            end
+          end
+          for i, d in ipairs(state.local_drafts or {}) do
+            if d == disc then
+              table.remove(state.local_drafts, i)
+              break
+            end
+          end
+          rerender_view()
+        end)
+        return
+      end
+
+      -- Published comments: existing path
       if not state.current_user then return end
       if note.author ~= state.current_user then
         vim.notify("Can only delete your own comments", vim.log.levels.WARN)
         return
       end
-      local comment = require("codereview.mr.comment")
       comment.delete_note(disc, note, state.review, function(result)
         state.row_selection[cursor_row] = nil  -- clear selection
         if result and result.removed_disc then
