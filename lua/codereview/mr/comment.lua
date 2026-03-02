@@ -275,6 +275,34 @@ function M.delete_note(disc, note, mr, on_success)
   end)
 end
 
+--- Delete a draft comment. Confirmation prompt, calls provider delete_draft_note.
+--- @param disc table  the draft discussion (must have server_draft_id)
+--- @param mr table    the MR/PR object
+--- @param on_success fun()  called after successful delete
+function M.delete_draft(disc, mr, on_success)
+  if not disc.server_draft_id then
+    vim.notify("Cannot delete: draft has no server ID", vim.log.levels.ERROR)
+    return
+  end
+  vim.ui.input({ prompt = "Delete this draft comment? (Y/n): ", default = "y" }, function(input)
+    if not input or input:lower():match("^n") then return end
+    vim.schedule(function()
+      local provider, client, ctx = get_provider()
+      if not provider then return end
+      if not provider.delete_draft_note then
+        vim.notify("Draft deletion not supported on this platform", vim.log.levels.WARN)
+        return
+      end
+      local _, err = provider.delete_draft_note(client, ctx, mr, disc.server_draft_id)
+      if err then
+        vim.notify("Delete draft failed: " .. err, vim.log.levels.ERROR)
+        return
+      end
+      if on_success then on_success() end
+    end)
+  end)
+end
+
 function M.resolve_toggle(disc, mr, callback)
   local first = disc.notes and disc.notes[1]
   if not first then return end

@@ -167,9 +167,7 @@ describe("mr.comment", function()
         on_success = function(text) success_called_with = text end,
       })
       comment.open_input_popup = orig_popup
-      -- on_success won't be called because get_provider() will fail in test env
-      -- Just verify the function completes without error
-      assert.is_nil(success_called_with)  -- provider detection fails in unit test
+      assert.equals("draft text", success_called_with)
     end)
 
     it("passes API result to on_success on draft path", function()
