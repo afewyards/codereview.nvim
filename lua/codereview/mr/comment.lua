@@ -349,12 +349,12 @@ function M.create_comment(mr, opts)
       -- Draft path: synchronous, no optimistic, no retry
       local provider, client, ctx = get_provider()
       if not provider then return end
-      local _, err = opts.api_fn(provider, client, ctx, mr, text)
+      local result, err = opts.api_fn(provider, client, ctx, mr, text)
       if err then
         vim.notify((opts.failure_msg or "Failed to create draft comment") .. ": " .. err, vim.log.levels.ERROR)
       else
         vim.notify(opts.success_msg or "Draft comment created", vim.log.levels.INFO)
-        if opts.on_success then opts.on_success(text) end
+        if opts.on_success then opts.on_success(text, result) end
       end
     end
   end, popup_opts)

@@ -87,6 +87,12 @@ describe("mr.comment", function()
     end)
   end)
 
+  describe("delete_draft", function()
+    it("function exists and is callable", function()
+      assert.is_function(comment.delete_draft)
+    end)
+  end)
+
   describe("create_comment", function()
     it("function exists and is callable", function()
       assert.is_function(comment.create_comment)
@@ -164,6 +170,35 @@ describe("mr.comment", function()
       -- on_success won't be called because get_provider() will fail in test env
       -- Just verify the function completes without error
       assert.is_nil(success_called_with)  -- provider detection fails in unit test
+    end)
+
+    it("passes API result to on_success on draft path", function()
+      local success_result
+      local orig_popup = comment.open_input_popup
+      comment.open_input_popup = function(title, cb, opts)
+        cb("draft text")
+      end
+      local providers = require("codereview.providers")
+      local orig_detect = providers.detect
+      providers.detect = function()
+        return {
+          name = "gitlab",
+          create_draft_comment = function() return { id = 42 }, nil end,
+        }, {}, {}
+      end
+
+      comment.create_comment({}, {
+        title = "Draft Comment",
+        api_fn = function(provider, cl, ctx, mr, text)
+          return { id = 42 }, nil
+        end,
+        on_success = function(text, result) success_result = result end,
+      })
+
+      comment.open_input_popup = orig_popup
+      providers.detect = orig_detect
+      assert.is_table(success_result)
+      assert.equals(42, success_result.id)
     end)
 
     it("uses 'Comment' as default title when no title provided", function()
