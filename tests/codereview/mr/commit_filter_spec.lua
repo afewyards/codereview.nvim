@@ -151,20 +151,30 @@ describe("commit_filter", function()
   end)
 
   describe("get_changed_paths", function()
+    local orig_system
+    before_each(function()
+      orig_system = vim.fn.system
+    end)
+    after_each(function()
+      vim.fn.system = orig_system
+    end)
+
     it("returns list of changed file paths between two SHAs", function()
       vim.fn.system = function(cmd)
         if type(cmd) == "table" and cmd[2] == "diff" and cmd[3] == "--name-only" then
+          orig_system("true")
           return "a.lua\nb.lua\nc.lua\n"
         end
-        return ""
+        return orig_system(cmd)
       end
-      vim.v.shell_error = 0
       local paths = commit_filter.get_changed_paths("sha1", "sha2")
       assert.same({ "a.lua", "b.lua", "c.lua" }, paths)
     end)
     it("returns empty list on git error", function()
-      vim.fn.system = function() return "" end
-      vim.v.shell_error = 1
+      vim.fn.system = function()
+        orig_system("false")
+        return ""
+      end
       local paths = commit_filter.get_changed_paths("sha1", "sha2")
       assert.same({}, paths)
     end)

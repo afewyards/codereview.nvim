@@ -687,9 +687,9 @@ describe("render_all_files batch git diff", function()
           "+new2",
         }, "\n")
       end
+      orig_system("true")
       return ""
     end
-    vim.v.shell_error = 0
 
     local buf = vim.api.nvim_create_buf(false, true)
     local files = {

@@ -2,9 +2,28 @@ local auth = require("codereview.api.auth")
 local config = require("codereview.config")
 
 describe("auth", function()
+  local saved_github_token, saved_gitlab_token
+  local saved_filereadable
   before_each(function()
+    saved_github_token = vim.env.GITHUB_TOKEN
+    saved_gitlab_token = vim.env.GITLAB_TOKEN
+    vim.env.GITHUB_TOKEN = nil
+    vim.env.GITLAB_TOKEN = nil
+    -- Prevent .codereview.nvim config file from leaking tokens into tests
+    saved_filereadable = vim.fn.filereadable
+    vim.fn.filereadable = function(path)
+      if path and path:match("%.codereview%.nvim$") then
+        return 0
+      end
+      return saved_filereadable(path)
+    end
     config.reset()
     auth.reset()
+  end)
+  after_each(function()
+    vim.env.GITHUB_TOKEN = saved_github_token
+    vim.env.GITLAB_TOKEN = saved_gitlab_token
+    vim.fn.filereadable = saved_filereadable
   end)
 
   describe("get_token", function()
