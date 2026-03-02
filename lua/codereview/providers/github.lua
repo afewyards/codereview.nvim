@@ -321,6 +321,21 @@ function M.get_commits(client, ctx, review)
   return commits
 end
 
+--- Fetch additions/deletions stats for each commit (mutates in place).
+function M.get_commit_stats(client, ctx, commits)
+  local headers, err = get_headers()
+  if not headers then return end
+  local owner, repo = parse_owner_repo(ctx)
+  for _, c in ipairs(commits) do
+    local url = string.format("%s/repos/%s/%s/commits/%s", ctx.base_url, owner, repo, c.sha)
+    local result = client.get_url(url, { headers = headers })
+    if result and result.data and result.data.stats then
+      c.additions = result.data.stats.additions
+      c.deletions = result.data.stats.deletions
+    end
+  end
+end
+
 --- Get file diffs for a single commit via the commits API.
 --- @param client table HTTP client module
 --- @param ctx table { base_url, project }

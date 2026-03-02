@@ -88,6 +88,8 @@ function M.normalize_commit(raw)
     title = raw.title or raw.message or "",
     author = raw.author_name or raw.author or "",
     created_at = raw.created_at or "",
+    additions = raw.additions,
+    deletions = raw.deletions,
   }
 end
 

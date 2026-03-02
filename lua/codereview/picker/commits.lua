@@ -36,11 +36,20 @@ function M.build_entries(commits, last_reviewed_sha)
 
   for _, c in ipairs(commits) do
     local short = c.short_sha or (c.sha or ""):sub(1, 8)
-    local display = string.format("  %s  %s  (%s)", short, c.title or "", c.author or "")
+    local stats = ""
+    if c.additions or c.deletions then
+      stats = string.format("+%d -%d", c.additions or 0, c.deletions or 0)
+    end
+    local display = stats ~= ""
+      and string.format("  %s  %s  %s  (%s)", short, c.title or "", stats, c.author or "")
+      or string.format("  %s  %s  (%s)", short, c.title or "", c.author or "")
     table.insert(entries, {
       type = "commit",
       sha = c.sha,
       title = c.title,
+      author = c.author,
+      additions = c.additions,
+      deletions = c.deletions,
       display = display,
       ordinal = (c.sha or "") .. " " .. (c.title or "") .. " " .. (c.author or ""),
     })
@@ -55,41 +64,18 @@ end
 function M.pick(state, on_select)
   local entries = M.build_entries(state.commits or {}, state.last_reviewed_sha)
 
+  local default_idx = 1
+  if state.commit_filter then
+    for i, e in ipairs(entries) do
+      if e.sha == state.commit_filter.to_sha then
+        default_idx = i
+        break
+      end
+    end
+  end
+
   local picker_mod = require("codereview.picker")
-  local adapter = picker_mod.detect()
-  if not adapter then
-    vim.notify("No picker available (telescope/fzf/snacks)", vim.log.levels.WARN)
-    return
-  end
-
-  local ok, pickers = pcall(require, "telescope.pickers")
-  if not ok then
-    vim.notify("Commit picker requires telescope", vim.log.levels.WARN)
-    return
-  end
-  local finders = require("telescope.finders")
-  local conf = require("telescope.config").values
-  local actions = require("telescope.actions")
-  local action_state = require("telescope.actions.state")
-
-  pickers.new({}, {
-    prompt_title = "Commits",
-    finder = finders.new_table({
-      results = entries,
-      entry_maker = function(entry)
-        return { value = entry, display = entry.display, ordinal = entry.ordinal }
-      end,
-    }),
-    sorter = conf.generic_sorter({}),
-    attach_mappings = function(prompt_bufnr)
-      actions.select_default:replace(function()
-        actions.close(prompt_bufnr)
-        local sel = action_state.get_selected_entry()
-        if sel then on_select(sel.value) end
-      end)
-      return true
-    end,
-  }):find()
+  picker_mod.pick_commits(entries, on_select, { default_selection_index = default_idx })
 end
 
 return M

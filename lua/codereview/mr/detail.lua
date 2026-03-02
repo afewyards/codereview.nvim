@@ -440,6 +440,9 @@ function M.open(entry)
     if prov.get_commits then
       local fetched, _ = prov.get_commits(client, pctx, rev)
       c = fetched or {}
+      if #c > 0 and prov.get_commit_stats then
+        prov.get_commit_stats(client, pctx, c)
+      end
     end
 
     return prov, pctx, rev, disc, f, c

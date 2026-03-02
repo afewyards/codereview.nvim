@@ -190,6 +190,83 @@ function M.pick_comments(entries, on_select, opts)
     :find()
 end
 
+function M.pick_commits(entries, on_select, opts)
+  local pickers = require("telescope.pickers")
+  local finders = require("telescope.finders")
+  local conf = require("telescope.config").values
+  local actions = require("telescope.actions")
+  local action_state = require("telescope.actions.state")
+  local entry_display = require("telescope.pickers.entry_display")
+
+  local has_stats = false
+  for _, e in ipairs(entries) do
+    if e.additions then has_stats = true; break end
+  end
+
+  local make_entry
+  if has_stats then
+    local max_title = 0
+    for _, e in ipairs(entries) do
+      if e.title and #e.title > max_title then max_title = #e.title end
+    end
+    local displayer = entry_display.create({
+      separator = " ",
+      items = {
+        { width = 2 },
+        { width = 8 },
+        { width = math.min(max_title, 50) },
+        { width = 7 },
+        { width = 7 },
+        { remaining = true },
+      },
+    })
+    make_entry = function(entry)
+      if entry.type ~= "commit" or not entry.additions then
+        return { value = entry, display = entry.display, ordinal = entry.ordinal }
+      end
+      return {
+        value = entry,
+        ordinal = entry.ordinal,
+        display = function()
+          return displayer({
+            { "  " },
+            { (entry.sha or ""):sub(1, 8), "TelescopeResultsIdentifier" },
+            { entry.title or "" },
+            { string.format("+%d", entry.additions), "diffAdded" },
+            { string.format("-%d", entry.deletions), "diffRemoved" },
+            { string.format("(%s)", entry.author or ""), "TelescopeResultsComment" },
+          })
+        end,
+      }
+    end
+  else
+    make_entry = function(entry)
+      return { value = entry, display = entry.display, ordinal = entry.ordinal }
+    end
+  end
+
+  pickers
+    .new({}, {
+      prompt_title = "Commits",
+      default_selection_index = opts and opts.default_selection_index or 1,
+      finder = finders.new_table({
+        results = entries,
+        entry_maker = make_entry,
+      }),
+      previewer = false,
+      sorter = conf.generic_sorter({}),
+      attach_mappings = function(prompt_bufnr)
+        actions.select_default:replace(function()
+          actions.close(prompt_bufnr)
+          local sel = action_state.get_selected_entry()
+          if sel then on_select(sel.value) end
+        end)
+        return true
+      end,
+    })
+    :find()
+end
+
 function M.pick_branches(branches, on_select)
   local pickers = require("telescope.pickers")
   local finders = require("telescope.finders")

@@ -130,6 +130,48 @@ function M.pick_comments(entries, on_select, _opts)
   })
 end
 
+function M.pick_commits(entries, on_select, opts)
+  local fzf = require("fzf-lua")
+  local utils = require("fzf-lua.utils")
+
+  local display_list = {}
+  for i, entry in ipairs(entries) do
+    local display
+    if entry.type == "commit" and entry.additions then
+      local short = (entry.sha or ""):sub(1, 8)
+      display = string.format("  %s  %s  %s %s  (%s)",
+        short, entry.title or "",
+        utils.ansi_codes.green(string.format("+%d", entry.additions)),
+        utils.ansi_codes.red(string.format("-%d", entry.deletions)),
+        entry.author or "")
+    else
+      display = entry.display
+    end
+    table.insert(display_list, string.format("%d\t%s", i, display))
+  end
+
+  local default_idx = opts and opts.default_selection_index or 1
+  local fzf_extra = {}
+  if default_idx > 1 then
+    fzf_extra["--sync"] = ""
+    fzf_extra["--bind"] = string.format("start:pos(%d)", default_idx)
+  end
+
+  fzf.fzf_exec(display_list, {
+    prompt = "Commits> ",
+    previewer = false,
+    fzf_opts = vim.tbl_extend("force", { ["--ansi"] = "", ["--with-nth"] = "2..", ["--delimiter"] = "\t" }, fzf_extra),
+    actions = {
+      ["default"] = function(selected)
+        if selected and selected[1] then
+          local idx = tonumber(selected[1]:match("^(%d+)\t"))
+          if idx and entries[idx] then on_select(entries[idx]) end
+        end
+      end,
+    },
+  })
+end
+
 function M.pick_branches(branches, on_select)
   local fzf = require("fzf-lua")
   fzf.fzf_exec(branches, {

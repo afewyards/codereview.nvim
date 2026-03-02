@@ -119,6 +119,49 @@ function M.pick_comments(entries, on_select, _opts)
 	})
 end
 
+function M.pick_commits(entries, on_select, opts)
+	local snacks = require("snacks")
+	local items = {}
+	for _, entry in ipairs(entries) do
+		table.insert(items, { text = entry.display, data = entry })
+	end
+
+	local default_idx = opts and opts.default_selection_index or 1
+
+	snacks.picker({
+		title = "Commits",
+		items = items,
+		layout = { preset = "select", preview = false },
+		on_show = function(picker)
+			if default_idx > 1 then
+				picker.list:view(default_idx)
+			end
+		end,
+		format = function(item)
+			local entry = item.data
+			if entry and entry.type == "commit" and entry.additions then
+				local short = (entry.sha or ""):sub(1, 8)
+				return {
+					{ "  " },
+					{ short .. " ", "Special" },
+					{ (entry.title or "") .. "  " },
+					{ string.format("+%d", entry.additions), "diffAdded" },
+					{ " " },
+					{ string.format("-%d", entry.deletions), "diffRemoved" },
+					{ string.format("  (%s)", entry.author or "") },
+				}
+			end
+			return { { item.text } }
+		end,
+		confirm = function(picker, item)
+			picker:close()
+			if item then
+				on_select(item.data)
+			end
+		end,
+	})
+end
+
 function M.pick_branches(branches, on_select)
 	local snacks = require("snacks")
 	local items = {}
@@ -129,7 +172,7 @@ function M.pick_branches(branches, on_select)
 	snacks.picker({
 		title = "Target Branch",
 		items = items,
-		preview = false,
+		layout = { preset = "select", preview = false },
 		format = function(item)
 			return { { item.text } }
 		end,
