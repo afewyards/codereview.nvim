@@ -161,11 +161,17 @@ describe("mr.comment", function()
       comment.open_input_popup = function(title, cb, opts)
         cb("draft text")
       end
+      local providers = require("codereview.providers")
+      local orig_detect = providers.detect
+      providers.detect = function()
+        return { name = "gitlab" }, {}, nil
+      end
       comment.create_comment({}, {
         title = "Draft Comment",
         api_fn = function(provider, client, ctx, mr, text) return true, nil end,
         on_success = function(text) success_called_with = text end,
       })
+      providers.detect = orig_detect
       comment.open_input_popup = orig_popup
       assert.equals("draft text", success_called_with)
     end)
