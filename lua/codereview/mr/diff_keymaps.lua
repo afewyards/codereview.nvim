@@ -118,7 +118,7 @@ function M.setup_keymaps(state, layout, active_states)
 
   -- Add a draft comment to local state and re-render
   local function add_local_draft(new_path, new_line, start_line)
-    return function(text)
+    return function(text, result)
       local disc = {
         notes = {{
           author = "You (draft)",
@@ -131,6 +131,7 @@ function M.setup_keymaps(state, layout, active_states)
           },
         }},
         is_draft = true,
+        server_draft_id = result and result.id or nil,
       }
       if not state.local_drafts then state.local_drafts = {} end
       table.insert(state.local_drafts, disc)
