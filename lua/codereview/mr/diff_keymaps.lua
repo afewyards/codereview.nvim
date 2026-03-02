@@ -651,7 +651,7 @@ function M.setup_keymaps(state, layout, active_states)
             if not notes[i].system then
               thread_height = thread_height + 1 -- separator (│)
               thread_height = thread_height + 1 -- reply header (│  ↪ @author)
-              thread_height = thread_height + #wrap_text(notes[i].body, 58)
+              thread_height = thread_height + #wrap_text(notes[i].body, config.get().diff.comment_width - 2)
             end
           end
           thread_height = thread_height + 1 -- footer (└ r:reply...)
