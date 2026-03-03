@@ -31,8 +31,13 @@ describe("bulk_publish", function()
     package.loaded["codereview.providers"] = {
       detect = function()
         return {
-          publish_review = function(_, _, _, opts) captured_opts = opts return {}, nil end,
-        }, { base_url = "test" }, nil
+          publish_review = function(_, _, _, opts)
+            captured_opts = opts
+            return {}, nil
+          end,
+        },
+          { base_url = "test" },
+          nil
       end,
     }
     package.loaded["codereview.api.client"] = {}

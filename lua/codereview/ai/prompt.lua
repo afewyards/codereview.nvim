@@ -5,12 +5,18 @@ local severity_levels = { "info", "suggestion", "warning", "error" }
 local function severity_instruction()
   local cfg = require("codereview.config").get()
   local level = cfg.ai.review_level or "info"
-  if level == "info" then return nil end
+  if level == "info" then
+    return nil
+  end
   local allowed = {}
   local found = false
   for _, sev in ipairs(severity_levels) do
-    if sev == level then found = true end
-    if found then table.insert(allowed, '"' .. sev .. '"') end
+    if sev == level then
+      found = true
+    end
+    if found then
+      table.insert(allowed, '"' .. sev .. '"')
+    end
   end
   return "Only report issues with severity " .. table.concat(allowed, ", ") .. ". Do NOT include lower-severity items."
 end
@@ -25,7 +31,9 @@ end
 --- @param diff_text string  Raw unified diff text
 --- @return string           Annotated diff text
 function M.annotate_diff_with_lines(diff_text)
-  if not diff_text or diff_text == "" then return diff_text or "" end
+  if not diff_text or diff_text == "" then
+    return diff_text or ""
+  end
 
   -- Split into lines, preserving trailing newline by tracking it separately
   local trailing_newline = diff_text:sub(-1) == "\n"
@@ -48,10 +56,14 @@ function M.annotate_diff_with_lines(diff_text)
     elseif in_hunk then
       local prefix = line:sub(1, 1)
       if prefix == "+" then
-        if tmp_new_line > max_new_line then max_new_line = tmp_new_line end
+        if tmp_new_line > max_new_line then
+          max_new_line = tmp_new_line
+        end
         tmp_new_line = tmp_new_line + 1
       elseif prefix == " " or line == "" then
-        if tmp_new_line > max_new_line then max_new_line = tmp_new_line end
+        if tmp_new_line > max_new_line then
+          max_new_line = tmp_new_line
+        end
         tmp_new_line = tmp_new_line + 1
       end
       -- "-" and "\" lines don't increment new_line
@@ -106,7 +118,9 @@ function M.annotate_diff_with_lines(diff_text)
   end
 
   local out = table.concat(result, "\n")
-  if trailing_newline then out = out .. "\n" end
+  if trailing_newline then
+    out = out .. "\n"
+  end
   return out
 end
 
@@ -114,7 +128,9 @@ end
 --- @param diff_text string|nil  Raw unified diff text
 --- @return table<number, true>  Set of line numbers with additions
 function M.extract_changed_lines(diff_text)
-  if not diff_text or diff_text == "" then return {} end
+  if not diff_text or diff_text == "" then
+    return {}
+  end
   local changed = {}
   local in_hunk = false
   local new_line = 0
@@ -144,7 +160,9 @@ end
 --- @param diffs table[]        File diff objects (each with new_path/old_path and diff fields)
 --- @return table[]             Suggestions on changed lines only
 function M.filter_unchanged_lines(suggestions, diffs)
-  if not suggestions or not diffs then return suggestions or {} end
+  if not suggestions or not diffs then
+    return suggestions or {}
+  end
   local log = require("codereview.log")
   local changed_map = {}
   for _, file in ipairs(diffs) do
@@ -188,26 +206,43 @@ function M.build_review_prompt(review, diffs)
 
   table.insert(parts, "## Instructions")
   table.insert(parts, "")
-  table.insert(parts, "Each diff line is prefixed with its line number (e.g., L38:). Use the EXACT number from the L-prefix for the line field.")
+  table.insert(
+    parts,
+    "Each diff line is prefixed with its line number (e.g., L38:). Use the EXACT number from the L-prefix for the line field."
+  )
   table.insert(parts, "Review this MR. Output a JSON array in a ```json code block.")
-  table.insert(parts, 'Each item: {"file": "path", "line": <number from L-prefix>, "code": "<exact content of that line>", "severity": "error"|"warning"|"info"|"suggestion", "comment": "text"}')
-  table.insert(parts, 'The "code" field must contain the trimmed source code from the line you are commenting on (without the diff +/- prefix).')
+  table.insert(
+    parts,
+    'Each item: {"file": "path", "line": <number from L-prefix>, "code": "<exact content of that line>", "severity": "error"|"warning"|"info"|"suggestion", "comment": "text"}'
+  )
+  table.insert(
+    parts,
+    'The "code" field must contain the trimmed source code from the line you are commenting on (without the diff +/- prefix).'
+  )
   table.insert(parts, 'Use \\n inside "comment" strings for line breaks (e.g. "Problem.\\n\\nSuggested fix:").')
   table.insert(parts, "If no issues, output `[]`.")
-  table.insert(parts, "ONLY comment on lines that are actual changes: lines prefixed with + (added) or - (removed) in the diff. Context lines (no +/- prefix) are for understanding only — NEVER comment on them.")
+  table.insert(
+    parts,
+    "ONLY comment on lines that are actual changes: lines prefixed with + (added) or - (removed) in the diff. Context lines (no +/- prefix) are for understanding only — NEVER comment on them."
+  )
   table.insert(parts, "Focus on: bugs, security, error handling, edge cases, naming, clarity.")
   table.insert(parts, "Do NOT comment on style or formatting.")
   local sev_instr = severity_instruction()
   if sev_instr then
     table.insert(parts, sev_instr)
   end
-  table.insert(parts, "IMPORTANT: Find the L-prefix on the exact code line your comment applies to and use that number. Do NOT guess or count lines yourself.")
+  table.insert(
+    parts,
+    "IMPORTANT: Find the L-prefix on the exact code line your comment applies to and use that number. Do NOT guess or count lines yourself."
+  )
 
   return table.concat(parts, "\n")
 end
 
 function M.parse_review_output(output)
-  if not output or output == "" then return {} end
+  if not output or output == "" then
+    return {}
+  end
 
   local log = require("codereview.log")
 
@@ -234,8 +269,15 @@ function M.parse_review_output(output)
   for _, item in ipairs(data) do
     if type(item) == "table" and item.file and item.line and item.comment then
       local has_newlines = item.comment:find("\n") ~= nil
-      log.debug(string.format("AI parse: %s:%s comment=%d chars, newlines=%s",
-        item.file, tostring(item.line), #item.comment, tostring(has_newlines)))
+      log.debug(
+        string.format(
+          "AI parse: %s:%s comment=%d chars, newlines=%s",
+          item.file,
+          tostring(item.line),
+          #item.comment,
+          tostring(has_newlines)
+        )
+      )
       table.insert(suggestions, {
         file = item.file,
         line = tonumber(item.line),
@@ -346,23 +388,40 @@ function M.build_file_review_prompt(review, file, summaries, content)
   table.insert(parts, "")
   table.insert(parts, "## Instructions")
   table.insert(parts, "")
-  table.insert(parts, "Each diff line is prefixed with its line number (e.g., L38:). Use the EXACT number from the L-prefix for the line field.")
+  table.insert(
+    parts,
+    "Each diff line is prefixed with its line number (e.g., L38:). Use the EXACT number from the L-prefix for the line field."
+  )
   table.insert(parts, "Review this file. Output a JSON array in a ```json code block.")
-  table.insert(parts, 'Each item: {"file": "' .. path .. '", "line": <number from L-prefix>, "code": "<exact content of that line>", "severity": "error"|"warning"|"info"|"suggestion", "comment": "text"}')
-  table.insert(parts, 'The "code" field must contain the trimmed source code from the line you are commenting on (without the diff +/- prefix).')
+  table.insert(
+    parts,
+    'Each item: {"file": "'
+      .. path
+      .. '", "line": <number from L-prefix>, "code": "<exact content of that line>", "severity": "error"|"warning"|"info"|"suggestion", "comment": "text"}'
+  )
+  table.insert(
+    parts,
+    'The "code" field must contain the trimmed source code from the line you are commenting on (without the diff +/- prefix).'
+  )
   table.insert(parts, 'Use \\n inside "comment" strings for line breaks.')
   table.insert(parts, "If no issues, output `[]`.")
   if content and content ~= "" then
     table.insert(parts, "The full file content is provided above for understanding only.")
   end
-  table.insert(parts, "ONLY comment on lines that are actual changes: lines prefixed with + (added) or - (removed) in the diff. Context lines (no +/- prefix) are for understanding only — NEVER comment on them.")
+  table.insert(
+    parts,
+    "ONLY comment on lines that are actual changes: lines prefixed with + (added) or - (removed) in the diff. Context lines (no +/- prefix) are for understanding only — NEVER comment on them."
+  )
   table.insert(parts, "Focus on: bugs, security, error handling, edge cases, naming, clarity.")
   table.insert(parts, "Do NOT comment on style or formatting.")
   local sev_instr = severity_instruction()
   if sev_instr then
     table.insert(parts, sev_instr)
   end
-  table.insert(parts, "IMPORTANT: Find the L-prefix on the exact code line your comment applies to and use that number. Do NOT guess or count lines yourself.")
+  table.insert(
+    parts,
+    "IMPORTANT: Find the L-prefix on the exact code line your comment applies to and use that number. Do NOT guess or count lines yourself."
+  )
 
   return table.concat(parts, "\n")
 end
@@ -399,16 +458,22 @@ function M.build_summary_prompt(review, diffs)
 end
 
 function M.parse_summary_output(output)
-  if not output or output == "" then return {} end
+  if not output or output == "" then
+    return {}
+  end
 
   local json_str = output:match("```json%s*\n(.+)\n```")
   if not json_str then
     json_str = output:match("%{.+%}")
   end
-  if not json_str then return {} end
+  if not json_str then
+    return {}
+  end
 
   local ok, data = pcall(vim.json.decode, json_str)
-  if not ok or type(data) ~= "table" then return {} end
+  if not ok or type(data) ~= "table" then
+    return {}
+  end
 
   return data
 end

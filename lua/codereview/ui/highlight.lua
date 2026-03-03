@@ -14,11 +14,27 @@ function M.setup()
   vim.api.nvim_set_hl(0, "CodeReviewCommentStrikethrough", { bg = "#2a2a3a", strikethrough = true, default = true })
   vim.api.nvim_set_hl(0, "CodeReviewCommentLink", { bg = "#2a2a3a", fg = "#7aa2f7", underline = true, default = true })
   -- Inline markdown – unresolved
-  vim.api.nvim_set_hl(0, "CodeReviewCommentBoldUnresolved", { bg = "#3a2a2a", fg = "#ff9966", bold = true, default = true })
-  vim.api.nvim_set_hl(0, "CodeReviewCommentItalicUnresolved", { bg = "#3a2a2a", fg = "#ff9966", italic = true, default = true })
+  vim.api.nvim_set_hl(
+    0,
+    "CodeReviewCommentBoldUnresolved",
+    { bg = "#3a2a2a", fg = "#ff9966", bold = true, default = true }
+  )
+  vim.api.nvim_set_hl(
+    0,
+    "CodeReviewCommentItalicUnresolved",
+    { bg = "#3a2a2a", fg = "#ff9966", italic = true, default = true }
+  )
   vim.api.nvim_set_hl(0, "CodeReviewCommentCodeUnresolved", { bg = "#1e2030", fg = "#a9b1d6", default = true })
-  vim.api.nvim_set_hl(0, "CodeReviewCommentStrikethroughUnresolved", { bg = "#3a2a2a", fg = "#ff9966", strikethrough = true, default = true })
-  vim.api.nvim_set_hl(0, "CodeReviewCommentLinkUnresolved", { bg = "#3a2a2a", fg = "#ff9966", underline = true, default = true })
+  vim.api.nvim_set_hl(
+    0,
+    "CodeReviewCommentStrikethroughUnresolved",
+    { bg = "#3a2a2a", fg = "#ff9966", strikethrough = true, default = true }
+  )
+  vim.api.nvim_set_hl(
+    0,
+    "CodeReviewCommentLinkUnresolved",
+    { bg = "#3a2a2a", fg = "#ff9966", underline = true, default = true }
+  )
   vim.api.nvim_set_hl(0, "CodeReviewFileChanged", { fg = "#e0af68", default = true })
   vim.api.nvim_set_hl(0, "CodeReviewFileAdded", { fg = "#9ece6a", default = true })
   vim.api.nvim_set_hl(0, "CodeReviewFileDeleted", { fg = "#f7768e", default = true })
@@ -54,8 +70,16 @@ function M.setup()
   vim.api.nvim_set_hl(0, "CodeReviewCommentBoldSelectedNote", { bg = "#2a3a4a", bold = true, default = true })
   vim.api.nvim_set_hl(0, "CodeReviewCommentItalicSelectedNote", { bg = "#2a3a4a", italic = true, default = true })
   vim.api.nvim_set_hl(0, "CodeReviewCommentCodeSelectedNote", { bg = "#1e2030", fg = "#a9b1d6", default = true })
-  vim.api.nvim_set_hl(0, "CodeReviewCommentStrikethroughSelectedNote", { bg = "#2a3a4a", strikethrough = true, default = true })
-  vim.api.nvim_set_hl(0, "CodeReviewCommentLinkSelectedNote", { bg = "#2a3a4a", fg = "#7aa2f7", underline = true, default = true })
+  vim.api.nvim_set_hl(
+    0,
+    "CodeReviewCommentStrikethroughSelectedNote",
+    { bg = "#2a3a4a", strikethrough = true, default = true }
+  )
+  vim.api.nvim_set_hl(
+    0,
+    "CodeReviewCommentLinkSelectedNote",
+    { bg = "#2a3a4a", fg = "#7aa2f7", underline = true, default = true }
+  )
   -- Block-level markdown
   vim.api.nvim_set_hl(0, "CodeReviewMdH1", { fg = "#c8d3f5", bold = true, default = true })
   vim.api.nvim_set_hl(0, "CodeReviewMdH2", { fg = "#c8d3f5", bold = true, default = true })

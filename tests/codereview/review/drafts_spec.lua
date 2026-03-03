@@ -4,12 +4,16 @@ local _mock_client = {}
 local _mock_ctx = { base_url = "https://example.com", project = "owner/repo" }
 
 package.loaded["codereview.providers"] = {
-  detect = function() return _mock_provider, _mock_ctx, nil end,
+  detect = function()
+    return _mock_provider, _mock_ctx, nil
+  end,
 }
 package.loaded["codereview.api.client"] = _mock_client
 package.loaded["codereview.review.session"] = {
   start = function() end,
-  get = function() return { active = false } end,
+  get = function()
+    return { active = false }
+  end,
 }
 
 -- Ensure vim.ui exists for check_and_prompt tests
@@ -52,7 +56,11 @@ describe("review.drafts", function()
         name = "gitlab",
         get_draft_notes = function()
           return {
-            { notes = {{ author = "You (draft)", body = "fix", position = { new_path = "a.lua", new_line = 1 } }}, is_draft = true, server_draft_id = 1 },
+            {
+              notes = { { author = "You (draft)", body = "fix", position = { new_path = "a.lua", new_line = 1 } } },
+              is_draft = true,
+              server_draft_id = 1,
+            },
           }
         end,
       }
@@ -63,7 +71,9 @@ describe("review.drafts", function()
     it("returns empty table on provider error", function()
       _mock_provider = {
         name = "gitlab",
-        get_draft_notes = function() return nil, "auth error" end,
+        get_draft_notes = function()
+          return nil, "auth error"
+        end,
       }
       local result = drafts.fetch_server_drafts(_mock_provider, _mock_client, _mock_ctx, { id = 1 })
       assert.equal(0, #result)
@@ -106,7 +116,9 @@ describe("review.drafts", function()
     it("calls on_done(nil) when no drafts exist", function()
       _mock_provider = {
         name = "gitlab",
-        get_draft_notes = function() return {} end,
+        get_draft_notes = function()
+          return {}
+        end,
       }
       local result_arg = "not_called"
       drafts.check_and_prompt(_mock_provider, _mock_client, _mock_ctx, { id = 1 }, function(d)
@@ -117,15 +129,19 @@ describe("review.drafts", function()
 
     it("calls on_done with drafts when user selects Resume", function()
       local server_drafts = {
-        { notes = {{ author = "You (draft)", body = "fix" }}, is_draft = true, server_draft_id = 1 },
+        { notes = { { author = "You (draft)", body = "fix" } }, is_draft = true, server_draft_id = 1 },
       }
       _mock_provider = {
         name = "gitlab",
-        get_draft_notes = function() return server_drafts end,
+        get_draft_notes = function()
+          return server_drafts
+        end,
       }
       -- Stub vim.ui.select to auto-choose "Resume"
       local orig_select = vim.ui.select
-      vim.ui.select = function(items, opts, on_choice) on_choice("Resume") end
+      vim.ui.select = function(items, opts, on_choice)
+        on_choice("Resume")
+      end
 
       local result_arg
       drafts.check_and_prompt(_mock_provider, _mock_client, _mock_ctx, { id = 1 }, function(d)
@@ -142,12 +158,16 @@ describe("review.drafts", function()
       _mock_provider = {
         name = "gitlab",
         get_draft_notes = function()
-          return { { server_draft_id = 10, is_draft = true, notes = {{}} } }
+          return { { server_draft_id = 10, is_draft = true, notes = { {} } } }
         end,
-        delete_draft_note = function() discarded = true end,
+        delete_draft_note = function()
+          discarded = true
+        end,
       }
       local orig_select = vim.ui.select
-      vim.ui.select = function(items, opts, on_choice) on_choice("Discard") end
+      vim.ui.select = function(items, opts, on_choice)
+        on_choice("Discard")
+      end
 
       local result_arg = "not_called"
       drafts.check_and_prompt(_mock_provider, _mock_client, _mock_ctx, { id = 1 }, function(d)
@@ -163,11 +183,13 @@ describe("review.drafts", function()
       _mock_provider = {
         name = "gitlab",
         get_draft_notes = function()
-          return { { server_draft_id = 10, is_draft = true, notes = {{}} } }
+          return { { server_draft_id = 10, is_draft = true, notes = { {} } } }
         end,
       }
       local orig_select = vim.ui.select
-      vim.ui.select = function(items, opts, on_choice) on_choice(nil) end
+      vim.ui.select = function(items, opts, on_choice)
+        on_choice(nil)
+      end
 
       local result_arg = "not_called"
       drafts.check_and_prompt(_mock_provider, _mock_client, _mock_ctx, { id = 1 }, function(d)

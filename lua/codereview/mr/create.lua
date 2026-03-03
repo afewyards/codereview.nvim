@@ -48,7 +48,9 @@ function M.ensure_pushed(branch)
   if not has_upstream then
     vim.notify("Pushing " .. branch .. " to origin...", vim.log.levels.INFO)
     vim.fn.systemlist({ "git", "push", "--set-upstream", "origin", branch })
-    if vim.v.shell_error ~= 0 then return false, "Failed to push branch" end
+    if vim.v.shell_error ~= 0 then
+      return false, "Failed to push branch"
+    end
     return true
   end
   local head = vim.fn.systemlist({ "git", "rev-parse", "HEAD" })
@@ -58,20 +60,26 @@ function M.ensure_pushed(branch)
   end
   vim.notify("Pushing " .. branch .. "...", vim.log.levels.INFO)
   vim.fn.systemlist({ "git", "push" })
-  if vim.v.shell_error ~= 0 then return false, "Failed to push branch" end
+  if vim.v.shell_error ~= 0 then
+    return false, "Failed to push branch"
+  end
   return true
 end
 
 function M.get_current_branch()
   local result = vim.fn.systemlist({ "git", "branch", "--show-current" })
-  if vim.v.shell_error ~= 0 or #result == 0 then return nil end
+  if vim.v.shell_error ~= 0 or #result == 0 then
+    return nil
+  end
   return vim.trim(result[1])
 end
 
 function M.get_branch_diff(target)
   target = target or "main"
   local result = vim.fn.systemlist({ "git", "diff", target .. "...HEAD" })
-  if vim.v.shell_error ~= 0 then return nil end
+  if vim.v.shell_error ~= 0 then
+    return nil
+  end
   return table.concat(result, "\n")
 end
 
@@ -79,18 +87,24 @@ function M.detect_target_branch()
   local result = vim.fn.systemlist({ "git", "symbolic-ref", "refs/remotes/origin/HEAD" })
   if vim.v.shell_error == 0 and #result > 0 then
     local branch = result[1]:match("refs/remotes/origin/(.+)")
-    if branch then return branch end
+    if branch then
+      return branch
+    end
   end
   return "main"
 end
 
 function M.fetch_remote_branches()
   local result = vim.fn.systemlist({ "git", "ls-remote", "--heads", "origin" })
-  if vim.v.shell_error ~= 0 then return {} end
+  if vim.v.shell_error ~= 0 then
+    return {}
+  end
   local branches = {}
   for _, line in ipairs(result) do
     local branch = line:match("\trefs/heads/(.+)$")
-    if branch then table.insert(branches, branch) end
+    if branch then
+      table.insert(branches, branch)
+    end
   end
   return branches
 end

@@ -6,23 +6,23 @@ describe("mr.sidebar_help", function()
     package.loaded["codereview.keymaps"] = {
       get = function(action)
         local bindings = {
-          next_file            = "]f",
-          prev_file            = "[f",
-          toggle_full_file     = "<C-f>",
-          toggle_scroll_mode   = "<C-a>",
-          create_comment       = "cc",
+          next_file = "]f",
+          prev_file = "[f",
+          toggle_full_file = "<C-f>",
+          toggle_scroll_mode = "<C-a>",
+          create_comment = "cc",
           create_range_comment = "cc",
-          reply                = "r",
-          toggle_resolve       = "gt",
-          accept_suggestion    = "a",
-          dismiss_suggestion   = "x",
-          submit               = "S",
-          approve              = "a",
-          open_in_browser      = "o",
-          ai_review            = "A",
-          refresh              = "R",
-          quit                 = "Q",
-          pick_files           = "<leader>ff",
+          reply = "r",
+          toggle_resolve = "gt",
+          accept_suggestion = "a",
+          dismiss_suggestion = "x",
+          submit = "S",
+          approve = "a",
+          open_in_browser = "o",
+          ai_review = "A",
+          refresh = "R",
+          quit = "Q",
+          pick_files = "<leader>ff",
         }
         return bindings[action]
       end,
@@ -80,8 +80,8 @@ describe("mr.sidebar_help", function()
     it("includes action descriptions", function()
       local lines = sidebar_help.build_lines()
       local joined = table.concat(lines, "\n")
-      assert.truthy(joined:find("Next file"),  "expected 'Next file' description")
-      assert.truthy(joined:find("Quit"),        "expected 'Quit' description")
+      assert.truthy(joined:find("Next file"), "expected 'Next file' description")
+      assert.truthy(joined:find("Quit"), "expected 'Quit' description")
       assert.truthy(joined:find("New comment"), "expected 'New comment' description")
     end)
 
@@ -94,7 +94,9 @@ describe("mr.sidebar_help", function()
 
     it("shows (disabled) for nil keys", function()
       package.loaded["codereview.keymaps"] = {
-        get = function() return nil end,
+        get = function()
+          return nil
+        end,
       }
       package.loaded["codereview.mr.sidebar_help"] = nil
       local help = require("codereview.mr.sidebar_help")
@@ -116,8 +118,13 @@ describe("mr.sidebar_help", function()
         captured_cfg = cfg
         -- use a real window but with minimal config so headless tests work
         return orig_open_win(buf, false, {
-          relative = "editor", width = 60, height = 20, row = 1, col = 1,
-          style = "minimal", border = "rounded",
+          relative = "editor",
+          width = 60,
+          height = 20,
+          row = 1,
+          col = 1,
+          style = "minimal",
+          border = "rounded",
         })
       end
     end)
@@ -159,7 +166,10 @@ describe("mr.sidebar_help", function()
       local keymaps = vim.api.nvim_buf_get_keymap(handle.buf, "n")
       local has_q = false
       for _, km in ipairs(keymaps) do
-        if km.lhs == "q" then has_q = true; break end
+        if km.lhs == "q" then
+          has_q = true
+          break
+        end
       end
       assert.is_true(has_q, "expected 'q' keymap to close the float")
       vim.api.nvim_win_close(handle.win, true)
@@ -170,7 +180,10 @@ describe("mr.sidebar_help", function()
       local keymaps = vim.api.nvim_buf_get_keymap(handle.buf, "n")
       local has_esc = false
       for _, km in ipairs(keymaps) do
-        if km.lhs == "<Esc>" then has_esc = true; break end
+        if km.lhs == "<Esc>" then
+          has_esc = true
+          break
+        end
       end
       assert.is_true(has_esc, "expected '<Esc>' keymap to close the float")
       vim.api.nvim_win_close(handle.win, true)

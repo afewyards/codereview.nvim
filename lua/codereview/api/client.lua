@@ -28,7 +28,9 @@ end
 
 function M.parse_next_url(headers)
   local link = headers and (headers["link"] or headers["Link"])
-  if not link then return nil end
+  if not link then
+    return nil
+  end
   return link:match('<([^>]+)>%s*;%s*rel="next"')
 end
 
@@ -192,24 +194,46 @@ function M.async_request(method, base_url, path, opts)
 
   if response.status < 200 or response.status >= 300 then
     local err = string.format("HTTP %d: %s", response.status, response.body or "")
-    log.error(string.format("ASYNC RES %d %s %s — %s", response.status, method:upper(), params.url, response.body or ""))
+    log.error(
+      string.format("ASYNC RES %d %s %s — %s", response.status, method:upper(), params.url, response.body or "")
+    )
     return nil, err
   end
 
   return process_response(response)
 end
 
-function M.get(base_url, path, opts) return M.request("get", base_url, path, opts) end
-function M.post(base_url, path, opts) return M.request("post", base_url, path, opts) end
-function M.put(base_url, path, opts) return M.request("put", base_url, path, opts) end
-function M.delete(base_url, path, opts) return M.request("delete", base_url, path, opts) end
+function M.get(base_url, path, opts)
+  return M.request("get", base_url, path, opts)
+end
+function M.post(base_url, path, opts)
+  return M.request("post", base_url, path, opts)
+end
+function M.put(base_url, path, opts)
+  return M.request("put", base_url, path, opts)
+end
+function M.delete(base_url, path, opts)
+  return M.request("delete", base_url, path, opts)
+end
 
-function M.async_get(base_url, path, opts) return M.async_request("get", base_url, path, opts) end
-function M.async_post(base_url, path, opts) return M.async_request("post", base_url, path, opts) end
-function M.async_put(base_url, path, opts) return M.async_request("put", base_url, path, opts) end
-function M.async_delete(base_url, path, opts) return M.async_request("delete", base_url, path, opts) end
-function M.patch(base_url, path, opts) return M.request("patch", base_url, path, opts) end
-function M.async_patch(base_url, path, opts) return M.async_request("patch", base_url, path, opts) end
+function M.async_get(base_url, path, opts)
+  return M.async_request("get", base_url, path, opts)
+end
+function M.async_post(base_url, path, opts)
+  return M.async_request("post", base_url, path, opts)
+end
+function M.async_put(base_url, path, opts)
+  return M.async_request("put", base_url, path, opts)
+end
+function M.async_delete(base_url, path, opts)
+  return M.async_request("delete", base_url, path, opts)
+end
+function M.patch(base_url, path, opts)
+  return M.request("patch", base_url, path, opts)
+end
+function M.async_patch(base_url, path, opts)
+  return M.async_request("patch", base_url, path, opts)
+end
 
 function M.get_url(full_url, opts)
   opts = opts or {}

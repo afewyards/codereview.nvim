@@ -8,9 +8,13 @@ local diff_state_mod = require("codereview.mr.diff_state")
 local M = {}
 
 function M.format_time(iso_str)
-  if not iso_str then return "" end
+  if not iso_str then
+    return ""
+  end
   local y, mo, d, h, mi = iso_str:match("(%d+)-(%d+)-(%d+)T(%d+):(%d+)")
-  if not y then return iso_str end
+  if not y then
+    return iso_str
+  end
   return string.format("%s-%s-%s %s:%s", y, mo, d, h, mi)
 end
 
@@ -20,7 +24,7 @@ function M.build_header_lines(review, width)
   local lines = {}
 
   -- ── Header card ─────────────────────────────────────────────────
-  local inner_w = width - 2  -- inside │ ... │
+  local inner_w = width - 2 -- inside │ ... │
   table.insert(lines, "╭" .. string.rep("─", inner_w) .. "╮")
   table.insert(highlights, { #lines - 1, 0, #lines[#lines], "CodeReviewHeaderCardBorder" })
 
@@ -28,9 +32,11 @@ function M.build_header_lines(review, width)
   local id_str = "#" .. review.id
   local state_str = review.state or "unknown"
   local sw = vim.fn.strdisplaywidth
-  local title_max = inner_w - #id_str - #state_str - 6  -- 3×2-char pads: "  id  title...state  "
+  local title_max = inner_w - #id_str - #state_str - 6 -- 3×2-char pads: "  id  title...state  "
   local title = review.title or ""
-  if sw(title) > title_max then title = title:sub(1, title_max - 1) .. "…" end
+  if sw(title) > title_max then
+    title = title:sub(1, title_max - 1) .. "…"
+  end
   local gap1 = math.max(1, inner_w - 6 - #id_str - sw(title) - #state_str)
   local line1 = "│  " .. id_str .. "  " .. title .. string.rep(" ", gap1) .. state_str .. "  │"
   local row1 = #lines
@@ -42,8 +48,12 @@ function M.build_header_lines(review, width)
   local title_start = id_start + #id_str + 2
   table.insert(highlights, { row1, title_start, title_start + #title, "CodeReviewHeaderCardTitle" })
   -- Find state position by searching from end
-  local state_pos = #line1 - 5 - #state_str  -- 5 = "  │" (3 bytes for │ + 2 spaces)
-  local state_hl = ({ opened = "CodeReviewStateOpened", merged = "CodeReviewStateMerged", closed = "CodeReviewStateClosed" })[review.state] or "CodeReviewThreadMeta"
+  local state_pos = #line1 - 5 - #state_str -- 5 = "  │" (3 bytes for │ + 2 spaces)
+  local state_hl = ({
+    opened = "CodeReviewStateOpened",
+    merged = "CodeReviewStateMerged",
+    closed = "CodeReviewStateClosed",
+  })[review.state] or "CodeReviewThreadMeta"
   table.insert(highlights, { row1, state_pos, state_pos + #state_str, state_hl })
 
   -- Line 2: │  @author  source → target   CI  1/2 approved │
@@ -71,7 +81,7 @@ function M.build_header_lines(review, width)
   local a_start = 3
   table.insert(highlights, { row2, a_start, a_start + #author_str, "CodeReviewCommentAuthor" })
   local b_start = a_start + #author_str + 2
-  table.insert(highlights, { row2, b_start, b_start + #branch_str + 2, "CodeReviewHeaderBranch" })  -- +2 for → (3 bytes but visually 1 char, offset compensates)
+  table.insert(highlights, { row2, b_start, b_start + #branch_str + 2, "CodeReviewHeaderBranch" }) -- +2 for → (3 bytes but visually 1 char, offset compensates)
 
   -- Bottom border
   table.insert(lines, "╰" .. string.rep("─", inner_w) .. "╯")
@@ -85,7 +95,8 @@ function M.build_header_lines(review, width)
     table.insert(lines, "## Description")
     table.insert(highlights, { desc_header_row, 0, 14, "CodeReviewMdH2" })
     local desc_start = #lines
-    block_result = require("codereview.ui.markdown").parse_blocks(review.description, "CodeReviewComment", { width = width })
+    block_result =
+      require("codereview.ui.markdown").parse_blocks(review.description, "CodeReviewComment", { width = width })
     for _, bl in ipairs(block_result.lines) do
       table.insert(lines, "  " .. bl)
     end
@@ -132,7 +143,9 @@ local function wrap_text(text, width)
           line = line == "" and word or (line .. " " .. word)
         end
       end
-      if line ~= "" then table.insert(result, line) end
+      if line ~= "" then
+        table.insert(result, line)
+      end
     end
   end
   return result
@@ -141,12 +154,12 @@ end
 local format_time_short = tvl.format_time_relative
 
 local ACTIVITY_ICONS = {
-  { pattern = "assigned",         icon = "\xef\x90\x95", hl = "CodeReviewActivityAssign" },
+  { pattern = "assigned", icon = "\xef\x90\x95", hl = "CodeReviewActivityAssign" },
   { pattern = "added %d+ commit", icon = "\xef\x90\x97", hl = "CodeReviewActivityCommit" },
-  { pattern = "review",           icon = "\xef\x90\x9f", hl = "CodeReviewActivityComment" },
-  { pattern = "resolved",         icon = "\xef\x90\xae", hl = "CodeReviewActivityResolved" },
-  { pattern = "approved",         icon = "\xef\x90\x9d", hl = "CodeReviewActivityApproved" },
-  { pattern = "merged",           icon = "\xef\x90\x99", hl = "CodeReviewActivityMerged" },
+  { pattern = "review", icon = "\xef\x90\x9f", hl = "CodeReviewActivityComment" },
+  { pattern = "resolved", icon = "\xef\x90\xae", hl = "CodeReviewActivityResolved" },
+  { pattern = "approved", icon = "\xef\x90\x9d", hl = "CodeReviewActivityApproved" },
+  { pattern = "merged", icon = "\xef\x90\x99", hl = "CodeReviewActivityMerged" },
 }
 local FALLBACK_ICON = { icon = "\xef\x91\x84", hl = "CodeReviewActivityGeneric" }
 
@@ -172,7 +185,9 @@ local function render_thread(result, disc, width, reply_key, resolve_key, is_las
   local highlights = result.highlights
   local row_map = result.row_map
   local first_note = disc.notes and disc.notes[1]
-  if not first_note then return end
+  if not first_note then
+    return
+  end
 
   local resolved = disc.resolved
   if resolved == nil then
@@ -207,17 +222,25 @@ local function render_thread(result, disc, width, reply_key, resolve_key, is_las
   row_map[thread_start_row] = { type = "thread_start", discussion = disc }
 
   -- Header highlights
-  table.insert(highlights, {thread_start_row, 0, #author_str, "CodeReviewCommentAuthor"})
+  table.insert(highlights, { thread_start_row, 0, #author_str, "CodeReviewCommentAuthor" })
   if #header_meta > 0 then
-    table.insert(highlights, {thread_start_row, #author_str, #author_str + #header_meta, "CodeReviewThreadMeta"})
+    table.insert(highlights, { thread_start_row, #author_str, #author_str + #header_meta, "CodeReviewThreadMeta" })
   end
   if #status_str > 0 then
     local dot_start = #left_part + gap
-    table.insert(highlights, {thread_start_row, dot_start, dot_start + #status_dot,
-      resolved and "CodeReviewStatusResolved" or "CodeReviewStatusUnresolved"})
+    table.insert(highlights, {
+      thread_start_row,
+      dot_start,
+      dot_start + #status_dot,
+      resolved and "CodeReviewStatusResolved" or "CodeReviewStatusUnresolved",
+    })
     local label_start = dot_start + #status_dot
-    table.insert(highlights, {thread_start_row, label_start, label_start + #status_label,
-      resolved and "CodeReviewCommentResolved" or "CodeReviewCommentUnresolved"})
+    table.insert(highlights, {
+      thread_start_row,
+      label_start,
+      label_start + #status_label,
+      resolved and "CodeReviewCommentResolved" or "CodeReviewCommentUnresolved",
+    })
   end
 
   -- Body lines (no prefix)
@@ -242,7 +265,7 @@ local function render_thread(result, disc, width, reply_key, resolve_key, is_las
   end
 
   -- Replies
-  local arrow_len = #"↪ "  -- ↪ is U+21AA = 3 UTF-8 bytes, + space = 4 bytes
+  local arrow_len = #"↪ " -- ↪ is U+21AA = 3 UTF-8 bytes, + space = 4 bytes
   for i = 2, #disc.notes do
     local reply = disc.notes[i]
     if not reply.system then
@@ -261,10 +284,13 @@ local function render_thread(result, disc, width, reply_key, resolve_key, is_las
       table.insert(lines, reply_header)
       row_map[reply_header_row] = { type = "thread", discussion = disc }
 
-      table.insert(highlights, {reply_header_row, 0, arrow_len, "CodeReviewThreadBorder"})
-      table.insert(highlights, {reply_header_row, arrow_len, arrow_len + #rauthor_str, "CodeReviewCommentAuthor"})
+      table.insert(highlights, { reply_header_row, 0, arrow_len, "CodeReviewThreadBorder" })
+      table.insert(highlights, { reply_header_row, arrow_len, arrow_len + #rauthor_str, "CodeReviewCommentAuthor" })
       if #rmeta > 0 then
-        table.insert(highlights, {reply_header_row, arrow_len + #rauthor_str, arrow_len + #rauthor_str + #rmeta, "CodeReviewThreadMeta"})
+        table.insert(
+          highlights,
+          { reply_header_row, arrow_len + #rauthor_str, arrow_len + #rauthor_str + #rmeta, "CodeReviewThreadMeta" }
+        )
       end
 
       -- Reply body (no prefix)
@@ -298,14 +324,16 @@ local function render_thread(result, disc, width, reply_key, resolve_key, is_las
     local sep = string.rep("╌", width)
     local sep_row = #lines
     table.insert(lines, sep)
-    table.insert(highlights, {sep_row, 0, #sep, "CodeReviewThreadBorder"})
+    table.insert(highlights, { sep_row, 0, #sep, "CodeReviewThreadBorder" })
   end
 end
 
 function M.build_commits_lines(commits, width, commit_filter)
   width = width or 60
   local result = { lines = {}, highlights = {} }
-  if not commits or #commits == 0 then return result end
+  if not commits or #commits == 0 then
+    return result
+  end
 
   local lines = result.lines
   local highlights = result.highlights
@@ -387,10 +415,10 @@ function M.build_activity_lines(discussions, width)
   table.insert(lines, "")
   local sep1 = string.rep("─", width)
   table.insert(lines, sep1)
-  table.insert(highlights, {#lines - 1, 0, #sep1, "CodeReviewMdHr"})
+  table.insert(highlights, { #lines - 1, 0, #sep1, "CodeReviewMdHr" })
   local act_header_row = #lines
   table.insert(lines, "## Activity")
-  table.insert(highlights, {act_header_row, 0, 11, "CodeReviewMdH2"})
+  table.insert(highlights, { act_header_row, 0, 11, "CodeReviewMdH2" })
   table.insert(lines, "")
 
   for _, note in ipairs(system_notes) do
@@ -408,12 +436,12 @@ function M.build_activity_lines(discussions, width)
     table.insert(lines, activity_line)
     -- Highlights: icon (3 bytes), @author, time
     local icon_col = 2
-    table.insert(highlights, {activity_row, icon_col, icon_col + 3, icon_entry.hl})
-    local author_col = icon_col + 3 + 1  -- after icon + space
-    table.insert(highlights, {activity_row, author_col, author_col + #author_str, "CodeReviewCommentAuthor"})
+    table.insert(highlights, { activity_row, icon_col, icon_col + 3, icon_entry.hl })
+    local author_col = icon_col + 3 + 1 -- after icon + space
+    table.insert(highlights, { activity_row, author_col, author_col + #author_str, "CodeReviewCommentAuthor" })
     if #right > 0 then
       local time_col = #left + gap
-      table.insert(highlights, {activity_row, time_col, time_col + #right, "CodeReviewActivityTime"})
+      table.insert(highlights, { activity_row, time_col, time_col + #right, "CodeReviewActivityTime" })
     end
   end
 
@@ -421,12 +449,12 @@ function M.build_activity_lines(discussions, width)
   table.insert(lines, "")
   local sep2 = string.rep("─", width)
   table.insert(lines, sep2)
-  table.insert(highlights, {#lines - 1, 0, #sep2, "CodeReviewMdHr"})
+  table.insert(highlights, { #lines - 1, 0, #sep2, "CodeReviewMdHr" })
   local _, unresolved = M.count_discussions(discussions)
   local disc_header = "## Discussions (" .. unresolved .. " unresolved)"
   local disc_header_row = #lines
   table.insert(lines, disc_header)
-  table.insert(highlights, {disc_header_row, 0, #disc_header, "CodeReviewMdH2"})
+  table.insert(highlights, { disc_header_row, 0, #disc_header, "CodeReviewMdH2" })
   table.insert(lines, "")
 
   for i = #user_discussions, 1, -1 do
@@ -467,10 +495,14 @@ end
 function M.open(entry)
   local ok, provider, ctx, review, discussions, files, commits = pcall(function()
     local prov, pctx, perr = providers.detect()
-    if not prov then error(perr or "Could not detect platform") end
+    if not prov then
+      error(perr or "Could not detect platform")
+    end
 
     local rev, review_err = prov.get_review(client, pctx, entry.id)
-    if not rev then error("Failed to load MR: " .. (review_err or "unknown error")) end
+    if not rev then
+      error("Failed to load MR: " .. (review_err or "unknown error"))
+    end
 
     local disc, disc_err = prov.get_discussions(client, pctx, rev)
     if not disc then
@@ -522,11 +554,15 @@ function M.open(entry)
   -- Fetch current user for note authorship checks (edit/delete guards)
   local client_mod = require("codereview.api.client")
   local user = provider.get_current_user(client_mod, ctx)
-  if user then state.current_user = user end
+  if user then
+    state.current_user = user
+  end
 
   if user and provider.get_last_reviewed_sha then
     local sha = provider.get_last_reviewed_sha(client_mod, ctx, review, user)
-    if sha then state.last_reviewed_sha = sha end
+    if sha then
+      state.last_reviewed_sha = sha
+    end
   end
 
   diff.render_sidebar(layout.sidebar_buf, state)

@@ -88,7 +88,9 @@ describe("mr.diff_state", function()
       config.setup({ diff = { scroll_threshold = 5 } })
       local few_files = { { new_path = "a.lua" }, { new_path = "b.lua" } }
       local many_files = {}
-      for i = 1, 10 do many_files[i] = { new_path = "f" .. i .. ".lua" } end
+      for i = 1, 10 do
+        many_files[i] = { new_path = "f" .. i .. ".lua" }
+      end
 
       local s1 = diff_state.create_state({ files = few_files })
       local s2 = diff_state.create_state({ files = many_files })

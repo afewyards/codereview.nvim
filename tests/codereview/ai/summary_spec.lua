@@ -1,5 +1,7 @@
 _G.vim = _G.vim or {}
-vim.trim = vim.trim or function(s) return s:match("^%s*(.-)%s*$") end
+vim.trim = vim.trim or function(s)
+  return s:match("^%s*(.-)%s*$")
+end
 
 local summary = require("codereview.ai.summary")
 

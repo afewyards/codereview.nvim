@@ -12,7 +12,9 @@ local COLLAPSED_THRESHOLD = 8
 --- @param width number  sidebar display width for truncation
 function M.render(state, lines, row_map, width)
   local commits = state.commits or {}
-  if #commits == 0 then return end
+  if #commits == 0 then
+    return
+  end
 
   if state.collapsed_commits == nil then
     state.collapsed_commits = #commits > COLLAPSED_THRESHOLD
@@ -21,7 +23,9 @@ function M.render(state, lines, row_map, width)
   local prefix = state.collapsed_commits and "▸" or "▾"
   local header = string.format(" %s Commits (%d) ", prefix, #commits)
   local pad = width - vim.fn.strdisplaywidth(header)
-  if pad > 0 then header = header .. string.rep("─", pad) end
+  if pad > 0 then
+    header = header .. string.rep("─", pad)
+  end
   table.insert(lines, header)
   row_map[#lines] = { type = "commits_header" }
 

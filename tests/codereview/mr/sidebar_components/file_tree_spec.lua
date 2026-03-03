@@ -18,12 +18,12 @@ describe("sidebar_components.file_tree", function()
       discussions = {
         make_discussion("src/a.lua"),
         make_discussion("src/a.lua"),
-        make_discussion("src/a.lua", true),  -- resolved: not unresolved
-        make_discussion("src/a.lua"),         -- unresolved
+        make_discussion("src/a.lua", true), -- resolved: not unresolved
+        make_discussion("src/a.lua"), -- unresolved
       },
       ai_suggestions = {
         { file = "src/a.lua", status = "pending" },
-        { file = "src/a.lua", status = "dismissed" },  -- excluded
+        { file = "src/a.lua", status = "dismissed" }, -- excluded
       },
       files = {
         { new_path = "src/a.lua", old_path = "src/a.lua" },
@@ -45,18 +45,18 @@ describe("sidebar_components.file_tree", function()
   it("shows correct review status icon for each status", function()
     local state = {
       view_mode = "diff",
-      current_file = 99,  -- no file is current
+      current_file = 99, -- no file is current
       collapsed_dirs = {},
       discussions = {},
       ai_suggestions = {},
       file_review_status = {
         ["reviewed.lua"] = { status = "reviewed" },
-        ["partial.lua"]  = { status = "partial" },
+        ["partial.lua"] = { status = "partial" },
         -- unvisited.lua has no entry
       },
       files = {
         { new_path = "reviewed.lua", old_path = "reviewed.lua" },
-        { new_path = "partial.lua",  old_path = "partial.lua" },
+        { new_path = "partial.lua", old_path = "partial.lua" },
         { new_path = "unvisited.lua", old_path = "unvisited.lua" },
       },
     }
@@ -67,9 +67,12 @@ describe("sidebar_components.file_tree", function()
     local reviewed_line, partial_line, unvisited_line
     for row, entry in pairs(row_map) do
       if entry.type == "file" then
-        if entry.path == "reviewed.lua" then reviewed_line = lines[row]
-        elseif entry.path == "partial.lua" then partial_line = lines[row]
-        elseif entry.path == "unvisited.lua" then unvisited_line = lines[row]
+        if entry.path == "reviewed.lua" then
+          reviewed_line = lines[row]
+        elseif entry.path == "partial.lua" then
+          partial_line = lines[row]
+        elseif entry.path == "unvisited.lua" then
+          unvisited_line = lines[row]
         end
       end
     end
@@ -90,11 +93,11 @@ describe("sidebar_components.file_tree", function()
       discussions = {},
       ai_suggestions = {},
       file_review_status = {
-        ["current.lua"] = { status = "reviewed" },  -- reviewed but still shows ▸
+        ["current.lua"] = { status = "reviewed" }, -- reviewed but still shows ▸
       },
       files = {
         { new_path = "current.lua", old_path = "current.lua" },
-        { new_path = "other.lua",   old_path = "other.lua" },
+        { new_path = "other.lua", old_path = "other.lua" },
       },
     }
     local lines, row_map = {}, {}
@@ -103,8 +106,10 @@ describe("sidebar_components.file_tree", function()
     local current_line, other_line
     for row, entry in pairs(row_map) do
       if entry.type == "file" then
-        if entry.path == "current.lua" then current_line = lines[row]
-        elseif entry.path == "other.lua" then other_line = lines[row]
+        if entry.path == "current.lua" then
+          current_line = lines[row]
+        elseif entry.path == "other.lua" then
+          other_line = lines[row]
         end
       end
     end

@@ -15,13 +15,19 @@ function M.detect()
 
   local ok
   ok, _ = pcall(require, "telescope")
-  if ok then return "telescope" end
+  if ok then
+    return "telescope"
+  end
 
   ok, _ = pcall(require, "fzf-lua")
-  if ok then return "fzf" end
+  if ok then
+    return "fzf"
+  end
 
   ok, _ = pcall(require, "snacks")
-  if ok then return "snacks" end
+  if ok then
+    return "snacks"
+  end
 
   return nil
 end
@@ -79,7 +85,9 @@ function M.pick_branches(branches, on_select)
   local name = M.detect()
   if not name then
     vim.ui.select(branches, { prompt = "Target branch:" }, function(choice)
-      if choice then on_select(choice) end
+      if choice then
+        on_select(choice)
+      end
     end)
     return
   end

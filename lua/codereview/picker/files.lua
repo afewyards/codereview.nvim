@@ -34,7 +34,9 @@ local function count_file_ai(file, suggestions)
   local n = 0
   local path = file.new_path or file.old_path
   for _, s in ipairs(suggestions or {}) do
-    if s.file == path and s.status ~= "dismissed" then n = n + 1 end
+    if s.file == path and s.status ~= "dismissed" then
+      n = n + 1
+    end
   end
   return n
 end
@@ -48,9 +50,15 @@ function M.build_entries(files, discussions, ai_suggestions)
     local ac = count_file_ai(file, ai_suggestions)
 
     local parts = { path }
-    if cc > 0 then table.insert(parts, "[" .. cc .. "]") end
-    if uc > 0 then table.insert(parts, "⚠" .. uc) end
-    if ac > 0 then table.insert(parts, "🤖" .. ac) end
+    if cc > 0 then
+      table.insert(parts, "[" .. cc .. "]")
+    end
+    if uc > 0 then
+      table.insert(parts, "⚠" .. uc)
+    end
+    if ac > 0 then
+      table.insert(parts, "🤖" .. ac)
+    end
 
     table.insert(entries, {
       display = table.concat(parts, "  "),

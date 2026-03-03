@@ -222,8 +222,12 @@ describe("mr.diff_nav", function()
       end
       vim.fn.winrestview = function(view)
         local win = _current_win or 1
-        if not _win_state[win] then _win_state[win] = {} end
-        if view.topline then _win_state[win].topline = view.topline end
+        if not _win_state[win] then
+          _win_state[win] = {}
+        end
+        if view.topline then
+          _win_state[win].topline = view.topline
+        end
       end
     end)
 
@@ -238,7 +242,9 @@ describe("mr.diff_nav", function()
     local function make_buf_with_lines(n)
       local buf = vim.api.nvim_create_buf(false, true)
       local lines = {}
-      for i = 1, n do lines[i] = "line " .. i end
+      for i = 1, n do
+        lines[i] = "line " .. i
+      end
       vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
       return buf
     end
@@ -258,7 +264,9 @@ describe("mr.diff_nav", function()
       local buf = make_buf_with_lines(30)
       local win = make_win(buf, 10, 1)
       local virt_lines = {}
-      for _ = 1, 8 do table.insert(virt_lines, { { "thread line", "" } }) end
+      for _ = 1, 8 do
+        table.insert(virt_lines, { { "thread line", "" } })
+      end
       vim.api.nvim_buf_set_extmark(buf, DIFF_NS, 7, 0, { virt_lines = virt_lines })
 
       diff_nav.ensure_virt_lines_visible(win, buf, 8)
@@ -288,7 +296,9 @@ describe("mr.diff_nav", function()
       local buf = make_buf_with_lines(30)
       local win = make_win(buf, 5, 1)
       local virt_lines = {}
-      for _ = 1, 20 do table.insert(virt_lines, { { "thread line", "" } }) end
+      for _ = 1, 20 do
+        table.insert(virt_lines, { { "thread line", "" } })
+      end
       vim.api.nvim_buf_set_extmark(buf, DIFF_NS, 9, 0, { virt_lines = virt_lines })
 
       diff_nav.ensure_virt_lines_visible(win, buf, 10)
@@ -299,5 +309,4 @@ describe("mr.diff_nav", function()
       vim.api.nvim_buf_delete(buf, { force = true })
     end)
   end)
-
 end)

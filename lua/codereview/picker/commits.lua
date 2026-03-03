@@ -21,7 +21,9 @@ function M.build_entries(commits, last_reviewed_sha)
   if last_reviewed_sha then
     local count = 0
     for i = #commits, 1, -1 do
-      if commits[i].sha == last_reviewed_sha then break end
+      if commits[i].sha == last_reviewed_sha then
+        break
+      end
       count = count + 1
     end
     if count > 0 then
@@ -40,8 +42,7 @@ function M.build_entries(commits, last_reviewed_sha)
     if c.additions or c.deletions then
       stats = string.format("+%d -%d", c.additions or 0, c.deletions or 0)
     end
-    local display = stats ~= ""
-      and string.format("  %s  %s  %s  (%s)", short, c.title or "", stats, c.author or "")
+    local display = stats ~= "" and string.format("  %s  %s  %s  (%s)", short, c.title or "", stats, c.author or "")
       or string.format("  %s  %s  (%s)", short, c.title or "", c.author or "")
     table.insert(entries, {
       type = "commit",

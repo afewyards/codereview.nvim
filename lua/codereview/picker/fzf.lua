@@ -11,7 +11,9 @@ local function make_previewer(lookup, get_text, ft)
   end
 
   function Previewer:populate_preview_buf(entry_str)
-    if not self.win or not self.win:validate_preview() then return end
+    if not self.win or not self.win:validate_preview() then
+      return
+    end
     local tmpbuf = self:get_tmp_buffer()
     local entry = lookup[entry_str]
     local text = entry and get_text(entry) or "(no preview)"
@@ -97,7 +99,9 @@ function M.pick_files(entries, on_select)
       ["default"] = function(selected)
         if selected and selected[1] then
           local entry = display_to_entry[selected[1]]
-          if entry then on_select(entry) end
+          if entry then
+            on_select(entry)
+          end
         end
       end,
     },
@@ -120,7 +124,9 @@ function M.pick_comments(entries, on_select, _opts)
       ["default"] = function(selected)
         if selected and selected[1] then
           local entry = display_to_entry[selected[1]]
-          if entry then on_select(entry) end
+          if entry then
+            on_select(entry)
+          end
         end
       end,
       ["ctrl-r"] = function()
@@ -139,11 +145,14 @@ function M.pick_commits(entries, on_select, opts)
     local display
     if entry.type == "commit" and entry.additions then
       local short = (entry.sha or ""):sub(1, 8)
-      display = string.format("  %s  %s  %s %s  (%s)",
-        short, entry.title or "",
+      display = string.format(
+        "  %s  %s  %s %s  (%s)",
+        short,
+        entry.title or "",
         utils.ansi_codes.green(string.format("+%d", entry.additions)),
         utils.ansi_codes.red(string.format("-%d", entry.deletions)),
-        entry.author or "")
+        entry.author or ""
+      )
     else
       display = entry.display
     end
@@ -165,7 +174,9 @@ function M.pick_commits(entries, on_select, opts)
       ["default"] = function(selected)
         if selected and selected[1] then
           local idx = tonumber(selected[1]:match("^(%d+)\t"))
-          if idx and entries[idx] then on_select(entries[idx]) end
+          if idx and entries[idx] then
+            on_select(entries[idx])
+          end
         end
       end,
     },

@@ -56,8 +56,12 @@ function M.apply(state, filter)
   for _, f in ipairs(state.original_files) do
     if path_set[f.new_path] or path_set[f.old_path] then
       table.insert(filtered_files, f)
-      if f.new_path then matched_paths[f.new_path] = true end
-      if f.old_path then matched_paths[f.old_path] = true end
+      if f.new_path then
+        matched_paths[f.new_path] = true
+      end
+      if f.old_path then
+        matched_paths[f.old_path] = true
+      end
     end
   end
   -- Add files not in the MR-level diff (e.g. changed then reverted later).
@@ -110,7 +114,9 @@ end
 --- @return string[]
 function M.get_changed_paths(from_sha, to_sha)
   local result = vim.fn.system({ "git", "diff", "--name-only", from_sha .. ".." .. to_sha })
-  if vim.v.shell_error ~= 0 then return {} end
+  if vim.v.shell_error ~= 0 then
+    return {}
+  end
   local paths = {}
   for path in result:gmatch("[^\n]+") do
     if path ~= "" then
@@ -132,12 +138,36 @@ function M.select(state, layout, entry)
 
   local function render_current_file()
     if state.scroll_mode then
-      local result = diff_render.render_all_files(layout.main_buf, state.files, state.review, state.discussions, state.context, state.file_contexts, state.ai_suggestions, state.row_selection, state.current_user, state.editing_note, state.git_diff_cache)
+      local result = diff_render.render_all_files(
+        layout.main_buf,
+        state.files,
+        state.review,
+        state.discussions,
+        state.context,
+        state.file_contexts,
+        state.ai_suggestions,
+        state.row_selection,
+        state.current_user,
+        state.editing_note,
+        state.git_diff_cache
+      )
       diff_state.apply_scroll_result(state, result)
     else
       local file = state.files and state.files[state.current_file]
       if file then
-        local ld, rd, ra = diff_render.render_file_diff(layout.main_buf, file, state.review, state.discussions, state.context, state.ai_suggestions, state.row_selection, state.current_user, state.editing_note, state.git_diff_cache, state.commit_filter)
+        local ld, rd, ra = diff_render.render_file_diff(
+          layout.main_buf,
+          file,
+          state.review,
+          state.discussions,
+          state.context,
+          state.ai_suggestions,
+          state.row_selection,
+          state.current_user,
+          state.editing_note,
+          state.git_diff_cache,
+          state.commit_filter
+        )
         diff_state.apply_file_result(state, state.current_file, ld, rd, ra)
       end
     end
@@ -155,8 +185,10 @@ function M.select(state, layout, entry)
     diff_render.ensure_git_objects(entry.from_sha, state.review.head_sha)
     local paths = M.get_changed_paths(entry.from_sha, state.review.head_sha)
     M.apply(state, {
-      from_sha = entry.from_sha, to_sha = state.review.head_sha,
-      label = "Since last review", changed_paths = paths,
+      from_sha = entry.from_sha,
+      to_sha = state.review.head_sha,
+      label = "Since last review",
+      changed_paths = paths,
     })
     state.view_mode = "diff"
     diff.render_sidebar(layout.sidebar_buf, state)
@@ -170,7 +202,9 @@ function M.select(state, layout, entry)
     local commit_diffs = state.provider.get_commit_diffs(client_mod, state.ctx, entry.sha) or {}
     local paths = {}
     for _, f in ipairs(commit_diffs) do
-      if f.new_path and f.new_path ~= "" then paths[#paths + 1] = f.new_path end
+      if f.new_path and f.new_path ~= "" then
+        paths[#paths + 1] = f.new_path
+      end
       if f.old_path and f.old_path ~= "" and f.old_path ~= f.new_path then
         paths[#paths + 1] = f.old_path
       end
@@ -178,13 +212,13 @@ function M.select(state, layout, entry)
     -- Parent SHA still needed for commit_filter.from_sha (diff rendering context).
     diff_render.ensure_git_objects(state.review.base_sha, entry.sha)
     local parent_result = vim.fn.system({ "git", "rev-parse", entry.sha .. "~1" })
-    local parent_sha = vim.v.shell_error == 0
-      and parent_result:gsub("%s+", "")
-      or state.review.base_sha
+    local parent_sha = vim.v.shell_error == 0 and parent_result:gsub("%s+", "") or state.review.base_sha
     M.apply(state, {
-      from_sha = parent_sha, to_sha = entry.sha,
+      from_sha = parent_sha,
+      to_sha = entry.sha,
       label = entry.title or entry.sha:sub(1, 8),
-      changed_paths = paths, commit_files = commit_diffs,
+      changed_paths = paths,
+      commit_files = commit_diffs,
     })
     state.view_mode = "diff"
     diff.render_sidebar(layout.sidebar_buf, state)

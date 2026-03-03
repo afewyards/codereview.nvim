@@ -5,7 +5,11 @@ require("tests.unit_helper")
 
 -- Stub modules that pull in vim API or network deps
 package.preload["codereview.providers"] = function()
-  return { detect = function() return nil, nil, "stub" end }
+  return {
+    detect = function()
+      return nil, nil, "stub"
+    end,
+  }
 end
 package.preload["codereview.api.client"] = function()
   return {}
@@ -31,10 +35,10 @@ describe("GitHub integration flow", function()
       local review = github.normalize_pr(pr)
 
       assert.equal(99, review.id)
-      assert.equal("bob", review.author)          -- string from user.login
+      assert.equal("bob", review.author) -- string from user.login
       assert.equal("aaa", review.base_sha)
       assert.equal("bbb", review.head_sha)
-      assert.equal("aaa", review.start_sha)       -- GitHub: start_sha == base_sha
+      assert.equal("aaa", review.start_sha) -- GitHub: start_sha == base_sha
       assert.equal("feat/x", review.source_branch)
       assert.equal("main", review.target_branch)
       assert.equal("open", review.state)
@@ -96,7 +100,9 @@ describe("GitHub integration flow", function()
       local found_hash_id = false
       for _, line in ipairs(lines) do
         assert.falsy(line:find("!42"), "line should not use ! prefix: " .. line)
-        if line:find("#42") then found_hash_id = true end
+        if line:find("#42") then
+          found_hash_id = true
+        end
       end
       assert.is_true(found_hash_id, "header should contain #42")
     end)
@@ -118,7 +124,9 @@ describe("GitHub integration flow", function()
 
       local found_author = false
       for _, line in ipairs(lines) do
-        if line:find("@octocat") then found_author = true end
+        if line:find("@octocat") then
+          found_author = true
+        end
       end
       assert.is_true(found_author, "header should contain @octocat")
     end)
@@ -144,7 +152,9 @@ describe("GitHub integration flow", function()
       -- With 0 approved_by and 0 approvals_required, Approvals line is omitted
       local found_approvals = false
       for _, line in ipairs(lines) do
-        if line:find("Approvals:") then found_approvals = true end
+        if line:find("Approvals:") then
+          found_approvals = true
+        end
       end
       assert.is_false(found_approvals, "no approvals line should appear for empty approved_by")
     end)

@@ -3,8 +3,12 @@ local M = {}
 local GITHUB_HOSTS = { ["github.com"] = true }
 
 function M.detect_platform(host)
-  if not host then return "gitlab" end
-  if GITHUB_HOSTS[host] then return "github" end
+  if not host then
+    return "gitlab"
+  end
+  if GITHUB_HOSTS[host] then
+    return "github"
+  end
   return "gitlab"
 end
 
@@ -29,9 +33,13 @@ function M.detect()
     project = config.project
   else
     local remote_url = git.get_remote_url()
-    if not remote_url then return nil, nil, "Could not get git remote" end
+    if not remote_url then
+      return nil, nil, "Could not get git remote"
+    end
     host, project = git.parse_remote(remote_url)
-    if not host then return nil, nil, "Could not parse git remote" end
+    if not host then
+      return nil, nil, "Could not parse git remote"
+    end
   end
 
   local platform = config.platform or M.detect_platform(host)

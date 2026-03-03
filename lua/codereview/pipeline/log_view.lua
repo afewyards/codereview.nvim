@@ -23,7 +23,9 @@ function M.open(job, trace, max_lines)
   -- Truncate very long logs
   if #lines > max_lines then
     local truncated = {}
-    for i = 1, max_lines do truncated[i] = lines[i] end
+    for i = 1, max_lines do
+      truncated[i] = lines[i]
+    end
     table.insert(truncated, string.format("... truncated (%d lines total)", #lines))
     lines = truncated
   end
@@ -57,7 +59,7 @@ function M.open(job, trace, max_lines)
     col = col,
     style = "minimal",
     border = "rounded",
-    title = {{ title, "CodeReviewFloatTitle" }},
+    title = { { title, "CodeReviewFloatTitle" } },
     title_pos = "center",
     zindex = 60,
   })
@@ -68,7 +70,9 @@ function M.open(job, trace, max_lines)
   handle = { buf = buf, win = win, closed = false }
 
   function handle.close()
-    if handle.closed then return end
+    if handle.closed then
+      return
+    end
     handle.closed = true
     pcall(vim.api.nvim_win_close, win, true)
   end
@@ -82,7 +86,9 @@ function M.open(job, trace, max_lines)
   vim.api.nvim_create_autocmd("WinClosed", {
     pattern = tostring(win),
     once = true,
-    callback = function() handle.close() end,
+    callback = function()
+      handle.close()
+    end,
   })
 
   -- Scroll to bottom (latest output)

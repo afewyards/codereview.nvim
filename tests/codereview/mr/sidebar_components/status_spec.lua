@@ -11,7 +11,9 @@ describe("sidebar_components.status", function()
 
   it("returns empty result when session is inactive", function()
     package.loaded["codereview.review.session"] = {
-      get = function() return { active = false } end,
+      get = function()
+        return { active = false }
+      end,
     }
     local status = make_status()
     local result = status.render({}, 30)

@@ -1,13 +1,22 @@
 _G.vim = _G.vim or {}
 vim.fn = vim.fn or {}
-vim.schedule = vim.schedule or function(fn) fn() end
-vim.json = vim.json or { encode = function(t) return '{}' end }
-vim.tbl_contains = vim.tbl_contains or function(tbl, val)
-  for _, v in ipairs(tbl) do
-    if v == val then return true end
-  end
-  return false
+vim.schedule = vim.schedule or function(fn)
+  fn()
 end
+vim.json = vim.json or {
+  encode = function(t)
+    return "{}"
+  end,
+}
+vim.tbl_contains = vim.tbl_contains
+  or function(tbl, val)
+    for _, v in ipairs(tbl) do
+      if v == val then
+        return true
+      end
+    end
+    return false
+  end
 
 package.loaded["codereview.log"] = { debug = function() end, warn = function() end, error = function() end }
 

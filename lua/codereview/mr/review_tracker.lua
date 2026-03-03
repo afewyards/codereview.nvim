@@ -13,7 +13,7 @@ local M = {}
 --- @param file_idx integer? when non-nil, only count lines where data.file_idx == file_idx
 --- @return table  { path, hunks_total, hunks_seen, hunk_rows, seen, status }
 function M.init_file(path, line_data, file_idx)
-  local hunk_rows = {}   -- row (1-based) -> hunk_idx of hunk that starts at that row
+  local hunk_rows = {} -- row (1-based) -> hunk_idx of hunk that starts at that row
   local hunks_total = 0
   local last_hunk_idx = nil
 

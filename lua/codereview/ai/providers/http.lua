@@ -53,7 +53,9 @@ function M.post_json(url, headers, body_table, callback)
       end
     end,
     on_exit = function(_, code)
-      if done then return end
+      if done then
+        return
+      end
       done = true
       vim.schedule(function()
         local stderr_str = table.concat(stderr_chunks, "\n")
@@ -61,7 +63,9 @@ function M.post_json(url, headers, body_table, callback)
 
         if code ~= 0 then
           local msg = "HTTP request failed (exit " .. code .. ")"
-          if stderr_str ~= "" then msg = msg .. ": " .. stderr_str end
+          if stderr_str ~= "" then
+            msg = msg .. ": " .. stderr_str
+          end
           log.error("AI http: " .. msg)
           callback(nil, msg)
           return
@@ -75,7 +79,8 @@ function M.post_json(url, headers, body_table, callback)
         end
 
         if type(data) == "table" and data.error then
-          local err_msg = type(data.error) == "table" and (data.error.message or vim.json.encode(data.error)) or tostring(data.error)
+          local err_msg = type(data.error) == "table" and (data.error.message or vim.json.encode(data.error))
+            or tostring(data.error)
           log.error("AI http: API error: " .. err_msg)
           callback(nil, "API error: " .. err_msg)
           return

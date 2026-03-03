@@ -93,7 +93,9 @@ end
 function M.file_has_annotations(state, file_idx)
   local files = state.files or {}
   local file = files[file_idx]
-  if not file then return false end
+  if not file then
+    return false
+  end
 
   -- Require diff here to avoid circular dependency: diff requires diff_state,
   -- but we only need the private discussion_matches_file logic.
@@ -146,7 +148,9 @@ end
 --- @param state table
 --- @param files table
 function M.load_diffs_into_state(state, files)
-  if state.files then return end
+  if state.files then
+    return
+  end
   local config = require("codereview.config")
   local cfg = config.get()
   state.files = files

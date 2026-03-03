@@ -2,7 +2,9 @@ local M = {}
 
 local function find_file_idx(files, path)
   for i, f in ipairs(files) do
-    if f.new_path == path or f.old_path == path then return i end
+    if f.new_path == path or f.old_path == path then
+      return i
+    end
   end
   return nil
 end
@@ -15,8 +17,12 @@ function M.build_entries(discussions, ai_suggestions, files, filter)
     if note and note.position then
       local resolved = disc.resolved
       local include = true
-      if filter == "unresolved" and resolved then include = false end
-      if filter == "resolved" and not resolved then include = false end
+      if filter == "unresolved" and resolved then
+        include = false
+      end
+      if filter == "resolved" and not resolved then
+        include = false
+      end
 
       if include then
         local path = note.position.new_path or note.position.old_path

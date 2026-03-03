@@ -26,7 +26,9 @@ describe("config_file", function()
     auth.reset()
     orig_get_repo_root = git.get_repo_root
     tmpdir = make_tmpdir()
-    git.get_repo_root = function() return tmpdir end
+    git.get_repo_root = function()
+      return tmpdir
+    end
   end)
 
   after_each(function()
@@ -66,7 +68,9 @@ describe("config_file", function()
   end)
 
   it("does not crash when git root is nil", function()
-    git.get_repo_root = function() return nil end
+    git.get_repo_root = function()
+      return nil
+    end
     config.setup({})
     local token = auth.get_token("github")
     assert.is_nil(token)

@@ -3,14 +3,14 @@
 local M = {}
 
 M.KEYS = {
-  toggle       = { "<CR>", "l" },
-  retry        = { "r" },
-  cancel       = { "c" },
-  play         = { "p" },
+  toggle = { "<CR>", "l" },
+  retry = { "r" },
+  cancel = { "c" },
+  play = { "p" },
   open_browser = { "o" },
-  refresh      = { "R" },
-  close        = { "q", "<Esc>" },
-  view_log     = { "<CR>" },
+  refresh = { "R" },
+  close = { "q", "<Esc>" },
+  view_log = { "<CR>" },
 }
 
 --- Set up keymaps on a pipeline float buffer.
@@ -32,7 +32,9 @@ function M.setup(buf, pstate, handle, callbacks)
   for _, key in ipairs(M.KEYS.toggle) do
     vim.keymap.set("n", key, function()
       local row = vim.api.nvim_win_get_cursor(0)[1]
-      if callbacks.on_toggle then callbacks.on_toggle(row) end
+      if callbacks.on_toggle then
+        callbacks.on_toggle(row)
+      end
     end, vim.tbl_extend("force", opts, { desc = "Toggle stage / View log" }))
   end
 
@@ -40,7 +42,9 @@ function M.setup(buf, pstate, handle, callbacks)
   for _, key in ipairs(M.KEYS.retry) do
     vim.keymap.set("n", key, function()
       local row = vim.api.nvim_win_get_cursor(0)[1]
-      if callbacks.on_retry then callbacks.on_retry(row) end
+      if callbacks.on_retry then
+        callbacks.on_retry(row)
+      end
     end, vim.tbl_extend("force", opts, { desc = "Retry job" }))
   end
 
@@ -48,7 +52,9 @@ function M.setup(buf, pstate, handle, callbacks)
   for _, key in ipairs(M.KEYS.cancel) do
     vim.keymap.set("n", key, function()
       local row = vim.api.nvim_win_get_cursor(0)[1]
-      if callbacks.on_cancel then callbacks.on_cancel(row) end
+      if callbacks.on_cancel then
+        callbacks.on_cancel(row)
+      end
     end, vim.tbl_extend("force", opts, { desc = "Cancel job" }))
   end
 
@@ -56,7 +62,9 @@ function M.setup(buf, pstate, handle, callbacks)
   for _, key in ipairs(M.KEYS.play) do
     vim.keymap.set("n", key, function()
       local row = vim.api.nvim_win_get_cursor(0)[1]
-      if callbacks.on_play then callbacks.on_play(row) end
+      if callbacks.on_play then
+        callbacks.on_play(row)
+      end
     end, vim.tbl_extend("force", opts, { desc = "Play manual job" }))
   end
 
@@ -64,14 +72,18 @@ function M.setup(buf, pstate, handle, callbacks)
   for _, key in ipairs(M.KEYS.open_browser) do
     vim.keymap.set("n", key, function()
       local row = vim.api.nvim_win_get_cursor(0)[1]
-      if callbacks.on_browser then callbacks.on_browser(row) end
+      if callbacks.on_browser then
+        callbacks.on_browser(row)
+      end
     end, vim.tbl_extend("force", opts, { desc = "Open in browser" }))
   end
 
   -- Force refresh
   for _, key in ipairs(M.KEYS.refresh) do
     vim.keymap.set("n", key, function()
-      if callbacks.on_refresh then callbacks.on_refresh() end
+      if callbacks.on_refresh then
+        callbacks.on_refresh()
+      end
     end, vim.tbl_extend("force", opts, { desc = "Force refresh" }))
   end
 end

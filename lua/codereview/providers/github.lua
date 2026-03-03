@@ -20,14 +20,18 @@ end
 
 local function parse_owner_repo(ctx)
   local parts = {}
-  for part in ctx.project:gmatch("[^/]+") do table.insert(parts, part) end
+  for part in ctx.project:gmatch("[^/]+") do
+    table.insert(parts, part)
+  end
   return parts[1], parts[2]
 end
 
 local function get_headers()
   local auth = require("codereview.api.auth")
   local token = auth.get_token("github")
-  if not token then return nil, "No GitHub token found" end
+  if not token then
+    return nil, "No GitHub token found"
+  end
   return M.build_auth_header(token)
 end
 
@@ -43,7 +47,9 @@ end
 local function graphql(base_url, headers, query, variables)
   local curl = require("plenary.curl")
   local payload = { query = query }
-  if variables then payload.variables = variables end
+  if variables then
+    payload.variables = variables
+  end
   local resp = curl.request({
     url = graphql_url(base_url),
     method = "post",
@@ -56,7 +62,9 @@ local function graphql(base_url, headers, query, variables)
     return nil, msg
   end
   local ok, data = pcall(vim.json.decode, resp.body)
-  if not ok then return nil, "Failed to parse GraphQL response" end
+  if not ok then
+    return nil, "Failed to parse GraphQL response"
+  end
   if data.errors then
     local msg = "GraphQL errors: " .. vim.json.encode(data.errors)
     log.error(msg)
@@ -71,7 +79,9 @@ end
 --- GitHub uses URL-based pagination: Link: <url>; rel="next", ...
 function M.parse_next_page(headers)
   local link = headers and (headers["link"] or headers["Link"])
-  if not link then return nil end
+  if not link then
+    return nil
+  end
   return link:match('<([^>]+)>%s*;%s*rel="next"')
 end
 
@@ -155,14 +165,18 @@ end
 function M.list_reviews(client, ctx, opts)
   opts = opts or {}
   local headers, err = get_headers()
-  if not headers then return nil, err end
+  if not headers then
+    return nil, err
+  end
   local owner, repo = parse_owner_repo(ctx)
   local path_url = string.format("/repos/%s/%s/pulls", owner, repo)
   local result, err2 = client.get(ctx.base_url, path_url, {
     query = { state = opts.state or "open", per_page = opts.per_page or 50 },
     headers = headers,
   })
-  if not result then return nil, err2 end
+  if not result then
+    return nil, err2
+  end
   local reviews = {}
   for _, pr in ipairs(result.data or {}) do
     table.insert(reviews, M.normalize_pr(pr))
@@ -173,25 +187,30 @@ end
 --- Get a single PR by number.
 function M.get_review(client, ctx, pr_number)
   local headers, err = get_headers()
-  if not headers then return nil, err end
+  if not headers then
+    return nil, err
+  end
   local owner, repo = parse_owner_repo(ctx)
   local path_url = string.format("/repos/%s/%s/pulls/%d", owner, repo, pr_number)
   local result, err2 = client.get(ctx.base_url, path_url, { headers = headers })
-  if not result then return nil, err2 end
+  if not result then
+    return nil, err2
+  end
   return M.normalize_pr(result.data)
 end
 
 --- Get file diffs for a PR.
 function M.get_diffs(client, ctx, review)
   local headers, err = get_headers()
-  if not headers then return nil, err end
+  if not headers then
+    return nil, err
+  end
   local owner, repo = parse_owner_repo(ctx)
   local path_url = string.format("/repos/%s/%s/pulls/%d/files", owner, repo, review.id)
-  local all_files = client.paginate_all_url(
-    ctx.base_url .. path_url,
-    { headers = headers }
-  )
-  if not all_files then return nil, "Failed to fetch diffs" end
+  local all_files = client.paginate_all_url(ctx.base_url .. path_url, { headers = headers })
+  if not all_files then
+    return nil, "Failed to fetch diffs"
+  end
 
   local diffs = {}
   for _, f in ipairs(all_files) do
@@ -211,28 +230,36 @@ end
 --- Returns the decoded file content as a string, or nil + error.
 function M.get_file_content(client, ctx, ref, path)
   local headers, err = get_headers()
-  if not headers then return nil, err end
+  if not headers then
+    return nil, err
+  end
   local owner, repo = parse_owner_repo(ctx)
   local api_path = string.format("/repos/%s/%s/contents/%s", owner, repo, path)
   local result, req_err = client.get(ctx.base_url, api_path, {
     headers = headers,
     query = { ref = ref },
   })
-  if not result then return nil, req_err end
+  if not result then
+    return nil, req_err
+  end
   local data = result.data
   if type(data) ~= "table" or not data.content then
     return nil, "No content in response"
   end
   local raw = data.content:gsub("%s", "")
   local decoded = vim.base64.decode(raw)
-  if not decoded then return nil, "base64 decode failed" end
+  if not decoded then
+    return nil, "base64 decode failed"
+  end
   return decoded
 end
 
 --- Get all review comment discussions for a PR.
 function M.get_discussions(client, ctx, review)
   local headers, err = get_headers()
-  if not headers then return nil, err end
+  if not headers then
+    return nil, err
+  end
   local owner, repo = parse_owner_repo(ctx)
 
   local all_threads = {}
@@ -274,14 +301,21 @@ function M.get_discussions(client, ctx, review)
     ]]
 
     local data, gql_err = graphql(ctx.base_url, headers, query, {
-      owner = owner, repo = repo, pr = review.id, cursor = cursor,
+      owner = owner,
+      repo = repo,
+      pr = review.id,
+      cursor = cursor,
     })
-    if not data then return nil, gql_err end
+    if not data then
+      return nil, gql_err
+    end
 
     local repo = type(data) == "table" and type(data.repository) == "table" and data.repository
     local pr_data = repo and type(repo.pullRequest) == "table" and repo.pullRequest
     local connection = pr_data and type(pr_data.reviewThreads) == "table" and pr_data.reviewThreads
-    if not connection then return {}, nil end
+    if not connection then
+      return {}, nil
+    end
 
     for _, node in ipairs(connection.nodes or {}) do
       table.insert(all_threads, node)
@@ -301,22 +335,29 @@ end
 --- Fetch commits for a PR, normalized to the Commit shape.
 function M.get_commits(client, ctx, review)
   local headers, err = get_headers()
-  if not headers then return nil, err end
+  if not headers then
+    return nil, err
+  end
   local owner, repo = parse_owner_repo(ctx)
   local url = string.format("%s/repos/%s/%s/pulls/%d/commits", ctx.base_url, owner, repo, review.id)
   local raw = client.paginate_all_url(url, { headers = headers })
-  if not raw then return nil, "Failed to fetch commits" end
+  if not raw then
+    return nil, "Failed to fetch commits"
+  end
   local commits = {}
   for _, c in ipairs(raw) do
     local msg = (c.commit and c.commit.message) or ""
     local title = msg:match("^([^\n]+)") or msg
-    table.insert(commits, types.normalize_commit({
-      sha = c.sha or "",
-      short_sha = (c.sha or ""):sub(1, 8),
-      title = title,
-      author = (c.author and c.author.login) or (c.commit and c.commit.author and c.commit.author.name) or "",
-      created_at = (c.commit and c.commit.author and c.commit.author.date) or "",
-    }))
+    table.insert(
+      commits,
+      types.normalize_commit({
+        sha = c.sha or "",
+        short_sha = (c.sha or ""):sub(1, 8),
+        title = title,
+        author = (c.author and c.author.login) or (c.commit and c.commit.author and c.commit.author.name) or "",
+        created_at = (c.commit and c.commit.author and c.commit.author.date) or "",
+      })
+    )
   end
   -- Reverse to newest-first (GitHub returns oldest-first, GitLab returns newest-first)
   local n = #commits
@@ -329,7 +370,9 @@ end
 --- Fetch additions/deletions stats for each commit (mutates in place).
 function M.get_commit_stats(client, ctx, commits)
   local headers, err = get_headers()
-  if not headers then return end
+  if not headers then
+    return
+  end
   local owner, repo = parse_owner_repo(ctx)
   for _, c in ipairs(commits) do
     local url = string.format("%s/repos/%s/%s/commits/%s", ctx.base_url, owner, repo, c.sha)
@@ -348,11 +391,15 @@ end
 --- @return table[]|nil normalized file diffs, string|nil error
 function M.get_commit_diffs(client, ctx, sha)
   local headers, err = get_headers()
-  if not headers then return nil, err end
+  if not headers then
+    return nil, err
+  end
   local owner, repo = parse_owner_repo(ctx)
   local url = string.format("%s/repos/%s/%s/commits/%s", ctx.base_url, owner, repo, sha)
   local result, err2 = client.get_url(url, { headers = headers })
-  if not result then return nil, err2 end
+  if not result then
+    return nil, err2
+  end
   local diffs = {}
   for _, f in ipairs(result.data.files or {}) do
     table.insert(diffs, {
@@ -370,11 +417,15 @@ end
 --- Return the commit_id of the most recent review submitted by username.
 function M.get_last_reviewed_sha(client, ctx, review, username)
   local headers, err = get_headers()
-  if not headers then return nil end
+  if not headers then
+    return nil
+  end
   local owner, repo = parse_owner_repo(ctx)
   local url = string.format("%s/repos/%s/%s/pulls/%d/reviews", ctx.base_url, owner, repo, review.id)
   local reviews = client.paginate_all_url(url, { headers = headers })
-  if not reviews then return nil end
+  if not reviews then
+    return nil
+  end
 
   local best_sha, best_time = nil, ""
   for _, r in ipairs(reviews) do
@@ -393,7 +444,9 @@ end
 --- @param position table|nil { new_path, old_path, new_line, old_line, side, commit_sha } or nil for general comment
 function M.post_comment(client, ctx, review, body, position)
   local headers, err = get_headers()
-  if not headers then return nil, err end
+  if not headers then
+    return nil, err
+  end
   local owner, repo = parse_owner_repo(ctx)
 
   if position then
@@ -415,7 +468,9 @@ end
 --- Post a multi-line range comment (GitHub supports start_line/start_side).
 function M.post_range_comment(client, ctx, review, body, old_path, new_path, start_pos, end_pos)
   local headers, err = get_headers()
-  if not headers then return nil, err end
+  if not headers then
+    return nil, err
+  end
   local owner, repo = parse_owner_repo(ctx)
   local path_url = string.format("/repos/%s/%s/pulls/%d/comments", owner, repo, review.id)
   local payload = {
@@ -435,14 +490,14 @@ end
 --- "user_id can only have one pending review" 422 errors).
 function M.reply_to_discussion(client, ctx, review, discussion_id, body)
   local headers, err = get_headers()
-  if not headers then return nil, err end
+  if not headers then
+    return nil, err
+  end
   local owner, repo = parse_owner_repo(ctx)
 
   if M._pending_review_id then
-    local path_url = string.format(
-      "/repos/%s/%s/pulls/%d/reviews/%d/comments",
-      owner, repo, review.id, M._pending_review_id
-    )
+    local path_url =
+      string.format("/repos/%s/%s/pulls/%d/reviews/%d/comments", owner, repo, review.id, M._pending_review_id)
     return client.post(ctx.base_url, path_url, {
       body = { body = body, in_reply_to = tonumber(discussion_id) },
       headers = headers,
@@ -456,7 +511,9 @@ end
 --- Edit an existing review comment. discussion_id unused for GitHub (kept for API consistency with GitLab).
 function M.edit_note(client, ctx, review, discussion_id, note_id, body)
   local headers, err = get_headers()
-  if not headers then return nil, err end
+  if not headers then
+    return nil, err
+  end
   local owner, repo = parse_owner_repo(ctx)
   local path_url = string.format("/repos/%s/%s/pulls/comments/%s", owner, repo, note_id)
   return client.patch(ctx.base_url, path_url, { body = { body = body }, headers = headers })
@@ -465,7 +522,9 @@ end
 --- Delete a review comment. discussion_id unused for GitHub (kept for API consistency with GitLab).
 function M.delete_note(client, ctx, review, discussion_id, note_id)
   local headers, err = get_headers()
-  if not headers then return nil, err end
+  if not headers then
+    return nil, err
+  end
   local owner, repo = parse_owner_repo(ctx)
   local path_url = string.format("/repos/%s/%s/pulls/comments/%s", owner, repo, note_id)
   return client.delete(ctx.base_url, path_url, { headers = headers })
@@ -474,7 +533,9 @@ end
 --- Close a PR (state = "closed"). Uses PATCH.
 function M.close(client, ctx, review)
   local headers, err = get_headers()
-  if not headers then return nil, err end
+  if not headers then
+    return nil, err
+  end
   local owner, repo = parse_owner_repo(ctx)
   local path_url = string.format("/repos/%s/%s/pulls/%d", owner, repo, review.id)
   return client.patch(ctx.base_url, path_url, { body = { state = "closed" }, headers = headers })
@@ -486,14 +547,17 @@ end
 --- If node_id is provided (cached from get_discussions), the lookup step is skipped.
 function M.resolve_discussion(client, ctx, review, discussion_id, resolved, node_id)
   local headers, err = get_headers()
-  if not headers then return nil, err end
+  if not headers then
+    return nil, err
+  end
   local owner, repo = parse_owner_repo(ctx)
 
   local thread_node_id = node_id
 
   if not thread_node_id then
     -- Step 1: find the thread node_id for this comment
-    local lookup_query = string.format([[
+    local lookup_query = string.format(
+      [[
       query {
         repository(owner: "%s", name: "%s") {
           pullRequest(number: %d) {
@@ -509,7 +573,11 @@ function M.resolve_discussion(client, ctx, review, discussion_id, resolved, node
           }
         }
       }
-    ]], owner, repo, review.id)
+    ]],
+      owner,
+      repo,
+      review.id
+    )
 
     log.debug("GraphQL: fetching review threads for comment " .. discussion_id)
     local ldata, lerr = graphql(nil, headers, lookup_query)
@@ -546,13 +614,19 @@ function M.resolve_discussion(client, ctx, review, discussion_id, resolved, node
   log.debug("GraphQL: " .. action .. " thread " .. thread_node_id)
   local mutation
   if resolved then
-    mutation = string.format([[
+    mutation = string.format(
+      [[
       mutation { resolveReviewThread(input: {threadId: "%s"}) { thread { id isResolved } } }
-    ]], thread_node_id)
+    ]],
+      thread_node_id
+    )
   else
-    mutation = string.format([[
+    mutation = string.format(
+      [[
       mutation { unresolveReviewThread(input: {threadId: "%s"}) { thread { id isResolved } } }
-    ]], thread_node_id)
+    ]],
+      thread_node_id
+    )
   end
 
   local _, merr = graphql(nil, headers, mutation)
@@ -567,7 +641,9 @@ end
 --- Approve a PR by submitting an APPROVE review.
 function M.approve(client, ctx, review)
   local headers, err = get_headers()
-  if not headers then return nil, err end
+  if not headers then
+    return nil, err
+  end
   local owner, repo = parse_owner_repo(ctx)
   local path_url = string.format("/repos/%s/%s/pulls/%d/reviews", owner, repo, review.id)
   return client.post(ctx.base_url, path_url, { body = { event = "APPROVE" }, headers = headers })
@@ -582,14 +658,20 @@ end
 M._cached_user = nil
 
 function M.get_current_user(client, ctx)
-  if M._cached_user then return M._cached_user end
+  if M._cached_user then
+    return M._cached_user
+  end
   local headers, err = get_headers()
-  if not headers then return nil, err end
+  if not headers then
+    return nil, err
+  end
   local resp = client.get(ctx.base_url, "/user", { headers = headers })
   if not resp or resp.status ~= 200 then
     return nil, "Failed to fetch current user"
   end
-  if not resp.data or not resp.data.login then return nil, "Failed to parse user response" end
+  if not resp.data or not resp.data.login then
+    return nil, "Failed to parse user response"
+  end
   M._cached_user = resp.data.login
   return M._cached_user
 end
@@ -597,13 +679,17 @@ end
 --- Merge a PR.
 function M.merge(client, ctx, review, opts)
   local headers, err = get_headers()
-  if not headers then return nil, err end
+  if not headers then
+    return nil, err
+  end
   local owner, repo = parse_owner_repo(ctx)
   opts = opts or {}
   local merge_method = opts.squash and "squash" or (opts.rebase and "rebase" or opts.merge_method or "merge")
   local path_url = string.format("/repos/%s/%s/pulls/%d/merge", owner, repo, review.id)
   local params = { merge_method = merge_method }
-  if opts.remove_source_branch then params.delete_branch_after = true end
+  if opts.remove_source_branch then
+    params.delete_branch_after = true
+  end
   return client.put(ctx.base_url, path_url, { body = params, headers = headers })
 end
 
@@ -622,7 +708,9 @@ M._pending_review_node_id = nil
 --- @param params table { body, path, line }
 function M.create_draft_comment(client, ctx, review, params)
   local headers, err = get_headers()
-  if not headers then return nil, err end
+  if not headers then
+    return nil, err
+  end
   local owner, repo = parse_owner_repo(ctx)
 
   -- First draft: create PENDING review with the comment included
@@ -631,16 +719,20 @@ function M.create_draft_comment(client, ctx, review, params)
     local resp, rev_err = client.post(ctx.base_url, reviews_path, {
       body = {
         commit_id = review.sha,
-        comments = {{
-          body = params.body,
-          path = params.path,
-          line = params.line,
-          side = "RIGHT",
-        }},
+        comments = {
+          {
+            body = params.body,
+            path = params.path,
+            line = params.line,
+            side = "RIGHT",
+          },
+        },
       },
       headers = headers,
     })
-    if not resp then return nil, rev_err end
+    if not resp then
+      return nil, rev_err
+    end
     M._pending_review_id = resp.data.id
     M._pending_review_node_id = resp.data.node_id
     return resp, nil
@@ -667,7 +759,9 @@ function M.create_draft_comment(client, ctx, review, params)
     line = params.line,
     side = "RIGHT",
   })
-  if not data then return nil, gql_err end
+  if not data then
+    return nil, gql_err
+  end
   return { data = data }, nil
 end
 
@@ -675,13 +769,17 @@ end
 --- Sets _pending_review_id only if a pending review with comments is found.
 function M.get_pending_review_drafts(client, ctx, review)
   local headers, err = get_headers()
-  if not headers then return nil, err end
+  if not headers then
+    return nil, err
+  end
   local owner, repo = parse_owner_repo(ctx)
 
   -- Find PENDING review (use per_page=100 to reduce pagination risk)
   local reviews_path = string.format("/repos/%s/%s/pulls/%d/reviews", owner, repo, review.id)
   local resp, rev_err = client.get(ctx.base_url, reviews_path, { headers = headers, query = { per_page = 100 } })
-  if not resp then return nil, rev_err end
+  if not resp then
+    return nil, rev_err
+  end
 
   local pending_id = nil
   local pending_node_id = nil
@@ -693,26 +791,32 @@ function M.get_pending_review_drafts(client, ctx, review)
     end
   end
 
-  if not pending_id then return {} end
+  if not pending_id then
+    return {}
+  end
 
   -- Fetch comments from the pending review
   local comments_path = string.format("/repos/%s/%s/pulls/%d/reviews/%d/comments", owner, repo, review.id, pending_id)
   local cresp, cerr = client.get(ctx.base_url, comments_path, { headers = headers, query = { per_page = 100 } })
-  if not cresp then return nil, cerr end
+  if not cresp then
+    return nil, cerr
+  end
 
   local drafts = {}
   for _, c in ipairs(cresp.data or {}) do
     table.insert(drafts, {
-      notes = {{
-        author = "You (draft)",
-        body = c.body or "",
-        created_at = c.created_at or "",
-        position = {
-          new_path = c.path,
-          new_line = c.line,
-          side = c.side or "RIGHT",
+      notes = {
+        {
+          author = "You (draft)",
+          body = c.body or "",
+          created_at = c.created_at or "",
+          position = {
+            new_path = c.path,
+            new_line = c.line,
+            side = c.side or "RIGHT",
+          },
         },
-      }},
+      },
       is_draft = true,
       server_draft_id = c.id,
     })
@@ -728,9 +832,13 @@ end
 
 --- Delete the pending review (discard all draft comments).
 function M.discard_pending_review(client, ctx, review)
-  if not M._pending_review_id then return nil, "No pending review to discard" end
+  if not M._pending_review_id then
+    return nil, "No pending review to discard"
+  end
   local headers, err = get_headers()
-  if not headers then return nil, err end
+  if not headers then
+    return nil, err
+  end
   local owner, repo = parse_owner_repo(ctx)
   local path = string.format("/repos/%s/%s/pulls/%d/reviews/%d", owner, repo, review.id, M._pending_review_id)
   local result, del_err = client.delete(ctx.base_url, path, { headers = headers })
@@ -743,7 +851,9 @@ end
 function M.publish_review(client, ctx, review, opts)
   opts = opts or {}
   local headers, err = get_headers()
-  if not headers then return nil, err end
+  if not headers then
+    return nil, err
+  end
   local owner, repo = parse_owner_repo(ctx)
 
   if not M._pending_review_id then
@@ -755,7 +865,8 @@ function M.publish_review(client, ctx, review, opts)
     payload.body = opts.body
   end
 
-  local submit_path = string.format("/repos/%s/%s/pulls/%d/reviews/%d/events", owner, repo, review.id, M._pending_review_id)
+  local submit_path =
+    string.format("/repos/%s/%s/pulls/%d/reviews/%d/events", owner, repo, review.id, M._pending_review_id)
   local result, post_err = client.post(ctx.base_url, submit_path, { body = payload, headers = headers })
   M._pending_review_id = nil
   M._pending_review_node_id = nil
@@ -766,7 +877,9 @@ end
 --- @param params table { source_branch, target_branch, title, description, draft? }
 function M.create_review(client, ctx, params)
   local headers, err = get_headers()
-  if not headers then return nil, err end
+  if not headers then
+    return nil, err
+  end
   local owner, repo = parse_owner_repo(ctx)
   local path_url = string.format("/repos/%s/%s/pulls", owner, repo)
   local body = {
@@ -808,22 +921,32 @@ end
 
 --- Extract workflow run ID from a check-run's details_url.
 local function extract_run_id(details_url)
-  if not details_url then return nil end
+  if not details_url then
+    return nil
+  end
   return details_url:match("/actions/runs/(%d+)")
 end
 
 --- Fetch pipeline (check-suite) status for the PR's head SHA.
 function M.get_pipeline(client, ctx, review)
   local headers, err = get_headers()
-  if not headers then return nil, err end
+  if not headers then
+    return nil, err
+  end
   local owner, repo = parse_owner_repo(ctx)
   local sha = review.head_sha or review.sha
-  if not sha then return nil, "No head SHA available" end
+  if not sha then
+    return nil, "No head SHA available"
+  end
   local path = string.format("/repos/%s/%s/commits/%s/check-suites", owner, repo, sha)
   local result, err2 = client.get(ctx.base_url, path, { headers = headers })
-  if not result then return nil, err2 end
+  if not result then
+    return nil, err2
+  end
   local suites = result.data and result.data.check_suites or {}
-  if #suites == 0 then return nil, "No check suites found" end
+  if #suites == 0 then
+    return nil, "No check suites found"
+  end
   -- Use the first (most recent) suite
   local s = suites[1]
   local types_mod = require("codereview.providers.types")
@@ -842,28 +965,36 @@ end
 --- Fetch check-runs (jobs) for a check-suite.
 function M.get_pipeline_jobs(client, ctx, review, suite_id) -- luacheck: ignore suite_id
   local headers, err = get_headers()
-  if not headers then return nil, err end
+  if not headers then
+    return nil, err
+  end
   local owner, repo = parse_owner_repo(ctx)
   local sha = review.head_sha or review.sha
   local path = string.format("/repos/%s/%s/commits/%s/check-runs", owner, repo, sha)
   local result, err2 = client.get(ctx.base_url, path, {
-    headers = headers, query = { per_page = 100 },
+    headers = headers,
+    query = { per_page = 100 },
   })
-  if not result then return nil, err2 end
+  if not result then
+    return nil, err2
+  end
   local types_mod = require("codereview.providers.types")
   local jobs = {}
   for _, cr in ipairs(result.data and result.data.check_runs or {}) do
-    table.insert(jobs, types_mod.normalize_pipeline_job({
-      id = cr.id,
-      name = cr.name,
-      stage = type(cr.app) == "table" and cr.app.name or "checks",
-      status = map_job_status(cr),
-      duration = 0,
-      web_url = cr.html_url or "",
-      allow_failure = false,
-      started_at = cr.started_at or "",
-      finished_at = cr.completed_at or "",
-    }))
+    table.insert(
+      jobs,
+      types_mod.normalize_pipeline_job({
+        id = cr.id,
+        name = cr.name,
+        stage = type(cr.app) == "table" and cr.app.name or "checks",
+        status = map_job_status(cr),
+        duration = 0,
+        web_url = cr.html_url or "",
+        allow_failure = false,
+        started_at = cr.started_at or "",
+        finished_at = cr.completed_at or "",
+      })
+    )
   end
   return jobs
 end
@@ -872,31 +1003,45 @@ end
 --- Falls back to "not available" when run ID cannot be determined.
 function M.get_job_trace(client, ctx, review, job_id)
   local headers, err = get_headers()
-  if not headers then return nil, err end
+  if not headers then
+    return nil, err
+  end
   local owner, repo = parse_owner_repo(ctx)
   -- Fetch the check run to find the workflow run ID
   local cr_path = string.format("/repos/%s/%s/check-runs/%d", owner, repo, job_id)
   local cr_result, cr_err = client.get(ctx.base_url, cr_path, { headers = headers })
-  if not cr_result then return nil, cr_err end
+  if not cr_result then
+    return nil, cr_err
+  end
   local run_id = extract_run_id(cr_result.data and cr_result.data.details_url)
-  if not run_id then return nil, "Cannot determine workflow run for log download" end
+  if not run_id then
+    return nil, "Cannot determine workflow run for log download"
+  end
   -- Download logs
   local log_path = string.format("/repos/%s/%s/actions/runs/%s/logs", owner, repo, run_id)
   local log_result, log_err = client.get(ctx.base_url, log_path, { headers = headers })
-  if not log_result then return nil, log_err end
+  if not log_result then
+    return nil, log_err
+  end
   return type(log_result.data) == "string" and log_result.data or "Log download returned non-text data"
 end
 
 --- Retry a job by re-running its workflow.
 function M.retry_job(client, ctx, review, job_id)
   local headers, err = get_headers()
-  if not headers then return nil, err end
+  if not headers then
+    return nil, err
+  end
   local owner, repo = parse_owner_repo(ctx)
   local cr_path = string.format("/repos/%s/%s/check-runs/%d", owner, repo, job_id)
   local cr_result, cr_err = client.get(ctx.base_url, cr_path, { headers = headers })
-  if not cr_result then return nil, cr_err end
+  if not cr_result then
+    return nil, cr_err
+  end
   local run_id = extract_run_id(cr_result.data and cr_result.data.details_url)
-  if not run_id then return nil, "Cannot determine workflow run" end
+  if not run_id then
+    return nil, "Cannot determine workflow run"
+  end
   local path = string.format("/repos/%s/%s/actions/runs/%s/rerun", owner, repo, run_id)
   return client.post(ctx.base_url, path, { body = {}, headers = headers })
 end
@@ -904,13 +1049,19 @@ end
 --- Cancel a running workflow.
 function M.cancel_job(client, ctx, review, job_id)
   local headers, err = get_headers()
-  if not headers then return nil, err end
+  if not headers then
+    return nil, err
+  end
   local owner, repo = parse_owner_repo(ctx)
   local cr_path = string.format("/repos/%s/%s/check-runs/%d", owner, repo, job_id)
   local cr_result, cr_err = client.get(ctx.base_url, cr_path, { headers = headers })
-  if not cr_result then return nil, cr_err end
+  if not cr_result then
+    return nil, cr_err
+  end
   local run_id = extract_run_id(cr_result.data and cr_result.data.details_url)
-  if not run_id then return nil, "Cannot determine workflow run" end
+  if not run_id then
+    return nil, "Cannot determine workflow run"
+  end
   local path = string.format("/repos/%s/%s/actions/runs/%s/cancel", owner, repo, run_id)
   return client.post(ctx.base_url, path, { body = {}, headers = headers })
 end

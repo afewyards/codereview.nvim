@@ -11,8 +11,20 @@ describe("mr.comment", function()
       local disc = {
         id = "abc",
         notes = {
-          { author = "jan", body = "Should we make this configurable?", created_at = "2026-02-20T10:00:00Z", resolvable = true, resolved = false },
-          { author = "maria", body = "Good point, will add.", created_at = "2026-02-20T11:00:00Z", resolvable = false, resolved = false },
+          {
+            author = "jan",
+            body = "Should we make this configurable?",
+            created_at = "2026-02-20T10:00:00Z",
+            resolvable = true,
+            resolved = false,
+          },
+          {
+            author = "maria",
+            body = "Good point, will add.",
+            created_at = "2026-02-20T11:00:00Z",
+            resolvable = false,
+            resolved = false,
+          },
         },
       }
       local lines = comment.build_thread_lines(disc)
@@ -25,7 +37,14 @@ describe("mr.comment", function()
       local disc = {
         id = "def",
         notes = {
-          { author = "jan", body = "LGTM", created_at = "2026-02-20T10:00:00Z", resolvable = true, resolved = true, resolved_by = "jan" },
+          {
+            author = "jan",
+            body = "LGTM",
+            created_at = "2026-02-20T10:00:00Z",
+            resolvable = true,
+            resolved = true,
+            resolved_by = "jan",
+          },
         },
       }
       local lines = comment.build_thread_lines(disc)
@@ -39,8 +58,14 @@ describe("mr.comment", function()
       local discussions = {}
       local function add_optimistic(text)
         local disc = {
-          notes = {{ author = "You", body = text, created_at = os.date("!%Y-%m-%dT%H:%M:%SZ"),
-            position = { new_path = "a.lua", new_line = 5 } }},
+          notes = {
+            {
+              author = "You",
+              body = text,
+              created_at = os.date("!%Y-%m-%dT%H:%M:%SZ"),
+              position = { new_path = "a.lua", new_line = 5 },
+            },
+          },
           is_optimistic = true,
         }
         table.insert(discussions, disc)
@@ -149,7 +174,9 @@ describe("mr.comment", function()
           mark_failed = function() end,
           refresh = function() end,
         },
-        api_fn = function(provider, client, ctx, mr, text) return nil, "error" end,
+        api_fn = function(provider, client, ctx, mr, text)
+          return nil, "error"
+        end,
       })
       comment.open_input_popup = orig_popup
       assert.equals("my comment text", add_called_with)
@@ -168,8 +195,12 @@ describe("mr.comment", function()
       end
       comment.create_comment({}, {
         title = "Draft Comment",
-        api_fn = function(provider, client, ctx, mr, text) return true, nil end,
-        on_success = function(text) success_called_with = text end,
+        api_fn = function(provider, client, ctx, mr, text)
+          return true, nil
+        end,
+        on_success = function(text)
+          success_called_with = text
+        end,
       })
       providers.detect = orig_detect
       comment.open_input_popup = orig_popup
@@ -187,7 +218,9 @@ describe("mr.comment", function()
       providers.detect = function()
         return {
           name = "gitlab",
-          create_draft_comment = function() return { id = 42 }, nil end,
+          create_draft_comment = function()
+            return { id = 42 }, nil
+          end,
         }, {}, {}
       end
 
@@ -196,7 +229,9 @@ describe("mr.comment", function()
         api_fn = function(provider, cl, ctx, mr, text)
           return { id = 42 }, nil
         end,
-        on_success = function(text, result) success_result = result end,
+        on_success = function(text, result)
+          success_result = result
+        end,
       })
 
       comment.open_input_popup = orig_popup
@@ -220,26 +255,28 @@ describe("mr.comment", function()
   describe("post_with_retry", function()
     it("calls on_success on first success", function()
       local called = false
-      comment.post_with_retry(
-        function() return nil, nil end,
-        function() called = true end,
-        function() end
-      )
-      vim.wait(100, function() return called end)
+      comment.post_with_retry(function()
+        return nil, nil
+      end, function()
+        called = true
+      end, function() end)
+      vim.wait(100, function()
+        return called
+      end)
       assert.truthy(called)
     end)
 
     it("calls on_failure after max retries", function()
       local failed = false
-      comment.post_with_retry(
-        function() return nil, "server error" end,
-        function() end,
-        function() failed = true end,
-        { max_retries = 1, delay_ms = 10 }
-      )
-      vim.wait(500, function() return failed end)
+      comment.post_with_retry(function()
+        return nil, "server error"
+      end, function() end, function()
+        failed = true
+      end, { max_retries = 1, delay_ms = 10 })
+      vim.wait(500, function()
+        return failed
+      end)
       assert.truthy(failed)
     end)
   end)
-
 end)

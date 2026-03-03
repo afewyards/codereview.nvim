@@ -13,7 +13,9 @@ local frame_idx = 1
 local current_label = DEFAULT_LABEL
 
 function M.open()
-  if win_id and vim.api.nvim_win_is_valid(win_id) then return end
+  if win_id and vim.api.nvim_win_is_valid(win_id) then
+    return
+  end
 
   current_label = DEFAULT_LABEL
   buf_id = vim.api.nvim_create_buf(false, true)

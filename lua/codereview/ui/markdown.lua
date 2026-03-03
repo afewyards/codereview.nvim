@@ -6,7 +6,9 @@ function M.strip_links(text)
 end
 
 function M.to_lines(text)
-  if not text then return {} end
+  if not text then
+    return {}
+  end
   local lines = {}
   for line in (text .. "\n"):gmatch("(.-)\n") do
     table.insert(lines, line)
@@ -44,11 +46,17 @@ local HL_SUFFIX_MAP = {
 local function flanking_open(text, delim_start, delim_len)
   if delim_start > 1 then
     local before = text:sub(delim_start - 1, delim_start - 1)
-    if before:match("[%w_]") then return false end
+    if before:match("[%w_]") then
+      return false
+    end
   end
   local inner_pos = delim_start + delim_len
-  if inner_pos > #text then return false end
-  if text:sub(inner_pos, inner_pos):match("%s") then return false end
+  if inner_pos > #text then
+    return false
+  end
+  if text:sub(inner_pos, inner_pos):match("%s") then
+    return false
+  end
   return true
 end
 
@@ -57,11 +65,17 @@ end
 local function flanking_close(text, delim_end, delim_len)
   if delim_end < #text then
     local after = text:sub(delim_end + 1, delim_end + 1)
-    if after:match("[%w_]") then return false end
+    if after:match("[%w_]") then
+      return false
+    end
   end
   local inner_pos = delim_end - delim_len
-  if inner_pos < 1 then return false end
-  if text:sub(inner_pos, inner_pos):match("%s") then return false end
+  if inner_pos < 1 then
+    return false
+  end
+  if text:sub(inner_pos, inner_pos):match("%s") then
+    return false
+  end
   return true
 end
 
@@ -70,15 +84,21 @@ end
 -- Returns {{start_pos, end_pos}, ...} for all markdown spans in text.
 -- Useful for callers that need to know span boundaries (e.g. wrap_text).
 function M.find_spans(text)
-  if not text or text == "" then return {} end
+  if not text or text == "" then
+    return {}
+  end
   local result = {}
 
   -- code spans
   local pos = 1
   while pos <= #text do
     local s, e = text:find("`(.-)`", pos)
-    if not s then break end
-    if e > s + 1 then table.insert(result, { s, e }) end
+    if not s then
+      break
+    end
+    if e > s + 1 then
+      table.insert(result, { s, e })
+    end
     pos = e + 1
   end
 
@@ -86,7 +106,9 @@ function M.find_spans(text)
   pos = 1
   while pos <= #text do
     local s, e = text:find("%[([^%]]+)%]%([^%)]+%)", pos)
-    if not s then break end
+    if not s then
+      break
+    end
     table.insert(result, { s, e })
     pos = e + 1
   end
@@ -95,7 +117,9 @@ function M.find_spans(text)
   pos = 1
   while pos <= #text do
     local s, e = text:find("%*%*(.-)%*%*", pos)
-    if not s then break end
+    if not s then
+      break
+    end
     if e - s >= 4 and flanking_open(text, s, 2) and flanking_close(text, e, 2) then
       table.insert(result, { s, e })
     end
@@ -106,7 +130,9 @@ function M.find_spans(text)
   pos = 1
   while pos <= #text do
     local s, e = text:find("~~(.-)~~", pos)
-    if not s then break end
+    if not s then
+      break
+    end
     if e - s >= 4 and flanking_open(text, s, 2) and flanking_close(text, e, 2) then
       table.insert(result, { s, e })
     end
@@ -117,11 +143,12 @@ function M.find_spans(text)
   pos = 1
   while pos <= #text do
     local s, e = text:find("%*([^%*]+)%*", pos)
-    if not s then break end
+    if not s then
+      break
+    end
     local before = s > 1 and text:sub(s - 1, s - 1) or ""
     local after = e < #text and text:sub(e + 1, e + 1) or ""
-    if before ~= "*" and after ~= "*"
-       and flanking_open(text, s, 1) and flanking_close(text, e, 1) then
+    if before ~= "*" and after ~= "*" and flanking_open(text, s, 1) and flanking_close(text, e, 1) then
       table.insert(result, { s, e })
       pos = e + 1
     else
@@ -133,21 +160,31 @@ function M.find_spans(text)
 end
 
 function M.parse_inline(text, base_hl)
-  if not text or text == "" then return { { "", base_hl } } end
-  if not HL_SUFFIX_MAP[base_hl] then return { { text, base_hl } } end
+  if not text or text == "" then
+    return { { "", base_hl } }
+  end
+  if not HL_SUFFIX_MAP[base_hl] then
+    return { { text, base_hl } }
+  end
 
   local suffix = HL_SUFFIX_MAP[base_hl]
-  local function hl(name) return name .. suffix end
+  local function hl(name)
+    return name .. suffix
+  end
 
   local len = #text
   -- Per-character format: each position gets a highlight or nil (= strip)
   local fmt = {}
-  for i = 1, len do fmt[i] = base_hl end
+  for i = 1, len do
+    fmt[i] = base_hl
+  end
 
   -- Helper: check if ALL positions in range still have base_hl
   local function range_is_base(s, e)
     for i = s, e do
-      if fmt[i] ~= base_hl then return false end
+      if fmt[i] ~= base_hl then
+        return false
+      end
     end
     return true
   end
@@ -156,10 +193,14 @@ function M.parse_inline(text, base_hl)
   local pos = 1
   while pos <= len do
     local cs, ce = text:find("`(.-)`", pos)
-    if not cs then break end
+    if not cs then
+      break
+    end
     if ce > cs + 1 then -- inner text is non-empty
       fmt[cs] = nil -- strip opening backtick
-      for i = cs + 1, ce - 1 do fmt[i] = hl("CodeReviewCommentCode") end
+      for i = cs + 1, ce - 1 do
+        fmt[i] = hl("CodeReviewCommentCode")
+      end
       fmt[ce] = nil -- strip closing backtick
     end
     pos = ce + 1
@@ -170,14 +211,20 @@ function M.parse_inline(text, base_hl)
   pos = 1
   while pos <= len do
     local ls, le = text:find("%[([^%]]+)%]%([^%)]+%)", pos)
-    if not ls then break end
+    if not ls then
+      break
+    end
     local bracket_end = text:find("%]", ls)
     if bracket_end and fmt[ls] == base_hl and range_is_base(bracket_end, le) then
       fmt[ls] = nil -- strip [
       for i = ls + 1, bracket_end - 1 do
-        if fmt[i] == base_hl then fmt[i] = hl("CodeReviewCommentLink") end
+        if fmt[i] == base_hl then
+          fmt[i] = hl("CodeReviewCommentLink")
+        end
       end
-      for i = bracket_end, le do fmt[i] = nil end -- strip ](url)
+      for i = bracket_end, le do
+        fmt[i] = nil
+      end -- strip ](url)
     end
     pos = le + 1
   end
@@ -186,13 +233,19 @@ function M.parse_inline(text, base_hl)
   pos = 1
   while pos <= len do
     local bs, be = text:find("%*%*(.-)%*%*", pos)
-    if not bs then break end
-    if be - bs >= 4 -- inner text is non-empty (at least **x**)
-       and flanking_open(text, bs, 2)
-       and flanking_close(text, be, 2)
-       -- Only process if the delimiter positions are still base_hl
-       and fmt[bs] == base_hl and fmt[bs + 1] == base_hl
-       and fmt[be - 1] == base_hl and fmt[be] == base_hl then
+    if not bs then
+      break
+    end
+    if
+      be - bs >= 4 -- inner text is non-empty (at least **x**)
+      and flanking_open(text, bs, 2)
+      and flanking_close(text, be, 2)
+      -- Only process if the delimiter positions are still base_hl
+      and fmt[bs] == base_hl
+      and fmt[bs + 1] == base_hl
+      and fmt[be - 1] == base_hl
+      and fmt[be] == base_hl
+    then
       -- Strip delimiters
       fmt[bs] = nil
       fmt[bs + 1] = nil
@@ -213,12 +266,18 @@ function M.parse_inline(text, base_hl)
   pos = 1
   while pos <= len do
     local ss, se = text:find("~~(.-)~~", pos)
-    if not ss then break end
-    if se - ss >= 4
-       and flanking_open(text, ss, 2)
-       and flanking_close(text, se, 2)
-       and fmt[ss] == base_hl and fmt[ss + 1] == base_hl
-       and fmt[se - 1] == base_hl and fmt[se] == base_hl then
+    if not ss then
+      break
+    end
+    if
+      se - ss >= 4
+      and flanking_open(text, ss, 2)
+      and flanking_close(text, se, 2)
+      and fmt[ss] == base_hl
+      and fmt[ss + 1] == base_hl
+      and fmt[se - 1] == base_hl
+      and fmt[se] == base_hl
+    then
       fmt[ss] = nil
       fmt[ss + 1] = nil
       fmt[se - 1] = nil
@@ -236,13 +295,19 @@ function M.parse_inline(text, base_hl)
   pos = 1
   while pos <= len do
     local is_, ie = text:find("%*([^%*]+)%*", pos)
-    if not is_ then break end
+    if not is_ then
+      break
+    end
     local before = is_ > 1 and text:sub(is_ - 1, is_ - 1) or ""
     local after = ie < len and text:sub(ie + 1, ie + 1) or ""
-    if before ~= "*" and after ~= "*"
-       and flanking_open(text, is_, 1)
-       and flanking_close(text, ie, 1)
-       and fmt[is_] == base_hl and fmt[ie] == base_hl then
+    if
+      before ~= "*"
+      and after ~= "*"
+      and flanking_open(text, is_, 1)
+      and flanking_close(text, ie, 1)
+      and fmt[is_] == base_hl
+      and fmt[ie] == base_hl
+    then
       fmt[is_] = nil -- strip opening *
       fmt[ie] = nil -- strip closing *
       for i = is_ + 1, ie - 1 do
@@ -277,7 +342,9 @@ function M.parse_inline(text, base_hl)
     table.insert(segments, { seg_text, seg_hl })
   end
 
-  if #segments == 0 then return { { text, base_hl } } end
+  if #segments == 0 then
+    return { { text, base_hl } }
+  end
   return segments
 end
 
@@ -296,7 +363,9 @@ end
 
 -- Helper: flush collected code_lines into result (used by fenced code block handling)
 local function flush_code_block(result, code_lines, code_lang)
-  if #code_lines == 0 then return end
+  if #code_lines == 0 then
+    return
+  end
   local code_start_row = #result.lines
   for _, cl in ipairs(code_lines) do
     local row = #result.lines
@@ -335,17 +404,23 @@ end
 -- Parse separator cell into alignment: "left", "right", or "center"
 local function parse_alignment(sep_cell)
   local s = sep_cell:match("^%s*(.-)%s*$")
-  local has_left  = s:sub(1, 1) == ":"
+  local has_left = s:sub(1, 1) == ":"
   local has_right = s:sub(-1) == ":"
-  if has_left and has_right then return "center" end
-  if has_right then return "right" end
+  if has_left and has_right then
+    return "center"
+  end
+  if has_right then
+    return "right"
+  end
   return "left"
 end
 
 -- Word-wrap text to fit within max_width (display columns). Returns list of strings.
 local function word_wrap(text, max_width)
   local sw = vim.fn.strdisplaywidth
-  if sw(text) <= max_width then return { text } end
+  if sw(text) <= max_width then
+    return { text }
+  end
   local lines = {}
   local current = ""
   for word in text:gmatch("%S+") do
@@ -369,15 +444,21 @@ local function word_wrap(text, max_width)
       end
     end
   end
-  if current ~= "" then table.insert(lines, current) end
-  if #lines == 0 then return { "" } end
+  if current ~= "" then
+    table.insert(lines, current)
+  end
+  if #lines == 0 then
+    return { "" }
+  end
   return lines
 end
 
 -- Pad text to exactly width display columns with the given alignment.
 local function pad_cell(text, width, align)
   local len = vim.fn.strdisplaywidth(text)
-  if len >= width then return text end
+  if len >= width then
+    return text
+  end
   local pad = width - len
   if align == "right" then
     return string.rep(" ", pad) .. text
@@ -392,7 +473,9 @@ end
 -- Process cell text through inline parser for table rendering.
 -- Returns display text (markdown stripped) and per-byte highlight array.
 local function process_cell_inline(text, base_hl)
-  if not text or text == "" then return "", {} end
+  if not text or text == "" then
+    return "", {}
+  end
   local segs = M.parse_inline(text, base_hl)
   local display = ""
   local char_hl = {}
@@ -430,11 +513,15 @@ end
 -- Returns { lines = {...}, highlights = {...} } with row indices starting at start_row.
 local function render_table(tbl_lines, base_hl, start_row, opts)
   local result = { lines = {}, highlights = {} }
-  if #tbl_lines < 2 then return result end
+  if #tbl_lines < 2 then
+    return result
+  end
 
   local header_cells = parse_table_row(tbl_lines[1])
   local num_cols = #header_cells
-  if num_cols == 0 then return result end
+  if num_cols == 0 then
+    return result
+  end
 
   -- Parse separator row for alignments
   local sep_cells = parse_table_row(tbl_lines[2])
@@ -448,7 +535,9 @@ local function render_table(tbl_lines, base_hl, start_row, opts)
   for li = 3, #tbl_lines do
     local row_cells = parse_table_row(tbl_lines[li])
     local padded = {}
-    for ci = 1, num_cols do padded[ci] = row_cells[ci] or "" end
+    for ci = 1, num_cols do
+      padded[ci] = row_cells[ci] or ""
+    end
     table.insert(data_rows, padded)
   end
 
@@ -491,16 +580,22 @@ local function render_table(tbl_lines, base_hl, start_row, opts)
   -- Shrink widest columns first if total exceeds budget
   local function sum_widths()
     local s = 0
-    for ci = 1, num_cols do s = s + col_widths[ci] end
+    for ci = 1, num_cols do
+      s = s + col_widths[ci]
+    end
     return s
   end
 
   while sum_widths() > available do
     local max_w = 0
     for ci = 1, num_cols do
-      if col_widths[ci] > max_w then max_w = col_widths[ci] end
+      if col_widths[ci] > max_w then
+        max_w = col_widths[ci]
+      end
     end
-    if max_w <= 3 then break end  -- can't shrink further
+    if max_w <= 3 then
+      break
+    end -- can't shrink further
 
     local second_max = 3
     for ci = 1, num_cols do
@@ -511,7 +606,9 @@ local function render_table(tbl_lines, base_hl, start_row, opts)
 
     local count = 0
     for ci = 1, num_cols do
-      if col_widths[ci] == max_w then count = count + 1 end
+      if col_widths[ci] == max_w then
+        count = count + 1
+      end
     end
 
     local excess = sum_widths() - available
@@ -575,7 +672,7 @@ local function render_table(tbl_lines, base_hl, start_row, opts)
     end
 
     -- Apply per-cell inline highlights (grouped by contiguous runs)
-    local byte_pos = 4  -- "│ " = 3 + 1 bytes (0-indexed start of cell content)
+    local byte_pos = 4 -- "│ " = 3 + 1 bytes (0-indexed start of cell content)
     for ci = 1, num_cols do
       local cell = cells[ci]
       if cell.hl_slice and #cell.hl_slice > 0 then
@@ -589,21 +686,28 @@ local function render_table(tbl_lines, base_hl, start_row, opts)
               i = i + 1
             end
             table.insert(result.highlights, {
-              row, content_start + run_start - 1, content_start + i - 1, hl,
+              row,
+              content_start + run_start - 1,
+              content_start + i - 1,
+              hl,
             })
           else
             i = i + 1
           end
         end
       end
-      byte_pos = byte_pos + col_widths[ci] + 5  -- " │ " = 1 + 3 + 1 bytes
+      byte_pos = byte_pos + col_widths[ci] + 5 -- " │ " = 1 + 3 + 1 bytes
     end
   end
 
   -- Compute content_offset within padded cell based on alignment
   local function content_offset_for_align(content_len, width, align)
-    if align == "right" then return width - content_len end
-    if align == "center" then return math.floor((width - content_len) / 2) end
+    if align == "right" then
+      return width - content_len
+    end
+    if align == "center" then
+      return math.floor((width - content_len) / 2)
+    end
     return 0
   end
 
@@ -671,7 +775,9 @@ end
 
 -- Strip HTML tags from text, converting block tags to newlines and removing the rest.
 local function strip_html(text)
-  if not text then return text end
+  if not text then
+    return text
+  end
   -- Replace <br>, <br/>, <br /> with newline
   text = text:gsub("<br%s*/?>", "\n")
   -- Remove all remaining HTML tags
@@ -684,7 +790,9 @@ end
 function M.parse_blocks(text, base_hl, opts)
   opts = opts or {}
   local result = { lines = {}, highlights = {}, code_blocks = {} }
-  if not text or text == "" then return result end
+  if not text or text == "" then
+    return result
+  end
 
   text = strip_html(text)
   local raw_lines = M.to_lines(text)
@@ -812,10 +920,12 @@ function M.parse_blocks(text, base_hl, opts)
     end
 
     -- Table: line matching ^|.+|$ followed by separator ^|[-: |]+|$
-    if state == "normal"
-       and line:match("^|.+|%s*$")
-       and i + 1 <= #raw_lines
-       and raw_lines[i + 1]:match("^|[-:| ]+|%s*$") then
+    if
+      state == "normal"
+      and line:match("^|.+|%s*$")
+      and i + 1 <= #raw_lines
+      and raw_lines[i + 1]:match("^|[-:| ]+|%s*$")
+    then
       -- Collect all consecutive pipe-table lines
       local tbl_lines = {}
       while i <= #raw_lines and raw_lines[i]:match("^|.+|%s*$") do

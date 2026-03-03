@@ -21,11 +21,25 @@ local AIDRAFT_NS = vim.api.nvim_create_namespace("codereview_ai_draft")
 function M.nav_file(layout, state, delta)
   local files = state.files or {}
   local next_idx = state.current_file + delta
-  if next_idx < 1 or next_idx > #files then return end
+  if next_idx < 1 or next_idx > #files then
+    return
+  end
   state.current_file = next_idx
   state.row_selection = {}
   diff_sidebar.render_sidebar(layout.sidebar_buf, state)
-  local line_data, row_disc, row_ai = diff_render.render_file_diff(layout.main_buf, files[next_idx], state.review, state.discussions, state.context, state.ai_suggestions, state.row_selection, state.current_user, nil, state.git_diff_cache, state.commit_filter)
+  local line_data, row_disc, row_ai = diff_render.render_file_diff(
+    layout.main_buf,
+    files[next_idx],
+    state.review,
+    state.discussions,
+    state.context,
+    state.ai_suggestions,
+    state.row_selection,
+    state.current_user,
+    nil,
+    state.git_diff_cache,
+    state.commit_filter
+  )
   diff_state.apply_file_result(state, next_idx, line_data, row_disc, row_ai)
   vim.api.nvim_win_set_cursor(layout.main_win, { 1, 0 })
 end
@@ -39,7 +53,18 @@ function M.switch_to_file(layout, state, idx)
   state.row_selection = {}
   diff_sidebar.render_sidebar(layout.sidebar_buf, state)
   local ld, rd, ra = diff_render.render_file_diff(
-    layout.main_buf, state.files[idx], state.review, state.discussions, state.context, state.ai_suggestions, state.row_selection, state.current_user, nil, state.git_diff_cache, state.commit_filter)
+    layout.main_buf,
+    state.files[idx],
+    state.review,
+    state.discussions,
+    state.context,
+    state.ai_suggestions,
+    state.row_selection,
+    state.current_user,
+    nil,
+    state.git_diff_cache,
+    state.commit_filter
+  )
   diff_state.apply_file_result(state, idx, ld, rd, ra)
 end
 
@@ -49,7 +74,9 @@ end
 --- @param state table
 --- @param file_idx number
 function M.jump_to_file(layout, state, file_idx)
-  if not state.files or not state.files[file_idx] then return end
+  if not state.files or not state.files[file_idx] then
+    return
+  end
 
   -- Transition out of summary mode into diff mode (mirrors sidebar click logic)
   if state.view_mode == "summary" then
@@ -58,7 +85,19 @@ function M.jump_to_file(layout, state, file_idx)
     vim.wo[layout.main_win].wrap = false
     vim.wo[layout.main_win].linebreak = false
     if state.scroll_mode then
-      local result = diff_render.render_all_files(layout.main_buf, state.files, state.review, state.discussions, state.context, state.file_contexts, state.ai_suggestions, state.row_selection, state.current_user, nil, state.git_diff_cache)
+      local result = diff_render.render_all_files(
+        layout.main_buf,
+        state.files,
+        state.review,
+        state.discussions,
+        state.context,
+        state.file_contexts,
+        state.ai_suggestions,
+        state.row_selection,
+        state.current_user,
+        nil,
+        state.git_diff_cache
+      )
       diff_state.apply_scroll_result(state, result)
       diff_sidebar.render_sidebar(layout.sidebar_buf, state)
       for _, sec in ipairs(state.file_sections) do
@@ -70,7 +109,18 @@ function M.jump_to_file(layout, state, file_idx)
     else
       diff_sidebar.render_sidebar(layout.sidebar_buf, state)
       local ld, rd, ra = diff_render.render_file_diff(
-        layout.main_buf, state.files[file_idx], state.review, state.discussions, state.context, state.ai_suggestions, state.row_selection, state.current_user, nil, state.git_diff_cache, state.commit_filter)
+        layout.main_buf,
+        state.files[file_idx],
+        state.review,
+        state.discussions,
+        state.context,
+        state.ai_suggestions,
+        state.row_selection,
+        state.current_user,
+        nil,
+        state.git_diff_cache,
+        state.commit_filter
+      )
       diff_state.apply_file_result(state, file_idx, ld, rd, ra)
       vim.api.nvim_win_set_cursor(layout.main_win, { 1, 0 })
     end
@@ -100,7 +150,9 @@ end
 --- @param state table
 --- @param entry table { file_idx, type, discussion?, suggestion? }
 function M.jump_to_comment(layout, state, entry)
-  if not entry.file_idx then return end
+  if not entry.file_idx then
+    return
+  end
 
   if state.scroll_mode then
     local row_cache
@@ -114,8 +166,12 @@ function M.jump_to_comment(layout, state, entry)
         local item_list = entry.type == "ai_suggestion" and { items } or items
         for _, item in ipairs(item_list) do
           local match = false
-          if entry.type == "discussion" and item.id == entry.discussion.id then match = true end
-          if entry.type == "ai_suggestion" and item == entry.suggestion then match = true end
+          if entry.type == "discussion" and item.id == entry.discussion.id then
+            match = true
+          end
+          if entry.type == "ai_suggestion" and item == entry.suggestion then
+            match = true
+          end
           if match then
             vim.api.nvim_win_set_cursor(layout.main_win, { r, 0 })
             M.ensure_virt_lines_visible(layout.main_win, layout.main_buf, r)
@@ -139,8 +195,12 @@ function M.jump_to_comment(layout, state, entry)
         local item_list = entry.type == "ai_suggestion" and { items } or items
         for _, item in ipairs(item_list) do
           local match = false
-          if entry.type == "discussion" and item.id == entry.discussion.id then match = true end
-          if entry.type == "ai_suggestion" and item == entry.suggestion then match = true end
+          if entry.type == "discussion" and item.id == entry.discussion.id then
+            match = true
+          end
+          if entry.type == "ai_suggestion" and item == entry.suggestion then
+            match = true
+          end
           if match then
             vim.api.nvim_win_set_cursor(layout.main_win, { r, 0 })
             M.ensure_virt_lines_visible(layout.main_win, layout.main_buf, r)
@@ -161,7 +221,9 @@ end
 --- @return table anchor { file_idx, old_line?, new_line? }
 function M.find_anchor(line_data, cursor_row, file_idx)
   local data = line_data[cursor_row]
-  if not data then return { file_idx = file_idx or 1 } end
+  if not data then
+    return { file_idx = file_idx or 1 }
+  end
   local fi = data.file_idx or file_idx or 1
   local item = data.item
   if item then
@@ -191,12 +253,18 @@ function M.find_row_for_anchor(line_data, anchor, fallback_file_idx)
     if fi == target_fi then
       local item = data.item
       if item then
-        if not first_diff_row then first_diff_row = row end
+        if not first_diff_row then
+          first_diff_row = row
+        end
 
         if has_target then
           -- Exact match: prefer new_line; for delete-only anchors use old_line
-          if target_new and item.new_line == target_new then return row end
-          if not target_new and target_old and item.old_line == target_old then return row end
+          if target_new and item.new_line == target_new then
+            return row
+          end
+          if not target_new and target_old and item.old_line == target_old then
+            return row
+          end
 
           -- Closest match by new_line distance
           local item_line = item.new_line or item.old_line
@@ -213,9 +281,15 @@ function M.find_row_for_anchor(line_data, anchor, fallback_file_idx)
     end
   end
 
-  if not has_target and first_diff_row then return first_diff_row end
-  if closest_row then return closest_row end
-  if first_diff_row then return first_diff_row end
+  if not has_target and first_diff_row then
+    return first_diff_row
+  end
+  if closest_row then
+    return closest_row
+  end
+  if first_diff_row then
+    return first_diff_row
+  end
   return 1
 end
 
@@ -227,10 +301,16 @@ end
 --- @return number[] sorted unique row numbers
 function M.get_annotated_rows(row_disc, row_ai)
   local seen = {}
-  for r in pairs(row_disc or {}) do seen[r] = true end
-  for r in pairs(row_ai or {}) do seen[r] = true end
+  for r in pairs(row_disc or {}) do
+    seen[r] = true
+  end
+  for r in pairs(row_ai or {}) do
+    seen[r] = true
+  end
   local rows = {}
-  for r in pairs(seen) do table.insert(rows, r) end
+  for r in pairs(seen) do
+    table.insert(rows, r)
+  end
   table.sort(rows)
   return rows
 end
@@ -244,7 +324,9 @@ end
 --- @param row number 1-indexed buffer row
 --- @param focus_offset number|nil virt_line index of the note to center on (0-based)
 function M.ensure_virt_lines_visible(win, buf, row, focus_offset)
-  if not vim.api.nvim_win_is_valid(win) then return end
+  if not vim.api.nvim_win_is_valid(win) then
+    return
+  end
 
   local win_height = vim.api.nvim_win_get_height(win)
   local half = math.floor(win_height / 2)
@@ -254,8 +336,12 @@ function M.ensure_virt_lines_visible(win, buf, row, focus_offset)
     -- ideal_topline puts (row + focus_offset) at the vertical center.
     -- Requires scrolloff=0 on the diff window to prevent Neovim override.
     local new_topline = row + focus_offset - half + 1
-    if new_topline < 1 then new_topline = 1 end
-    if new_topline > row then new_topline = row end
+    if new_topline < 1 then
+      new_topline = 1
+    end
+    if new_topline > row then
+      new_topline = row
+    end
     vim.fn.winrestview({ topline = new_topline })
   else
     -- No selection info: try to center the entire block
@@ -271,8 +357,12 @@ function M.ensure_virt_lines_visible(win, buf, row, focus_offset)
     end
     local total_height = 1 + virt_count
     local new_topline = row - math.floor((win_height - total_height) / 2)
-    if new_topline < 1 then new_topline = 1 end
-    if new_topline > row then new_topline = row end
+    if new_topline < 1 then
+      new_topline = 1
+    end
+    if new_topline > row then
+      new_topline = row
+    end
     vim.fn.winrestview({ topline = new_topline })
   end
 end
@@ -289,7 +379,19 @@ function M.adjust_context(layout, state, delta)
   if state.scroll_mode then
     local anchor = M.find_anchor(state.scroll_line_data, cursor_row)
     diff_state.clear_diff_cache(state)
-    local result = diff_render.render_all_files(layout.main_buf, state.files, state.review, state.discussions, state.context, state.file_contexts, state.ai_suggestions, state.row_selection, state.current_user, nil, state.git_diff_cache)
+    local result = diff_render.render_all_files(
+      layout.main_buf,
+      state.files,
+      state.review,
+      state.discussions,
+      state.context,
+      state.file_contexts,
+      state.ai_suggestions,
+      state.row_selection,
+      state.current_user,
+      nil,
+      state.git_diff_cache
+    )
     diff_state.apply_scroll_result(state, result)
     local row = M.find_row_for_anchor(state.scroll_line_data, anchor)
     vim.api.nvim_win_set_cursor(layout.main_win, { row, 0 })
@@ -297,10 +399,23 @@ function M.adjust_context(layout, state, delta)
     local per_file_ld = state.line_data_cache[state.current_file]
     local anchor = M.find_anchor(per_file_ld or {}, cursor_row, state.current_file)
     local file = state.files and state.files[state.current_file]
-    if not file then return end
+    if not file then
+      return
+    end
     diff_state.clear_diff_cache(state, file.new_path or file.old_path)
     local ld, row_disc, row_ai = diff_render.render_file_diff(
-      layout.main_buf, file, state.review, state.discussions, state.context, state.ai_suggestions, state.row_selection, state.current_user, nil, state.git_diff_cache, state.commit_filter)
+      layout.main_buf,
+      file,
+      state.review,
+      state.discussions,
+      state.context,
+      state.ai_suggestions,
+      state.row_selection,
+      state.current_user,
+      nil,
+      state.git_diff_cache,
+      state.commit_filter
+    )
     diff_state.apply_file_result(state, state.current_file, ld, row_disc, row_ai)
     local row = M.find_row_for_anchor(ld, anchor, state.current_file)
     vim.api.nvim_win_set_cursor(layout.main_win, { row, 0 })
@@ -317,7 +432,9 @@ end
 function M.current_file_from_cursor(layout, state)
   local row = vim.api.nvim_win_get_cursor(layout.main_win)[1]
   local sections = state.file_sections
-  if #sections == 0 then return 1 end
+  if #sections == 0 then
+    return 1
+  end
   local lo, hi = 1, #sections
   while lo < hi do
     local mid = math.floor((lo + hi + 1) / 2)
@@ -327,7 +444,9 @@ function M.current_file_from_cursor(layout, state)
       hi = mid - 1
     end
   end
-  if row < sections[lo].start_line then return 1 end
+  if row < sections[lo].start_line then
+    return 1
+  end
   return sections[lo].file_idx
 end
 
@@ -346,7 +465,19 @@ function M.toggle_scroll_mode(layout, state)
 
     local file = state.files[state.current_file]
     if file then
-      local ld, rd, ra = diff_render.render_file_diff(layout.main_buf, file, state.review, state.discussions, state.context, state.ai_suggestions, state.row_selection, state.current_user, nil, state.git_diff_cache, state.commit_filter)
+      local ld, rd, ra = diff_render.render_file_diff(
+        layout.main_buf,
+        file,
+        state.review,
+        state.discussions,
+        state.context,
+        state.ai_suggestions,
+        state.row_selection,
+        state.current_user,
+        nil,
+        state.git_diff_cache,
+        state.commit_filter
+      )
       diff_state.apply_file_result(state, state.current_file, ld, rd, ra)
       local row = M.find_row_for_anchor(ld, anchor, state.current_file)
       vim.api.nvim_win_set_cursor(layout.main_win, { row, 0 })
@@ -357,7 +488,19 @@ function M.toggle_scroll_mode(layout, state)
     local anchor = M.find_anchor(per_file_ld or {}, cursor_row, state.current_file)
     state.scroll_mode = true
 
-    local result = diff_render.render_all_files(layout.main_buf, state.files, state.review, state.discussions, state.context, state.file_contexts, state.ai_suggestions, state.row_selection, state.current_user, nil, state.git_diff_cache)
+    local result = diff_render.render_all_files(
+      layout.main_buf,
+      state.files,
+      state.review,
+      state.discussions,
+      state.context,
+      state.file_contexts,
+      state.ai_suggestions,
+      state.row_selection,
+      state.current_user,
+      nil,
+      state.git_diff_cache
+    )
     diff_state.apply_scroll_result(state, result)
     local row = M.find_row_for_anchor(state.scroll_line_data, anchor)
     vim.api.nvim_win_set_cursor(layout.main_win, { row, 0 })

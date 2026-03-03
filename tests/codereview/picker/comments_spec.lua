@@ -4,16 +4,36 @@ describe("picker.comments", function()
   describe("build_entries", function()
     local discussions = {
       {
-        id = 1, resolved = false,
-        notes = { { author = { username = "alice" }, body = "Fix this bug please", position = { new_path = "src/auth.lua", new_line = 42 } } },
+        id = 1,
+        resolved = false,
+        notes = {
+          {
+            author = { username = "alice" },
+            body = "Fix this bug please",
+            position = { new_path = "src/auth.lua", new_line = 42 },
+          },
+        },
       },
       {
-        id = 2, resolved = true,
-        notes = { { author = { username = "bob" }, body = "Looks good now", position = { new_path = "src/utils.lua", new_line = 10 } } },
+        id = 2,
+        resolved = true,
+        notes = {
+          {
+            author = { username = "bob" },
+            body = "Looks good now",
+            position = { new_path = "src/utils.lua", new_line = 10 },
+          },
+        },
       },
     }
     local ai_suggestions = {
-      { file = "src/auth.lua", line = 15, severity = "warning", comment = "Variable shadowing detected", status = "pending" },
+      {
+        file = "src/auth.lua",
+        line = 15,
+        severity = "warning",
+        comment = "Variable shadowing detected",
+        status = "pending",
+      },
       { file = "src/utils.lua", line = 20, severity = "info", comment = "Consider refactoring", status = "dismissed" },
     }
     local files = {

@@ -53,12 +53,36 @@ function M.setup_keymaps(state, layout, active_states)
     local view = vim.fn.winsaveview()
 
     if state.scroll_mode then
-      local result = diff_render.render_all_files(layout.main_buf, state.files, state.review, state.discussions, state.context, state.file_contexts, state.ai_suggestions, state.row_selection, state.current_user, state.editing_note, state.git_diff_cache)
+      local result = diff_render.render_all_files(
+        layout.main_buf,
+        state.files,
+        state.review,
+        state.discussions,
+        state.context,
+        state.file_contexts,
+        state.ai_suggestions,
+        state.row_selection,
+        state.current_user,
+        state.editing_note,
+        state.git_diff_cache
+      )
       diff_state.apply_scroll_result(state, result)
     else
       local file = state.files and state.files[state.current_file]
       if file then
-        local ld, rd, ra = diff_render.render_file_diff(layout.main_buf, file, state.review, state.discussions, state.context, state.ai_suggestions, state.row_selection, state.current_user, state.editing_note, state.git_diff_cache, state.commit_filter)
+        local ld, rd, ra = diff_render.render_file_diff(
+          layout.main_buf,
+          file,
+          state.review,
+          state.discussions,
+          state.context,
+          state.ai_suggestions,
+          state.row_selection,
+          state.current_user,
+          state.editing_note,
+          state.git_diff_cache,
+          state.commit_filter
+        )
         diff_state.apply_file_result(state, state.current_file, ld, rd, ra)
       end
     end
@@ -120,20 +144,24 @@ function M.setup_keymaps(state, layout, active_states)
   local function add_local_draft(new_path, new_line, start_line)
     return function(text, result)
       local disc = {
-        notes = {{
-          author = "You (draft)",
-          body = text,
-          created_at = os.date("!%Y-%m-%dT%H:%M:%SZ"),
-          position = {
-            new_path = new_path,
-            new_line = new_line,
-            start_line = start_line,
+        notes = {
+          {
+            author = "You (draft)",
+            body = text,
+            created_at = os.date("!%Y-%m-%dT%H:%M:%SZ"),
+            position = {
+              new_path = new_path,
+              new_line = new_line,
+              start_line = start_line,
+            },
           },
-        }},
+        },
         is_draft = true,
         server_draft_id = result and result.id or nil,
       }
-      if not state.local_drafts then state.local_drafts = {} end
+      if not state.local_drafts then
+        state.local_drafts = {}
+      end
       table.insert(state.local_drafts, disc)
       table.insert(state.discussions, disc)
       rerender_view()
@@ -143,18 +171,20 @@ function M.setup_keymaps(state, layout, active_states)
   local function add_optimistic_comment(old_path, new_path, old_line, new_line, start_line)
     return function(text)
       local disc = {
-        notes = {{
-          author = "You",
-          body = text,
-          created_at = os.date("!%Y-%m-%dT%H:%M:%SZ"),
-          position = {
-            old_path = old_path,
-            new_path = new_path,
-            old_line = old_line,
-            new_line = new_line,
-            start_line = start_line,
+        notes = {
+          {
+            author = "You",
+            body = text,
+            created_at = os.date("!%Y-%m-%dT%H:%M:%SZ"),
+            position = {
+              old_path = old_path,
+              new_path = new_path,
+              old_line = old_line,
+              new_line = new_line,
+              start_line = start_line,
+            },
           },
-        }},
+        },
         is_optimistic = true,
       }
       table.insert(state.discussions, disc)
@@ -212,12 +242,38 @@ function M.setup_keymaps(state, layout, active_states)
   -- Re-render current view after AI suggestion state change
   local function rerender_ai()
     if state.scroll_mode then
-      local result = diff_render.render_all_files(layout.main_buf, state.files, state.review, state.discussions, state.context, state.file_contexts, state.ai_suggestions, state.row_selection, state.current_user, nil, state.git_diff_cache)
+      local result = diff_render.render_all_files(
+        layout.main_buf,
+        state.files,
+        state.review,
+        state.discussions,
+        state.context,
+        state.file_contexts,
+        state.ai_suggestions,
+        state.row_selection,
+        state.current_user,
+        nil,
+        state.git_diff_cache
+      )
       diff_state.apply_scroll_result(state, result)
     else
       local file = state.files and state.files[state.current_file]
-      if not file then return end
-      local ld, rd, ra = diff_render.render_file_diff(layout.main_buf, file, state.review, state.discussions, state.context, state.ai_suggestions, state.row_selection, state.current_user, nil, state.git_diff_cache, state.commit_filter)
+      if not file then
+        return
+      end
+      local ld, rd, ra = diff_render.render_file_diff(
+        layout.main_buf,
+        file,
+        state.review,
+        state.discussions,
+        state.context,
+        state.ai_suggestions,
+        state.row_selection,
+        state.current_user,
+        nil,
+        state.git_diff_cache,
+        state.commit_filter
+      )
       diff_state.apply_file_result(state, state.current_file, ld, rd, ra)
     end
     diff_sidebar.render_sidebar(layout.sidebar_buf, state)
@@ -227,7 +283,9 @@ function M.setup_keymaps(state, layout, active_states)
   local function nav_to_next_ai(from_row)
     local row_ai_new = state.scroll_mode and state.scroll_row_ai or (state.row_ai_cache[state.current_file] or {})
     local rows = {}
-    for r in pairs(row_ai_new) do table.insert(rows, r) end
+    for r in pairs(row_ai_new) do
+      table.insert(rows, r)
+    end
     table.sort(rows)
     for _, r in ipairs(rows) do
       if r >= from_row then
@@ -256,7 +314,9 @@ function M.setup_keymaps(state, layout, active_states)
   end
 
   local function get_summary_disc()
-    if state.view_mode ~= "summary" then return nil end
+    if state.view_mode ~= "summary" then
+      return nil
+    end
     local cursor = vim.api.nvim_win_get_cursor(layout.main_win)[1]
     local entry = state.summary_row_map and state.summary_row_map[cursor]
     if entry and (entry.type == "thread" or entry.type == "thread_start") then
@@ -265,10 +325,14 @@ function M.setup_keymaps(state, layout, active_states)
   end
 
   local function jump_to_summary_file_path()
-    if state.view_mode ~= "summary" then return false end
+    if state.view_mode ~= "summary" then
+      return false
+    end
     local cursor = vim.api.nvim_win_get_cursor(layout.main_win)[1]
     local entry = state.summary_row_map and state.summary_row_map[cursor]
-    if not entry or entry.type ~= "file_path" then return false end
+    if not entry or entry.type ~= "file_path" then
+      return false
+    end
 
     -- Find file index by path
     for idx, f in ipairs(state.files or {}) do
@@ -323,19 +387,26 @@ function M.setup_keymaps(state, layout, active_states)
 
   local function nav_commit(delta)
     local commits = state.commits or {}
-    if #commits == 0 then return end
+    if #commits == 0 then
+      return
+    end
     local current_sha = state.commit_filter and state.commit_filter.to_sha
     local idx
     if current_sha then
       for i, c in ipairs(commits) do
-        if c.sha == current_sha then idx = i; break end
+        if c.sha == current_sha then
+          idx = i
+          break
+        end
       end
     end
     if not idx then
       idx = delta > 0 and 0 or #commits + 1
     end
     local next_idx = idx + delta
-    if next_idx < 1 or next_idx > #commits then return end
+    if next_idx < 1 or next_idx > #commits then
+      return
+    end
     local c = commits[next_idx]
     select_commit_entry({ type = "commit", sha = c.sha, title = c.title })
   end
@@ -351,7 +422,9 @@ function M.setup_keymaps(state, layout, active_states)
         end
         return
       end
-      if state.view_mode ~= "diff" then return end
+      if state.view_mode ~= "diff" then
+        return
+      end
       if state.scroll_mode then
         local cursor = vim.api.nvim_win_get_cursor(layout.main_win)[1]
         for _, sec in ipairs(state.file_sections) do
@@ -375,7 +448,9 @@ function M.setup_keymaps(state, layout, active_states)
         end
         return
       end
-      if state.view_mode ~= "diff" then return end
+      if state.view_mode ~= "diff" then
+        return
+      end
       if state.scroll_mode then
         local cursor = vim.api.nvim_win_get_cursor(layout.main_win)[1]
         for i = #state.file_sections, 1, -1 do
@@ -395,12 +470,16 @@ function M.setup_keymaps(state, layout, active_states)
     -- NOTE: We must NOT map bare "c" with nowait — it blocks cc from ever firing.
     create_comment = function()
       if state.view_mode == "summary" then
-        if jump_to_summary_file_path() then return end
+        if jump_to_summary_file_path() then
+          return
+        end
         local comment = require("codereview.mr.comment")
         comment.create_mr_comment(state.review, state.provider, state.ctx, refresh_discussions)
         return
       end
-      if state.view_mode ~= "diff" then return end
+      if state.view_mode ~= "diff" then
+        return
+      end
       local session = require("codereview.review.session")
       if state.scroll_mode then
         local cursor = vim.api.nvim_win_get_cursor(layout.main_win)
@@ -415,10 +494,10 @@ function M.setup_keymaps(state, layout, active_states)
           return
         end
         local file = state.files[data.file_idx]
-        local line_text = vim.api.nvim_buf_get_lines(
-          vim.api.nvim_win_get_buf(layout.main_win), row - 1, row, false
-        )[1] or ""
-        local popup_opts = { anchor_line = row, win_id = layout.main_win, action_type = "comment", context_text = line_text }
+        local line_text = vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(layout.main_win), row - 1, row, false)[1]
+          or ""
+        local popup_opts =
+          { anchor_line = row, win_id = layout.main_win, action_type = "comment", context_text = line_text }
         local comment = require("codereview.mr.comment")
         if session.get().active then
           local new_path = file.new_path
@@ -462,7 +541,9 @@ function M.setup_keymaps(state, layout, active_states)
       else
         if session.get().active then
           local line_data = state.line_data_cache[state.current_file]
-          if not line_data then return end
+          if not line_data then
+            return
+          end
           local cursor = vim.api.nvim_win_get_cursor(layout.main_win)
           local row = cursor[1]
           local data = line_data[row]
@@ -475,9 +556,8 @@ function M.setup_keymaps(state, layout, active_states)
             return
           end
           local file = state.files[state.current_file]
-          local line_text = vim.api.nvim_buf_get_lines(
-            vim.api.nvim_win_get_buf(layout.main_win), row - 1, row, false
-          )[1] or ""
+          local line_text = vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(layout.main_win), row - 1, row, false)[1]
+            or ""
           local comment = require("codereview.mr.comment")
           local new_path = file.new_path
           local new_line = data.item.new_line
@@ -489,7 +569,12 @@ function M.setup_keymaps(state, layout, active_states)
             on_success = add_local_draft(file.new_path, data.item.new_line),
             success_msg = "Draft comment created",
             failure_msg = "Failed to create draft comment",
-            popup_opts = { anchor_line = row, win_id = layout.main_win, action_type = "comment", context_text = line_text },
+            popup_opts = {
+              anchor_line = row,
+              win_id = layout.main_win,
+              action_type = "comment",
+              context_text = line_text,
+            },
           })
         else
           diff_comments.create_comment_at_cursor(layout, state, {
@@ -503,11 +588,15 @@ function M.setup_keymaps(state, layout, active_states)
     end,
 
     create_range_comment = function()
-      if state.view_mode ~= "diff" then return end
+      if state.view_mode ~= "diff" then
+        return
+      end
       local session = require("codereview.review.session")
       if state.scroll_mode then
         local s, e = vim.fn.line("v"), vim.fn.line(".")
-        if s > e then s, e = e, s end
+        if s > e then
+          s, e = e, s
+        end
         local start_data = state.scroll_line_data[s]
         local end_data = state.scroll_line_data[e]
         if not start_data or not start_data.item or not end_data or not end_data.item then
@@ -519,10 +608,15 @@ function M.setup_keymaps(state, layout, active_states)
           return
         end
         local file = state.files[start_data.file_idx]
-        local line_text = vim.api.nvim_buf_get_lines(
-          vim.api.nvim_win_get_buf(layout.main_win), e - 1, e, false
-        )[1] or ""
-        local popup_opts = { anchor_line = e, anchor_start = s, win_id = layout.main_win, action_type = "comment", context_text = line_text }
+        local line_text = vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(layout.main_win), e - 1, e, false)[1]
+          or ""
+        local popup_opts = {
+          anchor_line = e,
+          anchor_start = s,
+          win_id = layout.main_win,
+          action_type = "comment",
+          context_text = line_text,
+        }
         local comment = require("codereview.mr.comment")
         if session.get().active then
           local new_path = file.new_path
@@ -548,7 +642,13 @@ function M.setup_keymaps(state, layout, active_states)
               return provider.post_range_comment(client, ctx, mr, text, old_path, new_path, start_pos, end_pos)
             end,
             optimistic = {
-              add = add_optimistic_comment(old_path, new_path, end_data.item.old_line, end_data.item.new_line, start_data.item.new_line),
+              add = add_optimistic_comment(
+                old_path,
+                new_path,
+                end_data.item.old_line,
+                end_data.item.new_line,
+                start_data.item.new_line
+              ),
               remove = remove_optimistic,
               mark_failed = mark_optimistic_failed,
               refresh = refresh_discussions,
@@ -561,9 +661,13 @@ function M.setup_keymaps(state, layout, active_states)
       else
         if session.get().active then
           local line_data = state.line_data_cache[state.current_file]
-          if not line_data then return end
+          if not line_data then
+            return
+          end
           local s, e = vim.fn.line("v"), vim.fn.line(".")
-          if s > e then s, e = e, s end
+          if s > e then
+            s, e = e, s
+          end
           local start_data = line_data[s]
           local end_data = line_data[e]
           if not start_data or not start_data.item or not end_data or not end_data.item then
@@ -575,9 +679,8 @@ function M.setup_keymaps(state, layout, active_states)
             return
           end
           local file = state.files[state.current_file]
-          local line_text = vim.api.nvim_buf_get_lines(
-            vim.api.nvim_win_get_buf(layout.main_win), e - 1, e, false
-          )[1] or ""
+          local line_text = vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(layout.main_win), e - 1, e, false)[1]
+            or ""
           local comment = require("codereview.mr.comment")
           local new_path = file.new_path
           local end_line = end_data.item.new_line
@@ -589,7 +692,13 @@ function M.setup_keymaps(state, layout, active_states)
             on_success = add_local_draft(file.new_path, end_data.item.new_line, start_data.item.new_line),
             success_msg = "Draft comment created",
             failure_msg = "Failed to create draft comment",
-            popup_opts = { anchor_line = e, anchor_start = s, win_id = layout.main_win, action_type = "comment", context_text = line_text },
+            popup_opts = {
+              anchor_line = e,
+              anchor_start = s,
+              win_id = layout.main_win,
+              action_type = "comment",
+              context_text = line_text,
+            },
           })
         else
           diff_comments.create_comment_range(layout, state, {
@@ -616,14 +725,15 @@ function M.setup_keymaps(state, layout, active_states)
         end
         return
       end
-      if state.view_mode ~= "diff" then return end
+      if state.view_mode ~= "diff" then
+        return
+      end
       local disc = get_cursor_disc()
       if disc and not disc.is_draft then
         local comment = require("codereview.mr.comment")
         local cursor_row = vim.api.nvim_win_get_cursor(layout.main_win)[1]
         -- Find last row belonging to this discussion so float opens below the comment block
-        local row_disc = state.scroll_mode and state.scroll_row_disc
-          or state.row_disc_cache[state.current_file]
+        local row_disc = state.scroll_mode and state.scroll_row_disc or state.row_disc_cache[state.current_file]
         local last_row = cursor_row
         if row_disc then
           local total = vim.api.nvim_buf_line_count(vim.api.nvim_win_get_buf(layout.main_win))
@@ -632,9 +742,16 @@ function M.setup_keymaps(state, layout, active_states)
             if discs then
               local found = false
               for _, d in ipairs(discs) do
-                if d.id == disc.id then found = true; break end
+                if d.id == disc.id then
+                  found = true
+                  break
+                end
               end
-              if found then last_row = r else break end
+              if found then
+                last_row = r
+              else
+                break
+              end
             else
               break
             end
@@ -674,7 +791,9 @@ function M.setup_keymaps(state, layout, active_states)
         end
         return
       end
-      if state.view_mode ~= "diff" then return end
+      if state.view_mode ~= "diff" then
+        return
+      end
       local disc = get_cursor_disc()
       if disc then
         local comment = require("codereview.mr.comment")
@@ -683,17 +802,23 @@ function M.setup_keymaps(state, layout, active_states)
     end,
 
     increase_context = function()
-      if state.view_mode ~= "diff" then return end
+      if state.view_mode ~= "diff" then
+        return
+      end
       diff_nav.adjust_context(layout, state, 1)
     end,
 
     decrease_context = function()
-      if state.view_mode ~= "diff" then return end
+      if state.view_mode ~= "diff" then
+        return
+      end
       diff_nav.adjust_context(layout, state, -1)
     end,
 
     toggle_full_file = function()
-      if state.view_mode ~= "diff" then return end
+      if state.view_mode ~= "diff" then
+        return
+      end
       local cursor_row = vim.api.nvim_win_get_cursor(layout.main_win)[1]
       if state.scroll_mode then
         local file_idx = diff_nav.current_file_from_cursor(layout, state)
@@ -703,7 +828,19 @@ function M.setup_keymaps(state, layout, active_states)
         else
           state.file_contexts[file_idx] = 99999
         end
-        local result = diff_render.render_all_files(layout.main_buf, state.files, state.review, state.discussions, state.context, state.file_contexts, state.ai_suggestions, state.row_selection, state.current_user, nil, state.git_diff_cache)
+        local result = diff_render.render_all_files(
+          layout.main_buf,
+          state.files,
+          state.review,
+          state.discussions,
+          state.context,
+          state.file_contexts,
+          state.ai_suggestions,
+          state.row_selection,
+          state.current_user,
+          nil,
+          state.git_diff_cache
+        )
         diff_state.apply_scroll_result(state, result)
         local row = diff_nav.find_row_for_anchor(state.scroll_line_data, anchor)
         vim.api.nvim_win_set_cursor(layout.main_win, { row, 0 })
@@ -716,8 +853,22 @@ function M.setup_keymaps(state, layout, active_states)
           state.context = 99999
         end
         local file = state.files and state.files[state.current_file]
-        if not file then return end
-        local ld, rd, ra = diff_render.render_file_diff(layout.main_buf, file, state.review, state.discussions, state.context, state.ai_suggestions, state.row_selection, state.current_user, nil, state.git_diff_cache, state.commit_filter)
+        if not file then
+          return
+        end
+        local ld, rd, ra = diff_render.render_file_diff(
+          layout.main_buf,
+          file,
+          state.review,
+          state.discussions,
+          state.context,
+          state.ai_suggestions,
+          state.row_selection,
+          state.current_user,
+          nil,
+          state.git_diff_cache,
+          state.commit_filter
+        )
         diff_state.apply_file_result(state, state.current_file, ld, rd, ra)
         local row = diff_nav.find_row_for_anchor(ld, anchor, state.current_file)
         vim.api.nvim_win_set_cursor(layout.main_win, { row, 0 })
@@ -725,7 +876,9 @@ function M.setup_keymaps(state, layout, active_states)
     end,
 
     toggle_scroll_mode = function()
-      if state.view_mode ~= "diff" then return end
+      if state.view_mode ~= "diff" then
+        return
+      end
       diff_nav.toggle_scroll_mode(layout, state)
     end,
 
@@ -735,14 +888,20 @@ function M.setup_keymaps(state, layout, active_states)
         require("codereview.mr.actions").approve(state.review)
         return
       end
-      if state.view_mode ~= "diff" then return end
+      if state.view_mode ~= "diff" then
+        return
+      end
       local cursor = vim.api.nvim_win_get_cursor(layout.main_win)[1]
       local row_ai = state.scroll_mode and state.scroll_row_ai or (state.row_ai_cache[state.current_file] or {})
       local sel = state.row_selection[cursor]
-      if not sel or sel.type ~= "ai" then return end
+      if not sel or sel.type ~= "ai" then
+        return
+      end
       local ai_idx = sel.index
       local suggestion = row_ai[cursor] and row_ai[cursor][ai_idx]
-      if not suggestion then return end
+      if not suggestion then
+        return
+      end
 
       -- Post as draft comment via API
       local client_mod = require("codereview.api.client")
@@ -765,33 +924,47 @@ function M.setup_keymaps(state, layout, active_states)
 
     -- approve shares default key "a" with accept_suggestion; independent remapping supported
     approve = function()
-      if state.view_mode ~= "summary" then return end
+      if state.view_mode ~= "summary" then
+        return
+      end
       require("codereview.mr.actions").approve(state.review)
     end,
 
     dismiss_suggestion = function()
-      if state.view_mode ~= "diff" then return end
+      if state.view_mode ~= "diff" then
+        return
+      end
       local cursor = vim.api.nvim_win_get_cursor(layout.main_win)[1]
       local row_ai = state.scroll_mode and state.scroll_row_ai or (state.row_ai_cache[state.current_file] or {})
       local sel = state.row_selection[cursor]
-      if not sel or sel.type ~= "ai" then return end
+      if not sel or sel.type ~= "ai" then
+        return
+      end
       local ai_idx = sel.index
       local suggestion = row_ai[cursor] and row_ai[cursor][ai_idx]
-      if not suggestion then return end
+      if not suggestion then
+        return
+      end
       suggestion.status = "dismissed"
       rerender_ai()
       nav_to_next_ai(cursor)
     end,
 
     edit_suggestion = function()
-      if state.view_mode ~= "diff" then return end
+      if state.view_mode ~= "diff" then
+        return
+      end
       local cursor = vim.api.nvim_win_get_cursor(layout.main_win)[1]
       local row_ai = state.scroll_mode and state.scroll_row_ai or (state.row_ai_cache[state.current_file] or {})
       local sel = state.row_selection[cursor]
-      if not sel or sel.type ~= "ai" then return end
+      if not sel or sel.type ~= "ai" then
+        return
+      end
       local ai_idx = sel.index
       local suggestion = row_ai[cursor] and row_ai[cursor][ai_idx]
-      if not suggestion then return end
+      if not suggestion then
+        return
+      end
 
       -- Hide the suggestion's virt_lines while editing
       vim.api.nvim_buf_clear_namespace(layout.main_buf, AIDRAFT_NS, cursor - 1, cursor)
@@ -824,12 +997,16 @@ function M.setup_keymaps(state, layout, active_states)
         prefill = suggestion.comment,
         anchor_line = cursor,
         win_id = layout.main_win,
-        on_close = function() rerender_ai() end,
+        on_close = function()
+          rerender_ai()
+        end,
       })
     end,
 
     dismiss_all_suggestions = function()
-      if state.view_mode ~= "diff" or not state.ai_suggestions then return end
+      if state.view_mode ~= "diff" or not state.ai_suggestions then
+        return
+      end
       for _, s in ipairs(state.ai_suggestions) do
         if s.status ~= "accepted" and s.status ~= "edited" then
           s.status = "dismissed"
@@ -839,7 +1016,9 @@ function M.setup_keymaps(state, layout, active_states)
     end,
 
     submit = function()
-      if state.view_mode ~= "diff" then return end
+      if state.view_mode ~= "diff" then
+        return
+      end
       local session = require("codereview.review.session")
       local submit_float = require("codereview.mr.submit_float")
       local submit_mod = require("codereview.review.submit")
@@ -870,12 +1049,18 @@ function M.setup_keymaps(state, layout, active_states)
     end,
 
     open_in_browser = function()
-      if state.view_mode ~= "summary" then return end
-      if state.review.web_url then vim.ui.open(state.review.web_url) end
+      if state.view_mode ~= "summary" then
+        return
+      end
+      if state.review.web_url then
+        vim.ui.open(state.review.web_url)
+      end
     end,
 
     merge = function()
-      if state.view_mode ~= "summary" then return end
+      if state.view_mode ~= "summary" then
+        return
+      end
       local providers = require("codereview.providers")
       local _, ctx, err = providers.detect()
       if not ctx then
@@ -886,7 +1071,9 @@ function M.setup_keymaps(state, layout, active_states)
     end,
 
     show_pipeline = function()
-      if state.view_mode ~= "summary" and state.view_mode ~= "diff" then return end
+      if state.view_mode ~= "summary" and state.view_mode ~= "diff" then
+        return
+      end
       require("codereview.pipeline").open(state)
     end,
 
@@ -906,16 +1093,26 @@ function M.setup_keymaps(state, layout, active_states)
     end,
 
     edit_note = function()
-      if state.view_mode ~= "diff" then return end
+      if state.view_mode ~= "diff" then
+        return
+      end
       local disc = get_cursor_disc()
-      if not disc then return end
+      if not disc then
+        return
+      end
       local cursor_row = vim.api.nvim_win_get_cursor(layout.main_win)[1]
       local sel = state.row_selection[cursor_row]
       local sel_idx = sel and sel.type == "comment" and sel.disc_id == disc.id and sel.note_idx or nil
-      if not sel_idx then return end  -- no note selected; let edit_suggestion handle "e"
+      if not sel_idx then
+        return
+      end -- no note selected; let edit_suggestion handle "e"
       local note = disc.notes[sel_idx]
-      if not note then return end
-      if not state.current_user then return end
+      if not note then
+        return
+      end
+      if not state.current_user then
+        return
+      end
       if note.author ~= state.current_user then
         vim.notify("Can only edit your own comments", vim.log.levels.WARN)
         return
@@ -965,15 +1162,23 @@ function M.setup_keymaps(state, layout, active_states)
     end,
 
     delete_note = function()
-      if state.view_mode ~= "diff" then return end
+      if state.view_mode ~= "diff" then
+        return
+      end
       local disc = get_cursor_disc()
-      if not disc then return end
+      if not disc then
+        return
+      end
       local cursor_row = vim.api.nvim_win_get_cursor(layout.main_win)[1]
       local sel = state.row_selection[cursor_row]
       local sel_idx = sel and sel.type == "comment" and sel.disc_id == disc.id and sel.note_idx or nil
-      if not sel_idx then return end  -- no note selected; let dismiss_suggestion handle "x"
+      if not sel_idx then
+        return
+      end -- no note selected; let dismiss_suggestion handle "x"
       local note = disc.notes[sel_idx]
-      if not note then return end
+      if not note then
+        return
+      end
       local comment = require("codereview.mr.comment")
 
       -- Draft comments: use delete_draft path
@@ -998,13 +1203,15 @@ function M.setup_keymaps(state, layout, active_states)
       end
 
       -- Published comments: existing path
-      if not state.current_user then return end
+      if not state.current_user then
+        return
+      end
       if note.author ~= state.current_user then
         vim.notify("Can only delete your own comments", vim.log.levels.WARN)
         return
       end
       comment.delete_note(disc, note, state.review, function(result)
-        state.row_selection[cursor_row] = nil  -- clear selection
+        state.row_selection[cursor_row] = nil -- clear selection
         if result and result.removed_disc then
           for i, d in ipairs(state.discussions) do
             if d.id == disc.id then
@@ -1038,7 +1245,9 @@ function M.setup_keymaps(state, layout, active_states)
         end
 
         -- Past last thread (or no threads): transition to diff view
-        if not state.files or #state.files == 0 then return end
+        if not state.files or #state.files == 0 then
+          return
+        end
         -- Transition from summary to diff view
         state.view_mode = "diff"
         state.row_selection = {}
@@ -1046,7 +1255,18 @@ function M.setup_keymaps(state, layout, active_states)
         vim.wo[layout.main_win].linebreak = false
         vim.wo[layout.main_win].scrolloff = 0
         if state.scroll_mode then
-          local result = diff_render.render_all_files(layout.main_buf, state.files, state.review, state.discussions, state.context, state.file_contexts, state.ai_suggestions, state.row_selection, state.current_user, state.git_diff_cache)
+          local result = diff_render.render_all_files(
+            layout.main_buf,
+            state.files,
+            state.review,
+            state.discussions,
+            state.context,
+            state.file_contexts,
+            state.ai_suggestions,
+            state.row_selection,
+            state.current_user,
+            state.git_diff_cache
+          )
           state.file_sections = result.file_sections
           state.scroll_line_data = result.line_data
           state.scroll_row_disc = result.row_discussions
@@ -1067,7 +1287,8 @@ function M.setup_keymaps(state, layout, active_states)
       end
       local cursor_row = vim.api.nvim_win_get_cursor(layout.main_win)[1]
       local row_ai = state.scroll_mode and state.scroll_row_ai or (state.row_ai_cache[state.current_file] or {})
-      local row_disc_map = state.scroll_mode and state.scroll_row_disc or (state.row_disc_cache[state.current_file] or {})
+      local row_disc_map = state.scroll_mode and state.scroll_row_disc
+        or (state.row_disc_cache[state.current_file] or {})
       local ai_at_row = row_ai[cursor_row] or {}
       local discs_at_row = row_disc_map[cursor_row] or {}
       local items = diff_comments.build_row_items(ai_at_row, discs_at_row)
@@ -1078,7 +1299,16 @@ function M.setup_keymaps(state, layout, active_states)
         local next_sel = diff_comments.cycle_row_selection(items, current, 1)
         if next_sel then
           state.row_selection = { [cursor_row] = next_sel }
-          local sel_offset = diff_render.update_selection_at_row(layout.main_buf, cursor_row, state.row_selection, row_ai, row_disc_map, state.current_user, state.review, state.editing_note)
+          local sel_offset = diff_render.update_selection_at_row(
+            layout.main_buf,
+            cursor_row,
+            state.row_selection,
+            row_ai,
+            row_disc_map,
+            state.current_user,
+            state.review,
+            state.editing_note
+          )
           state._pending_scroll = { row = cursor_row, focus_offset = sel_offset }
           rerender_view()
           return
@@ -1094,7 +1324,16 @@ function M.setup_keymaps(state, layout, active_states)
           local next_disc = row_disc_map[r] or {}
           local next_items = diff_comments.build_row_items(next_ai, next_disc)
           state.row_selection = { [r] = next_items[1] or nil }
-          local sel_offset = diff_render.update_selection_at_row(layout.main_buf, r, state.row_selection, row_ai, row_disc_map, state.current_user, state.review, state.editing_note)
+          local sel_offset = diff_render.update_selection_at_row(
+            layout.main_buf,
+            r,
+            state.row_selection,
+            row_ai,
+            row_disc_map,
+            state.current_user,
+            state.review,
+            state.editing_note
+          )
           state._pending_scroll = { row = r, focus_offset = sel_offset }
           rerender_view()
           return
@@ -1111,7 +1350,16 @@ function M.setup_keymaps(state, layout, active_states)
           local next_disc = row_disc_map[r] or {}
           local next_items = diff_comments.build_row_items(next_ai, next_disc)
           state.row_selection = { [r] = next_items[1] or nil }
-          local sel_offset = diff_render.update_selection_at_row(layout.main_buf, r, state.row_selection, row_ai, row_disc_map, state.current_user, state.review, state.editing_note)
+          local sel_offset = diff_render.update_selection_at_row(
+            layout.main_buf,
+            r,
+            state.row_selection,
+            row_ai,
+            row_disc_map,
+            state.current_user,
+            state.review,
+            state.editing_note
+          )
           state._pending_scroll = { row = r, focus_offset = sel_offset }
           rerender_view()
         end
@@ -1132,7 +1380,16 @@ function M.setup_keymaps(state, layout, active_states)
               local next_disc = rd[rows[1]] or {}
               local next_items = diff_comments.build_row_items(next_ai, next_disc)
               state.row_selection = { [rows[1]] = next_items[1] or nil }
-              local sel_offset = diff_render.update_selection_at_row(layout.main_buf, rows[1], state.row_selection, ra, rd, state.current_user, state.review, state.editing_note)
+              local sel_offset = diff_render.update_selection_at_row(
+                layout.main_buf,
+                rows[1],
+                state.row_selection,
+                ra,
+                rd,
+                state.current_user,
+                state.review,
+                state.editing_note
+              )
               state._pending_scroll = { row = rows[1], focus_offset = sel_offset }
               rerender_view()
             end
@@ -1163,10 +1420,14 @@ function M.setup_keymaps(state, layout, active_states)
         end
 
         -- On or before first thread: stay put (don't transition to diff)
-        if #thread_rows > 0 then return end
+        if #thread_rows > 0 then
+          return
+        end
 
         -- No threads at all: transition to diff view
-        if not state.files or #state.files == 0 then return end
+        if not state.files or #state.files == 0 then
+          return
+        end
         -- Transition from summary to diff view
         state.view_mode = "diff"
         state.row_selection = {}
@@ -1174,7 +1435,18 @@ function M.setup_keymaps(state, layout, active_states)
         vim.wo[layout.main_win].linebreak = false
         vim.wo[layout.main_win].scrolloff = 0
         if state.scroll_mode then
-          local result = diff_render.render_all_files(layout.main_buf, state.files, state.review, state.discussions, state.context, state.file_contexts, state.ai_suggestions, state.row_selection, state.current_user, state.git_diff_cache)
+          local result = diff_render.render_all_files(
+            layout.main_buf,
+            state.files,
+            state.review,
+            state.discussions,
+            state.context,
+            state.file_contexts,
+            state.ai_suggestions,
+            state.row_selection,
+            state.current_user,
+            state.git_diff_cache
+          )
           state.file_sections = result.file_sections
           state.scroll_line_data = result.line_data
           state.scroll_row_disc = result.row_discussions
@@ -1196,7 +1468,8 @@ function M.setup_keymaps(state, layout, active_states)
       end
       local cursor_row = vim.api.nvim_win_get_cursor(layout.main_win)[1]
       local row_ai = state.scroll_mode and state.scroll_row_ai or (state.row_ai_cache[state.current_file] or {})
-      local row_disc_map = state.scroll_mode and state.scroll_row_disc or (state.row_disc_cache[state.current_file] or {})
+      local row_disc_map = state.scroll_mode and state.scroll_row_disc
+        or (state.row_disc_cache[state.current_file] or {})
       local ai_at_row = row_ai[cursor_row] or {}
       local discs_at_row = row_disc_map[cursor_row] or {}
       local items = diff_comments.build_row_items(ai_at_row, discs_at_row)
@@ -1207,7 +1480,16 @@ function M.setup_keymaps(state, layout, active_states)
         local next_sel = diff_comments.cycle_row_selection(items, current, -1)
         if next_sel then
           state.row_selection = { [cursor_row] = next_sel }
-          local sel_offset = diff_render.update_selection_at_row(layout.main_buf, cursor_row, state.row_selection, row_ai, row_disc_map, state.current_user, state.review, state.editing_note)
+          local sel_offset = diff_render.update_selection_at_row(
+            layout.main_buf,
+            cursor_row,
+            state.row_selection,
+            row_ai,
+            row_disc_map,
+            state.current_user,
+            state.review,
+            state.editing_note
+          )
           state._pending_scroll = { row = cursor_row, focus_offset = sel_offset }
           rerender_view()
           return
@@ -1224,7 +1506,16 @@ function M.setup_keymaps(state, layout, active_states)
           local prev_disc = row_disc_map[r] or {}
           local prev_items = diff_comments.build_row_items(prev_ai, prev_disc)
           state.row_selection = { [r] = prev_items[#prev_items] or nil }
-          local sel_offset = diff_render.update_selection_at_row(layout.main_buf, r, state.row_selection, row_ai, row_disc_map, state.current_user, state.review, state.editing_note)
+          local sel_offset = diff_render.update_selection_at_row(
+            layout.main_buf,
+            r,
+            state.row_selection,
+            row_ai,
+            row_disc_map,
+            state.current_user,
+            state.review,
+            state.editing_note
+          )
           state._pending_scroll = { row = r, focus_offset = sel_offset }
           rerender_view()
           return
@@ -1240,7 +1531,16 @@ function M.setup_keymaps(state, layout, active_states)
           local prev_disc = row_disc_map[r] or {}
           local prev_items = diff_comments.build_row_items(prev_ai, prev_disc)
           state.row_selection = { [r] = prev_items[#prev_items] or nil }
-          local sel_offset = diff_render.update_selection_at_row(layout.main_buf, r, state.row_selection, row_ai, row_disc_map, state.current_user, state.review, state.editing_note)
+          local sel_offset = diff_render.update_selection_at_row(
+            layout.main_buf,
+            r,
+            state.row_selection,
+            row_ai,
+            row_disc_map,
+            state.current_user,
+            state.review,
+            state.editing_note
+          )
           state._pending_scroll = { row = r, focus_offset = sel_offset }
           rerender_view()
         end
@@ -1261,7 +1561,16 @@ function M.setup_keymaps(state, layout, active_states)
               local prev_disc = rd[r] or {}
               local prev_items = diff_comments.build_row_items(prev_ai, prev_disc)
               state.row_selection = { [r] = prev_items[#prev_items] or nil }
-              local sel_offset = diff_render.update_selection_at_row(layout.main_buf, r, state.row_selection, ra, rd, state.current_user, state.review, state.editing_note)
+              local sel_offset = diff_render.update_selection_at_row(
+                layout.main_buf,
+                r,
+                state.row_selection,
+                ra,
+                rd,
+                state.current_user,
+                state.review,
+                state.editing_note
+              )
               state._pending_scroll = { row = r, focus_offset = sel_offset }
               rerender_view()
             end
@@ -1282,7 +1591,8 @@ function M.setup_keymaps(state, layout, active_states)
 
       local cursor_row = vim.api.nvim_win_get_cursor(layout.main_win)[1]
       local row_ai = state.scroll_mode and state.scroll_row_ai or (state.row_ai_cache[state.current_file] or {})
-      local row_disc_map = state.scroll_mode and state.scroll_row_disc or (state.row_disc_cache[state.current_file] or {})
+      local row_disc_map = state.scroll_mode and state.scroll_row_disc
+        or (state.row_disc_cache[state.current_file] or {})
       local has_sel = next(state.row_selection) ~= nil
       local cur_has_ann = row_ai[cursor_row] or row_disc_map[cursor_row]
 
@@ -1294,7 +1604,16 @@ function M.setup_keymaps(state, layout, active_states)
           local new_items = diff_comments.build_row_items(row_ai[new_row] or {}, row_disc_map[new_row] or {})
           if #new_items > 0 then
             state.row_selection = { [new_row] = new_items[1] }
-            local sel_offset = diff_render.update_selection_at_row(layout.main_buf, new_row, state.row_selection, row_ai, row_disc_map, state.current_user, state.review, state.editing_note)
+            local sel_offset = diff_render.update_selection_at_row(
+              layout.main_buf,
+              new_row,
+              state.row_selection,
+              row_ai,
+              row_disc_map,
+              state.current_user,
+              state.review,
+              state.editing_note
+            )
             state._pending_scroll = { row = new_row, focus_offset = sel_offset }
             rerender_view()
           end
@@ -1308,7 +1627,16 @@ function M.setup_keymaps(state, layout, active_states)
         local next_sel = diff_comments.cycle_row_selection(items, state.row_selection[cursor_row], 1)
         if next_sel then
           state.row_selection = { [cursor_row] = next_sel }
-          local sel_offset = diff_render.update_selection_at_row(layout.main_buf, cursor_row, state.row_selection, row_ai, row_disc_map, state.current_user, state.review, state.editing_note)
+          local sel_offset = diff_render.update_selection_at_row(
+            layout.main_buf,
+            cursor_row,
+            state.row_selection,
+            row_ai,
+            row_disc_map,
+            state.current_user,
+            state.review,
+            state.editing_note
+          )
           state._pending_scroll = { row = cursor_row, focus_offset = sel_offset }
           rerender_view()
           return
@@ -1318,13 +1646,24 @@ function M.setup_keymaps(state, layout, active_states)
       -- Move cursor down
       vim.cmd("normal! j")
       local new_row = vim.api.nvim_win_get_cursor(layout.main_win)[1]
-      if new_row == cursor_row then return end
+      if new_row == cursor_row then
+        return
+      end
 
       if row_ai[new_row] or row_disc_map[new_row] then
         local new_items = diff_comments.build_row_items(row_ai[new_row] or {}, row_disc_map[new_row] or {})
         if #new_items > 0 then
           state.row_selection = { [new_row] = new_items[1] }
-          local sel_offset = diff_render.update_selection_at_row(layout.main_buf, new_row, state.row_selection, row_ai, row_disc_map, state.current_user, state.review, state.editing_note)
+          local sel_offset = diff_render.update_selection_at_row(
+            layout.main_buf,
+            new_row,
+            state.row_selection,
+            row_ai,
+            row_disc_map,
+            state.current_user,
+            state.review,
+            state.editing_note
+          )
           state._pending_scroll = { row = new_row, focus_offset = sel_offset }
           rerender_view()
           return
@@ -1347,7 +1686,8 @@ function M.setup_keymaps(state, layout, active_states)
 
       local cursor_row = vim.api.nvim_win_get_cursor(layout.main_win)[1]
       local row_ai = state.scroll_mode and state.scroll_row_ai or (state.row_ai_cache[state.current_file] or {})
-      local row_disc_map = state.scroll_mode and state.scroll_row_disc or (state.row_disc_cache[state.current_file] or {})
+      local row_disc_map = state.scroll_mode and state.scroll_row_disc
+        or (state.row_disc_cache[state.current_file] or {})
       local has_sel = next(state.row_selection) ~= nil
       local cur_has_ann = row_ai[cursor_row] or row_disc_map[cursor_row]
 
@@ -1359,7 +1699,16 @@ function M.setup_keymaps(state, layout, active_states)
           local new_items = diff_comments.build_row_items(row_ai[new_row] or {}, row_disc_map[new_row] or {})
           if #new_items > 0 then
             state.row_selection = { [new_row] = new_items[#new_items] }
-            local sel_offset = diff_render.update_selection_at_row(layout.main_buf, new_row, state.row_selection, row_ai, row_disc_map, state.current_user, state.review, state.editing_note)
+            local sel_offset = diff_render.update_selection_at_row(
+              layout.main_buf,
+              new_row,
+              state.row_selection,
+              row_ai,
+              row_disc_map,
+              state.current_user,
+              state.review,
+              state.editing_note
+            )
             state._pending_scroll = { row = new_row, focus_offset = sel_offset }
             rerender_view()
           end
@@ -1373,7 +1722,16 @@ function M.setup_keymaps(state, layout, active_states)
         local next_sel = diff_comments.cycle_row_selection(items, state.row_selection[cursor_row], -1)
         if next_sel then
           state.row_selection = { [cursor_row] = next_sel }
-          local sel_offset = diff_render.update_selection_at_row(layout.main_buf, cursor_row, state.row_selection, row_ai, row_disc_map, state.current_user, state.review, state.editing_note)
+          local sel_offset = diff_render.update_selection_at_row(
+            layout.main_buf,
+            cursor_row,
+            state.row_selection,
+            row_ai,
+            row_disc_map,
+            state.current_user,
+            state.review,
+            state.editing_note
+          )
           state._pending_scroll = { row = cursor_row, focus_offset = sel_offset }
           rerender_view()
           return
@@ -1383,13 +1741,24 @@ function M.setup_keymaps(state, layout, active_states)
       -- Move cursor up
       vim.cmd("normal! k")
       local new_row = vim.api.nvim_win_get_cursor(layout.main_win)[1]
-      if new_row == cursor_row then return end
+      if new_row == cursor_row then
+        return
+      end
 
       if row_ai[new_row] or row_disc_map[new_row] then
         local new_items = diff_comments.build_row_items(row_ai[new_row] or {}, row_disc_map[new_row] or {})
         if #new_items > 0 then
           state.row_selection = { [new_row] = new_items[#new_items] }
-          local sel_offset = diff_render.update_selection_at_row(layout.main_buf, new_row, state.row_selection, row_ai, row_disc_map, state.current_user, state.review, state.editing_note)
+          local sel_offset = diff_render.update_selection_at_row(
+            layout.main_buf,
+            new_row,
+            state.row_selection,
+            row_ai,
+            row_disc_map,
+            state.current_user,
+            state.review,
+            state.editing_note
+          )
           state._pending_scroll = { row = new_row, focus_offset = sel_offset }
           rerender_view()
           return
@@ -1410,10 +1779,14 @@ function M.setup_keymaps(state, layout, active_states)
     pick_commits = function()
       require("codereview.picker.commits").pick(state, select_commit_entry)
     end,
-    next_commit = function() nav_commit(-1) end,
-    prev_commit = function() nav_commit(1) end,
+    next_commit = function()
+      nav_commit(-1)
+    end,
+    prev_commit = function()
+      nav_commit(1)
+    end,
     refresh = refresh,
-    quit    = quit,
+    quit = quit,
   }
 
   km.apply(main_buf, main_callbacks)
@@ -1429,7 +1802,9 @@ function M.setup_keymaps(state, layout, active_states)
         end
         return
       end
-      if state.view_mode ~= "diff" then return end
+      if state.view_mode ~= "diff" then
+        return
+      end
       diff_nav.nav_file(layout, state, 1)
     end,
     prev_file = function()
@@ -1440,11 +1815,15 @@ function M.setup_keymaps(state, layout, active_states)
         end
         return
       end
-      if state.view_mode ~= "diff" then return end
+      if state.view_mode ~= "diff" then
+        return
+      end
       diff_nav.nav_file(layout, state, -1)
     end,
     toggle_scroll_mode = function()
-      if state.view_mode ~= "diff" then return end
+      if state.view_mode ~= "diff" then
+        return
+      end
       diff_nav.toggle_scroll_mode(layout, state)
     end,
     pick_comments = function()
@@ -1456,10 +1835,14 @@ function M.setup_keymaps(state, layout, active_states)
     pick_commits = function()
       require("codereview.picker.commits").pick(state, select_commit_entry)
     end,
-    next_commit = function() nav_commit(-1) end,
-    prev_commit = function() nav_commit(1) end,
+    next_commit = function()
+      nav_commit(-1)
+    end,
+    prev_commit = function()
+      nav_commit(1)
+    end,
     refresh = refresh,
-    quit    = quit,
+    quit = quit,
   }
 
   km.apply(sidebar_buf, sidebar_callbacks)
@@ -1468,37 +1851,47 @@ function M.setup_keymaps(state, layout, active_states)
 
   -- gR: retry a failed optimistic comment
   map(main_buf, "n", "gR", function()
-    if state.view_mode ~= "diff" then return end
+    if state.view_mode ~= "diff" then
+      return
+    end
     local disc = get_cursor_disc()
-    if not disc or not disc.is_failed then return end
+    if not disc or not disc.is_failed then
+      return
+    end
     disc.is_failed = false
     disc.is_optimistic = true
     rerender_view()
     local note = disc.notes and disc.notes[1]
-    if not note then return end
+    if not note then
+      return
+    end
     local provider, _, ctx = require("codereview.providers").detect()
-    if not provider then return end
+    if not provider then
+      return
+    end
     local client = require("codereview.api.client")
     local comment = require("codereview.mr.comment")
     local pos = note.position or {}
-    comment.post_with_retry(
-      function() return provider.post_comment(client, ctx, state.review, note.body, pos) end,
-      function()
-        vim.notify("Comment posted", vim.log.levels.INFO)
-        refresh_discussions()
-      end,
-      function(err)
-        vim.notify("Retry failed: " .. err, vim.log.levels.ERROR)
-        mark_optimistic_failed(disc)
-      end
-    )
+    comment.post_with_retry(function()
+      return provider.post_comment(client, ctx, state.review, note.body, pos)
+    end, function()
+      vim.notify("Comment posted", vim.log.levels.INFO)
+      refresh_discussions()
+    end, function(err)
+      vim.notify("Retry failed: " .. err, vim.log.levels.ERROR)
+      mark_optimistic_failed(disc)
+    end)
   end)
 
   -- D: discard a failed optimistic comment
   map(main_buf, "n", "D", function()
-    if state.view_mode ~= "diff" then return end
+    if state.view_mode ~= "diff" then
+      return
+    end
     local disc = get_cursor_disc()
-    if not disc or not disc.is_failed then return end
+    if not disc or not disc.is_failed then
+      return
+    end
     remove_optimistic(disc)
     vim.notify("Discarded failed comment", vim.log.levels.INFO)
   end)
@@ -1509,11 +1902,15 @@ function M.setup_keymaps(state, layout, active_states)
       jump_to_summary_file_path()
       return
     end
-    if state.view_mode ~= "diff" then return end
+    if state.view_mode ~= "diff" then
+      return
+    end
     local cursor = vim.api.nvim_win_get_cursor(layout.main_win)
     local row = cursor[1]
     local line_data = state.line_data_cache[state.current_file]
-    if not line_data or not line_data[row] then return end
+    if not line_data or not line_data[row] then
+      return
+    end
     if line_data[row].type == "load_more" then
       diff_nav.adjust_context(layout, state, 10)
     end
@@ -1529,12 +1926,16 @@ function M.setup_keymaps(state, layout, active_states)
     local cursor = vim.api.nvim_win_get_cursor(layout.sidebar_win)
     local row = cursor[1]
     local entry = state.sidebar_row_map and state.sidebar_row_map[row]
-    if not entry then return end
+    if not entry then
+      return
+    end
 
     -- Restore main_buf into main_win if the user switched to another buffer
-    if vim.api.nvim_win_is_valid(layout.main_win)
+    if
+      vim.api.nvim_win_is_valid(layout.main_win)
       and vim.api.nvim_buf_is_valid(layout.main_buf)
-      and vim.api.nvim_win_get_buf(layout.main_win) ~= layout.main_buf then
+      and vim.api.nvim_win_get_buf(layout.main_win) ~= layout.main_buf
+    then
       vim.api.nvim_win_set_buf(layout.main_win, layout.main_buf)
     end
 
@@ -1544,9 +1945,10 @@ function M.setup_keymaps(state, layout, active_states)
       diff_sidebar.render_summary(layout.main_buf, state)
       vim.api.nvim_win_set_cursor(layout.main_win, { 1, 0 })
       vim.api.nvim_set_current_win(layout.main_win)
-
     elseif entry.type == "dir" then
-      if not state.collapsed_dirs then state.collapsed_dirs = {} end
+      if not state.collapsed_dirs then
+        state.collapsed_dirs = {}
+      end
       if state.collapsed_dirs[entry.path] then
         state.collapsed_dirs[entry.path] = nil
       else
@@ -1554,13 +1956,14 @@ function M.setup_keymaps(state, layout, active_states)
       end
       diff_sidebar.render_sidebar(layout.sidebar_buf, state)
       pcall(vim.api.nvim_win_set_cursor, layout.sidebar_win, { row, 0 })
-
     elseif entry.type == "file" then
       -- Lazy load diffs if needed
       if not state.files then
         local provider = state.provider
         local ctx = state.ctx
-        if not provider or not ctx then return end
+        if not provider or not ctx then
+          return
+        end
         local client_mod = require("codereview.api.client")
         local files, fetch_err = provider.get_diffs(client_mod, ctx, state.review)
         if fetch_err then
@@ -1579,7 +1982,19 @@ function M.setup_keymaps(state, layout, active_states)
 
       if state.scroll_mode then
         -- Always re-render all files (buffer may have summary content)
-        local result = diff_render.render_all_files(layout.main_buf, state.files, state.review, state.discussions, state.context, state.file_contexts, state.ai_suggestions, state.row_selection, state.current_user, nil, state.git_diff_cache)
+        local result = diff_render.render_all_files(
+          layout.main_buf,
+          state.files,
+          state.review,
+          state.discussions,
+          state.context,
+          state.file_contexts,
+          state.ai_suggestions,
+          state.row_selection,
+          state.current_user,
+          nil,
+          state.git_diff_cache
+        )
         diff_state.apply_scroll_result(state, result)
         diff_sidebar.render_sidebar(layout.sidebar_buf, state)
         for _, sec in ipairs(state.file_sections) do
@@ -1591,16 +2006,25 @@ function M.setup_keymaps(state, layout, active_states)
       else
         diff_sidebar.render_sidebar(layout.sidebar_buf, state)
         local line_data, row_disc, row_ai = diff_render.render_file_diff(
-          layout.main_buf, state.files[entry.idx], state.review, state.discussions, state.context, state.ai_suggestions, state.row_selection, state.current_user, nil, state.git_diff_cache, state.commit_filter)
+          layout.main_buf,
+          state.files[entry.idx],
+          state.review,
+          state.discussions,
+          state.context,
+          state.ai_suggestions,
+          state.row_selection,
+          state.current_user,
+          nil,
+          state.git_diff_cache,
+          state.commit_filter
+        )
         diff_state.apply_file_result(state, entry.idx, line_data, row_disc, row_ai)
       end
       vim.api.nvim_set_current_win(layout.main_win)
-
     elseif entry.type == "commits_header" then
       state.collapsed_commits = not state.collapsed_commits
       local diff_sidebar_mod = require("codereview.mr.diff_sidebar")
       diff_sidebar_mod.render_sidebar(layout.sidebar_buf, state)
-
     elseif entry.type == "commit" or entry.type == "since_last_review" then
       select_commit_entry(entry)
     end
@@ -1612,7 +2036,9 @@ function M.setup_keymaps(state, layout, active_states)
     buffer = sidebar_buf,
     callback = function()
       local ok, cur = pcall(vim.api.nvim_win_get_cursor, layout.sidebar_win)
-      if not ok then return end
+      if not ok then
+        return
+      end
       local row = cur[1]
       if state.sidebar_row_map[row] then
         prev_sb_row = row
@@ -1623,14 +2049,18 @@ function M.setup_keymaps(state, layout, active_states)
       local total = vim.api.nvim_buf_line_count(sidebar_buf)
       local target = row + dir
       while target >= 1 and target <= total do
-        if state.sidebar_row_map[target] then break end
+        if state.sidebar_row_map[target] then
+          break
+        end
         target = target + dir
       end
       -- Fallback: try other direction
       if not state.sidebar_row_map[target] then
         target = row - dir
         while target >= 1 and target <= total do
-          if state.sidebar_row_map[target] then break end
+          if state.sidebar_row_map[target] then
+            break
+          end
           target = target - dir
         end
       end
@@ -1647,12 +2077,15 @@ function M.setup_keymaps(state, layout, active_states)
   vim.api.nvim_create_autocmd("CursorMoved", {
     buffer = main_buf,
     callback = function()
-      if state.view_mode ~= "diff" then return end
+      if state.view_mode ~= "diff" then
+        return
+      end
 
       local cursor_row = vim.api.nvim_win_get_cursor(layout.main_win)[1]
       local row_ai = state.scroll_mode and state.scroll_row_ai or (state.row_ai_cache[state.current_file] or {})
       local ai_at_row = row_ai[cursor_row] or {}
-      local row_disc_map = state.scroll_mode and state.scroll_row_disc or (state.row_disc_cache[state.current_file] or {})
+      local row_disc_map = state.scroll_mode and state.scroll_row_disc
+        or (state.row_disc_cache[state.current_file] or {})
       local discs_at_row = row_disc_map[cursor_row] or {}
 
       local items = diff_comments.build_row_items(ai_at_row, discs_at_row)
@@ -1665,20 +2098,39 @@ function M.setup_keymaps(state, layout, active_states)
           prev_selection_row = cursor_row
           -- Clear old row's indicator, set new row's indicator
           if old_row and old_row ~= cursor_row then
-            diff_render.update_selection_at_row(main_buf, old_row, state.row_selection, row_ai, row_disc_map, state.current_user, state.review, state.editing_note)
+            diff_render.update_selection_at_row(
+              main_buf,
+              old_row,
+              state.row_selection,
+              row_ai,
+              row_disc_map,
+              state.current_user,
+              state.review,
+              state.editing_note
+            )
           end
-          diff_render.update_selection_at_row(main_buf, cursor_row, state.row_selection, row_ai, row_disc_map, state.current_user, state.review, state.editing_note)
+          diff_render.update_selection_at_row(
+            main_buf,
+            cursor_row,
+            state.row_selection,
+            row_ai,
+            row_disc_map,
+            state.current_user,
+            state.review,
+            state.editing_note
+          )
         else
           -- Validate prev_sel against current items (may be stale after dismiss/accept)
           local valid = false
           for _, item in ipairs(items) do
             if item.type == prev_sel.type then
               if item.type == "ai" and item.index == prev_sel.index then
-                valid = true; break
+                valid = true
+                break
               end
-              if item.type == "comment" and item.disc_id == prev_sel.disc_id
-                  and item.note_idx == prev_sel.note_idx then
-                valid = true; break
+              if item.type == "comment" and item.disc_id == prev_sel.disc_id and item.note_idx == prev_sel.note_idx then
+                valid = true
+                break
               end
             end
           end
@@ -1693,9 +2145,27 @@ function M.setup_keymaps(state, layout, active_states)
             state.row_selection = { [cursor_row] = state.row_selection[cursor_row] }
             prev_selection_row = cursor_row
             if old_row and old_row ~= cursor_row then
-              diff_render.update_selection_at_row(main_buf, old_row, state.row_selection, row_ai, row_disc_map, state.current_user, state.review, state.editing_note)
+              diff_render.update_selection_at_row(
+                main_buf,
+                old_row,
+                state.row_selection,
+                row_ai,
+                row_disc_map,
+                state.current_user,
+                state.review,
+                state.editing_note
+              )
             end
-            diff_render.update_selection_at_row(main_buf, cursor_row, state.row_selection, row_ai, row_disc_map, state.current_user, state.review, state.editing_note)
+            diff_render.update_selection_at_row(
+              main_buf,
+              cursor_row,
+              state.row_selection,
+              row_ai,
+              row_disc_map,
+              state.current_user,
+              state.review,
+              state.editing_note
+            )
           else
             prev_selection_row = cursor_row
           end
@@ -1708,7 +2178,16 @@ function M.setup_keymaps(state, layout, active_states)
         if had then
           -- Clear old row's indicator only
           if old_row then
-            diff_render.update_selection_at_row(main_buf, old_row, state.row_selection, row_ai, row_disc_map, state.current_user, state.review, state.editing_note)
+            diff_render.update_selection_at_row(
+              main_buf,
+              old_row,
+              state.row_selection,
+              row_ai,
+              row_disc_map,
+              state.current_user,
+              state.review,
+              state.editing_note
+            )
           end
         end
       end
@@ -1727,15 +2206,11 @@ function M.setup_keymaps(state, layout, active_states)
       local file_entry = state.files and state.files[track_idx]
       local track_path = file_entry and (file_entry.new_path or file_entry.old_path)
       if track_path then
-        local line_data = state.scroll_mode
-          and state.scroll_line_data
-          or (state.line_data_cache[track_idx] or {})
+        local line_data = state.scroll_mode and state.scroll_line_data or (state.line_data_cache[track_idx] or {})
         if #line_data > 0 then
           if not state.file_review_status[track_path] then
-            state.file_review_status[track_path] = tracker.init_file(
-              track_path, line_data,
-              state.scroll_mode and track_idx or nil
-            )
+            state.file_review_status[track_path] =
+              tracker.init_file(track_path, line_data, state.scroll_mode and track_idx or nil)
           end
           local frs = state.file_review_status[track_path]
           local ok, w0 = pcall(vim.fn.line, "w0")

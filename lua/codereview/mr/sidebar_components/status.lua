@@ -82,9 +82,15 @@ function M.render(state, _width)
   end
   if state.ai_suggestions then
     local ai_parts = {}
-    if stats.ai_accepted > 0 then table.insert(ai_parts, "✓" .. stats.ai_accepted) end
-    if stats.ai_dismissed > 0 then table.insert(ai_parts, "✗" .. stats.ai_dismissed) end
-    if stats.ai_pending > 0 then table.insert(ai_parts, "⏳" .. stats.ai_pending) end
+    if stats.ai_accepted > 0 then
+      table.insert(ai_parts, "✓" .. stats.ai_accepted)
+    end
+    if stats.ai_dismissed > 0 then
+      table.insert(ai_parts, "✗" .. stats.ai_dismissed)
+    end
+    if stats.ai_pending > 0 then
+      table.insert(ai_parts, "⏳" .. stats.ai_pending)
+    end
     if #ai_parts > 0 then
       table.insert(parts, table.concat(ai_parts, " ") .. " AI")
     end

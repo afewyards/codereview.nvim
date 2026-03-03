@@ -15,7 +15,9 @@ local PIPELINE_ICONS = {
 }
 
 function M.pipeline_icon(status)
-  if not status then return "[--]" end
+  if not status then
+    return "[--]"
+  end
   return PIPELINE_ICONS[status] or "[??]"
 end
 
@@ -46,7 +48,9 @@ function M.fetch(opts, callback)
   opts = opts or {}
   local ok, reviews, fetch_err = pcall(function()
     local prov, pctx, perr = providers.detect()
-    if not prov then return nil, perr end
+    if not prov then
+      return nil, perr
+    end
     return prov.list_reviews(client, pctx, opts)
   end)
 

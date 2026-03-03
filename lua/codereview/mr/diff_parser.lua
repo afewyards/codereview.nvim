@@ -53,7 +53,9 @@ function M.parse_hunks(diff_text)
 end
 
 function M.word_diff(old_text, new_text)
-  if not old_text or not new_text then return {} end
+  if not old_text or not new_text then
+    return {}
+  end
 
   local prefix_len = 0
   local max_prefix = math.min(#old_text, #new_text)
@@ -63,8 +65,7 @@ function M.word_diff(old_text, new_text)
 
   local suffix_len = 0
   local max_suffix = math.min(#old_text - prefix_len, #new_text - prefix_len)
-  while suffix_len < max_suffix
-    and old_text:byte(#old_text - suffix_len) == new_text:byte(#new_text - suffix_len) do
+  while suffix_len < max_suffix and old_text:byte(#old_text - suffix_len) == new_text:byte(#new_text - suffix_len) do
     suffix_len = suffix_len + 1
   end
 
@@ -152,7 +153,9 @@ end
 --- @param raw string  combined git diff output
 --- @return table<string, string>  path -> diff_text (including the diff --git header)
 function M.parse_batch_diff(raw)
-  if not raw or raw == "" then return {} end
+  if not raw or raw == "" then
+    return {}
+  end
   local diffs = {}
   local chunks = {}
   local start = 1

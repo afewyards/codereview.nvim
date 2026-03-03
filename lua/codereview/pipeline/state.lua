@@ -3,9 +3,14 @@
 local M = {}
 
 local TERMINAL_STATUSES = {
-  success = true, failed = true, canceled = true, skipped = true,
+  success = true,
+  failed = true,
+  canceled = true,
+  skipped = true,
   -- GitHub conclusions
-  action_required = true, timed_out = true, stale = true,
+  action_required = true,
+  timed_out = true,
+  stale = true,
 }
 
 --- Create a new pipeline state.
@@ -95,10 +100,14 @@ end
 --- @param interval_ms number
 --- @param on_update function  called when data changes
 function M.start_polling(pstate, interval_ms, on_update)
-  if pstate.poll_timer then return end
+  if pstate.poll_timer then
+    return
+  end
   pstate.poll_timer = vim.fn.timer_start(interval_ms, function()
     vim.schedule(function()
-      if not pstate.poll_timer then return end
+      if not pstate.poll_timer then
+        return
+      end
       if pstate.poll_failures >= 3 then
         M.stop_polling(pstate)
         return

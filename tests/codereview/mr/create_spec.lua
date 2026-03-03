@@ -1,12 +1,17 @@
 -- tests/codereview/mr/create_spec.lua
 -- Stub vim globals for unit testing
 _G.vim = _G.vim or {}
-vim.trim = vim.trim or function(s) return s:match("^%s*(.-)%s*$") end
-vim.split = vim.split or function(s, sep)
-  local parts = {}
-  for part in (s .. sep):gmatch("(.-)" .. sep) do table.insert(parts, part) end
-  return parts
+vim.trim = vim.trim or function(s)
+  return s:match("^%s*(.-)%s*$")
 end
+vim.split = vim.split
+  or function(s, sep)
+    local parts = {}
+    for part in (s .. sep):gmatch("(.-)" .. sep) do
+      table.insert(parts, part)
+    end
+    return parts
+  end
 
 local prompt_mod = require("codereview.ai.prompt")
 local create = require("codereview.mr.create")
@@ -181,7 +186,9 @@ describe("build_mr_footer", function()
   it("shows No Draft and target branch when draft is false", function()
     local footer = create.build_mr_footer(false, "main")
     local text = ""
-    for _, tuple in ipairs(footer) do text = text .. tuple[1] end
+    for _, tuple in ipairs(footer) do
+      text = text .. tuple[1]
+    end
     assert.truthy(text:find("No Draft"))
     assert.truthy(text:find("main"))
   end)
@@ -189,7 +196,9 @@ describe("build_mr_footer", function()
   it("shows Draft and target branch when draft is true", function()
     local footer = create.build_mr_footer(true, "develop")
     local text = ""
-    for _, tuple in ipairs(footer) do text = text .. tuple[1] end
+    for _, tuple in ipairs(footer) do
+      text = text .. tuple[1]
+    end
     assert.truthy(text:find("◀ Draft ▶"))
     assert.is_nil(text:find("No Draft"))
     assert.truthy(text:find("develop"))
@@ -222,16 +231,28 @@ describe("open_editor", function()
     orig_log = vim.log
 
     vim.api = {
-      nvim_create_buf = function() return 1 end,
-      nvim_buf_set_lines = function(_, _, _, _, lines) captured_lines = lines end,
-      nvim_open_win = function() return 1 end,
+      nvim_create_buf = function()
+        return 1
+      end,
+      nvim_buf_set_lines = function(_, _, _, _, lines)
+        captured_lines = lines
+      end,
+      nvim_open_win = function()
+        return 1
+      end,
       nvim_win_close = function() end,
-      nvim_buf_get_lines = function() return {} end,
-      nvim_win_is_valid = function() return true end,
+      nvim_buf_get_lines = function()
+        return {}
+      end,
+      nvim_win_is_valid = function()
+        return true
+      end,
       nvim_win_set_config = function(_, config)
         table.insert(captured_win_config, config)
       end,
-      nvim_create_namespace = function() return 1 end,
+      nvim_create_namespace = function()
+        return 1
+      end,
       nvim_buf_set_extmark = function(_, _, line, col, opts)
         table.insert(captured_extmarks, { line = line, col = col, opts = opts })
       end,
@@ -239,7 +260,9 @@ describe("open_editor", function()
     vim.o = { columns = 100, lines = 40 }
     vim.bo = setmetatable({}, {
       __index = function(t, k)
-        if not rawget(t, k) then rawset(t, k, {}) end
+        if not rawget(t, k) then
+          rawset(t, k, {})
+        end
         return rawget(t, k)
       end,
     })
@@ -283,7 +306,9 @@ describe("open_editor", function()
 
     local has_tab = false
     for _, km in ipairs(captured_keymaps) do
-      if km.lhs == "<Tab>" then has_tab = true end
+      if km.lhs == "<Tab>" then
+        has_tab = true
+      end
     end
     assert.is_true(has_tab)
   end)
@@ -293,7 +318,9 @@ describe("open_editor", function()
 
     local has_ct = false
     for _, km in ipairs(captured_keymaps) do
-      if km.lhs == "<C-t>" then has_ct = true end
+      if km.lhs == "<C-t>" then
+        has_ct = true
+      end
     end
     assert.is_true(has_ct)
   end)

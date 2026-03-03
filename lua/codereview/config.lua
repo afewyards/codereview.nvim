@@ -2,13 +2,13 @@
 local M = {}
 
 local defaults = {
-  base_url = nil,     -- API base URL override (auto-detected). Alias: gitlab_url
+  base_url = nil, -- API base URL override (auto-detected). Alias: gitlab_url
   project = nil,
-  platform = nil,     -- "github" | "gitlab" | nil (auto-detect)
+  platform = nil, -- "github" | "gitlab" | nil (auto-detect)
   github_token = nil,
   gitlab_token = nil,
   picker = nil,
-  debug = false,      -- write request/auth logs to .codereview.log
+  debug = false, -- write request/auth logs to .codereview.log
   diff = { context = 8, scroll_threshold = 50, comment_width = 80, separator_char = "╳", separator_lines = 3 },
   pipeline = { poll_interval = 10000, log_max_lines = 5000 },
   ai = {
@@ -17,9 +17,9 @@ local defaults = {
     review_level = "info",
     max_file_size = 500,
     claude_cli = { cmd = "claude", agent = "code-review" },
-    anthropic  = { api_key = nil, model = "claude-sonnet-4-20250514" },
-    openai     = { api_key = nil, model = "gpt-4o", base_url = nil },
-    ollama     = { model = "llama3", base_url = "http://localhost:11434" },
+    anthropic = { api_key = nil, model = "claude-sonnet-4-20250514" },
+    openai = { api_key = nil, model = "gpt-4o", base_url = nil },
+    ollama = { model = "llama3", base_url = "http://localhost:11434" },
     custom_cmd = { cmd = nil, args = {} },
   },
   keymaps = {},

@@ -25,7 +25,9 @@ function M.pick_mr(entries, on_select)
         title = "Description",
         define_preview = function(self, entry)
           local desc = entry.value.review and entry.value.review.description or ""
-          if desc == "" then desc = "(no description)" end
+          if desc == "" then
+            desc = "(no description)"
+          end
           local lines = vim.split(desc, "\n", { plain = true })
           vim.api.nvim_buf_set_lines(self.state.bufnr, 0, -1, false, lines)
           vim.bo[self.state.bufnr].syntax = "markdown"
@@ -81,7 +83,9 @@ function M.pick_files(entries, on_select)
         actions.select_default:replace(function()
           actions.close(prompt_bufnr)
           local selection = action_state.get_selected_entry()
-          if selection then on_select(selection.value) end
+          if selection then
+            on_select(selection.value)
+          end
         end)
         return true
       end,
@@ -159,7 +163,9 @@ function M.pick_comments(entries, on_select, opts)
         actions.select_default:replace(function()
           actions.close(prompt_bufnr)
           local selection = action_state.get_selected_entry()
-          if selection then on_select(selection.value) end
+          if selection then
+            on_select(selection.value)
+          end
         end)
 
         local filter_key = opts and opts.filter_key or "<C-r>"
@@ -200,14 +206,19 @@ function M.pick_commits(entries, on_select, opts)
 
   local has_stats = false
   for _, e in ipairs(entries) do
-    if e.additions then has_stats = true; break end
+    if e.additions then
+      has_stats = true
+      break
+    end
   end
 
   local make_entry
   if has_stats then
     local max_title = 0
     for _, e in ipairs(entries) do
-      if e.title and #e.title > max_title then max_title = #e.title end
+      if e.title and #e.title > max_title then
+        max_title = #e.title
+      end
     end
     local displayer = entry_display.create({
       separator = " ",
@@ -259,7 +270,9 @@ function M.pick_commits(entries, on_select, opts)
         actions.select_default:replace(function()
           actions.close(prompt_bufnr)
           local sel = action_state.get_selected_entry()
-          if sel then on_select(sel.value) end
+          if sel then
+            on_select(sel.value)
+          end
         end)
         return true
       end,

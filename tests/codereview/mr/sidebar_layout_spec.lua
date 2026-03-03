@@ -6,10 +6,14 @@ end
 describe("mr.sidebar_layout", function()
   before_each(function()
     package.loaded["codereview.review.session"] = {
-      get = function() return { active = false } end,
+      get = function()
+        return { active = false }
+      end,
     }
     package.loaded["codereview.mr.list"] = {
-      pipeline_icon = function() return "●" end,
+      pipeline_icon = function()
+        return "●"
+      end,
     }
   end)
 
@@ -59,11 +63,11 @@ describe("mr.sidebar_layout", function()
     layout.render(buf, state)
     local ranges = state.sidebar_component_ranges
     assert.truthy(ranges, "sidebar_component_ranges should be set")
-    assert.truthy(ranges.header,         "should have header range")
-    assert.truthy(ranges.status,         "should have status range (even if empty)")
+    assert.truthy(ranges.header, "should have header range")
+    assert.truthy(ranges.status, "should have status range (even if empty)")
     assert.truthy(ranges.summary_button, "should have summary_button range")
-    assert.truthy(ranges.file_tree,      "should have file_tree range")
-    assert.truthy(ranges.footer,         "should have footer range")
+    assert.truthy(ranges.file_tree, "should have file_tree range")
+    assert.truthy(ranges.footer, "should have footer range")
     vim.api.nvim_buf_delete(buf, { force = true })
   end)
 
@@ -75,11 +79,15 @@ describe("mr.sidebar_layout", function()
     local found_summary = false
     local found_file = false
     for _, entry in pairs(state.sidebar_row_map) do
-      if entry.type == "summary" then found_summary = true end
-      if entry.type == "file"    then found_file    = true end
+      if entry.type == "summary" then
+        found_summary = true
+      end
+      if entry.type == "file" then
+        found_file = true
+      end
     end
     assert.is_true(found_summary, "expected summary entry in sidebar_row_map")
-    assert.is_true(found_file,    "expected file entry in sidebar_row_map")
+    assert.is_true(found_file, "expected file entry in sidebar_row_map")
     vim.api.nvim_buf_delete(buf, { force = true })
   end)
 
@@ -88,7 +96,7 @@ describe("mr.sidebar_layout", function()
     local buf = vim.api.nvim_create_buf(false, true)
     local state = make_state()
     layout.render(buf, state)
-    local header_start    = state.sidebar_component_ranges.header.start
+    local header_start = state.sidebar_component_ranges.header.start
     local file_tree_start = state.sidebar_component_ranges.file_tree.start
     assert.truthy(header_start < file_tree_start, "header should come before file_tree")
     vim.api.nvim_buf_delete(buf, { force = true })
@@ -107,8 +115,8 @@ describe("mr.sidebar_layout", function()
         break
       end
     end
-    assert.truthy(summary_row,       "expected a summary row in sidebar_row_map")
-    assert.truthy(summary_row > 4,   "summary row should be offset past header")
+    assert.truthy(summary_row, "expected a summary row in sidebar_row_map")
+    assert.truthy(summary_row > 4, "summary row should be offset past header")
     vim.api.nvim_buf_delete(buf, { force = true })
   end)
 
@@ -117,7 +125,7 @@ describe("mr.sidebar_layout", function()
     local buf = vim.api.nvim_create_buf(false, true)
     local state = make_state()
     layout.render(buf, state)
-    local footer_start    = state.sidebar_component_ranges.footer.start
+    local footer_start = state.sidebar_component_ranges.footer.start
     local file_tree_start = state.sidebar_component_ranges.file_tree.start
     assert.truthy(footer_start > file_tree_start, "footer should come after file_tree")
     vim.api.nvim_buf_delete(buf, { force = true })
@@ -168,7 +176,10 @@ describe("mr.sidebar_layout", function()
       local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
       local commits_idx
       for i, line in ipairs(lines) do
-        if line:match("Commits") then commits_idx = i; break end
+        if line:match("Commits") then
+          commits_idx = i
+          break
+        end
       end
       assert.falsy(commits_idx, "Commits section should not appear in sidebar")
       vim.api.nvim_buf_delete(buf, { force = true })

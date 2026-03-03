@@ -408,11 +408,13 @@ describe("parse_blocks code blocks", function()
   it("renders fenced code block with background", function()
     local r = markdown.parse_blocks("```lua\nlocal x = 1\n```", "CodeReviewComment", {})
     assert.equals(1, #r.lines)
-    assert.equals("  local x = 1", r.lines[1])  -- 2-space indent
+    assert.equals("  local x = 1", r.lines[1]) -- 2-space indent
     -- Background highlight on code line
     local found_cb = false
     for _, h in ipairs(r.highlights) do
-      if h[4] == "CodeReviewMdCodeBlock" then found_cb = true end
+      if h[4] == "CodeReviewMdCodeBlock" then
+        found_cb = true
+      end
     end
     assert.is_true(found_cb)
   end)
@@ -460,7 +462,9 @@ describe("parse_blocks unordered lists", function()
     local r = markdown.parse_blocks("- test", "CodeReviewComment", {})
     local found = false
     for _, h in ipairs(r.highlights) do
-      if h[4] == "CodeReviewMdListBullet" then found = true end
+      if h[4] == "CodeReviewMdListBullet" then
+        found = true
+      end
     end
     assert.is_true(found)
   end)
@@ -476,7 +480,9 @@ describe("parse_blocks unordered lists", function()
     assert.equals("• bold item", r.lines[1])
     local has_bold = false
     for _, h in ipairs(r.highlights) do
-      if h[4] == "CodeReviewCommentBold" then has_bold = true end
+      if h[4] == "CodeReviewCommentBold" then
+        has_bold = true
+      end
     end
     assert.is_true(has_bold)
   end)
@@ -497,7 +503,9 @@ describe("parse_blocks blockquotes", function()
     assert.equals("  quoted text", r.lines[1])
     local found_bq = false
     for _, h in ipairs(r.highlights) do
-      if h[4] == "CodeReviewMdBlockquote" then found_bq = true end
+      if h[4] == "CodeReviewMdBlockquote" then
+        found_bq = true
+      end
     end
     assert.is_true(found_bq)
   end)
@@ -525,7 +533,9 @@ describe("parse_blocks blockquotes", function()
     assert.truthy(#r.lines > 0)
     local found_cb = false
     for _, h in ipairs(r.highlights) do
-      if h[4] == "CodeReviewMdCodeBlock" then found_cb = true end
+      if h[4] == "CodeReviewMdCodeBlock" then
+        found_cb = true
+      end
     end
     assert.is_true(found_cb)
   end)
@@ -556,7 +566,9 @@ describe("parse_blocks tables", function()
     local r = markdown.parse_blocks(text, "CodeReviewComment", {})
     local found_th = false
     for _, h in ipairs(r.highlights) do
-      if h[4] == "CodeReviewMdTableHeader" then found_th = true end
+      if h[4] == "CodeReviewMdTableHeader" then
+        found_th = true
+      end
     end
     assert.is_true(found_th)
   end)
@@ -566,7 +578,9 @@ describe("parse_blocks tables", function()
     local r = markdown.parse_blocks(text, "CodeReviewComment", {})
     local found_border = false
     for _, h in ipairs(r.highlights) do
-      if h[4] == "CodeReviewMdTableBorder" then found_border = true end
+      if h[4] == "CodeReviewMdTableBorder" then
+        found_border = true
+      end
     end
     assert.is_true(found_border)
   end)
@@ -585,20 +599,24 @@ describe("parse_blocks tables", function()
     -- Data row (line 4) should have 4 pipe chars (start + 2 internal seps + end)
     local data_line = r.lines[4]
     local pipe_count = 0
-    for _ in data_line:gmatch("│") do pipe_count = pipe_count + 1 end
+    for _ in data_line:gmatch("│") do
+      pipe_count = pipe_count + 1
+    end
     assert.equals(4, pipe_count)
   end)
 end)
 
 describe("parse_blocks table wrapping", function()
   it("wraps long cell text", function()
-    local long = string.rep("word ", 20)  -- 100 chars
+    local long = string.rep("word ", 20) -- 100 chars
     local text = "| Header |\n| --- |\n| " .. long .. "|"
     local r = markdown.parse_blocks(text, "CodeReviewComment", { width = 40 })
     -- Should produce multiple buffer lines for the data row
     local data_lines = 0
     for _, l in ipairs(r.lines) do
-      if l:find("word") then data_lines = data_lines + 1 end
+      if l:find("word") then
+        data_lines = data_lines + 1
+      end
     end
     assert.truthy(data_lines > 1)
   end)
@@ -609,7 +627,10 @@ describe("parse_blocks table wrapping", function()
     -- "42" should be right-padded (spaces before the value)
     local data_line = nil
     for _, l in ipairs(r.lines) do
-      if l:find("42") then data_line = l; break end
+      if l:find("42") then
+        data_line = l
+        break
+      end
     end
     assert.truthy(data_line)
     -- Right align: spaces before 42
@@ -622,7 +643,10 @@ describe("parse_blocks table wrapping", function()
     local r = markdown.parse_blocks(text, "CodeReviewComment", { width = 40 })
     local data_line = nil
     for _, l in ipairs(r.lines) do
-      if l:find("hi") then data_line = l; break end
+      if l:find("hi") then
+        data_line = l
+        break
+      end
     end
     assert.truthy(data_line)
     -- Center align: spaces on both sides of "hi"
@@ -638,18 +662,29 @@ describe("parse_blocks table wrapping", function()
     local r = markdown.parse_blocks(text, "CodeReviewComment", { width = 50 })
     local found_abc = false
     for _, l in ipairs(r.lines) do
-      if l:find("abc") then found_abc = true; break end
+      if l:find("abc") then
+        found_abc = true
+        break
+      end
     end
     assert.is_true(found_abc)
   end)
 
   it("table does not exceed container width", function()
-    local text = "| Alpha | Beta | Gamma |\n| --- | --- | --- |\n| " ..
-      string.rep("a", 30) .. " | " .. string.rep("b", 30) .. " | " .. string.rep("c", 30) .. " |"
+    local text = "| Alpha | Beta | Gamma |\n| --- | --- | --- |\n| "
+      .. string.rep("a", 30)
+      .. " | "
+      .. string.rep("b", 30)
+      .. " | "
+      .. string.rep("c", 30)
+      .. " |"
     local r = markdown.parse_blocks(text, "CodeReviewComment", { width = 60 })
     local border_line = nil
     for _, l in ipairs(r.lines) do
-      if l:find("┌") then border_line = l; break end
+      if l:find("┌") then
+        border_line = l
+        break
+      end
     end
     assert.truthy(border_line)
     -- Count display width: UTF-8 chars (skip continuation bytes 0x80-0xBF)
@@ -658,13 +693,16 @@ describe("parse_blocks table wrapping", function()
   end)
 
   it("columns respect minimum width of 3", function()
-    local text = "| A | B | C | D | E | F | G | H |\n| --- | --- | --- | --- | --- | --- | --- | --- |\n| 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |"
+    local text =
+      "| A | B | C | D | E | F | G | H |\n| --- | --- | --- | --- | --- | --- | --- | --- |\n| 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |"
     local r = markdown.parse_blocks(text, "CodeReviewComment", { width = 40 })
     -- Should render without error and produce output
     assert.truthy(#r.lines > 0)
     local pipe_lines = 0
     for _, l in ipairs(r.lines) do
-      if l:find("│") then pipe_lines = pipe_lines + 1 end
+      if l:find("│") then
+        pipe_lines = pipe_lines + 1
+      end
     end
     assert.truthy(pipe_lines > 0)
   end)
@@ -676,7 +714,10 @@ describe("parse_blocks table wrapping", function()
     -- The narrow column (5 chars) should remain intact
     local found_hello = false
     for _, l in ipairs(r.lines) do
-      if l:find("hello") then found_hello = true; break end
+      if l:find("hello") then
+        found_hello = true
+        break
+      end
     end
     assert.is_true(found_hello)
   end)
@@ -686,7 +727,10 @@ describe("parse_blocks table wrapping", function()
     local r = markdown.parse_blocks(text, "CodeReviewComment", { width = 70 })
     local border_line = nil
     for _, l in ipairs(r.lines) do
-      if l:find("┌") then border_line = l; break end
+      if l:find("┌") then
+        border_line = l
+        break
+      end
     end
     assert.truthy(border_line)
     local display_width = select(2, border_line:gsub("[^\128-\191]", ""))
@@ -702,8 +746,12 @@ describe("parse_blocks table inline formatting", function()
     local found_label = false
     local found_raw = false
     for _, l in ipairs(r.lines) do
-      if l:find("foo%.ts") then found_label = true end
-      if l:find("%[foo%.ts%]%(") then found_raw = true end
+      if l:find("foo%.ts") then
+        found_label = true
+      end
+      if l:find("%[foo%.ts%]%(") then
+        found_raw = true
+      end
     end
     assert.is_true(found_label, "link label should appear in table")
     assert.is_false(found_raw, "raw markdown link syntax should be stripped")
@@ -714,7 +762,9 @@ describe("parse_blocks table inline formatting", function()
     local r = markdown.parse_blocks(text, "CodeReviewComment", { width = 60 })
     local found_link_hl = false
     for _, h in ipairs(r.highlights) do
-      if h[4] == "CodeReviewCommentLink" then found_link_hl = true end
+      if h[4] == "CodeReviewCommentLink" then
+        found_link_hl = true
+      end
     end
     assert.is_true(found_link_hl, "link label should have CodeReviewCommentLink highlight")
   end)
@@ -727,7 +777,10 @@ describe("parse_blocks table inline formatting", function()
     -- The link column should NOT dominate the table width
     local data_line = nil
     for _, l in ipairs(r.lines) do
-      if l:find("ab") and l:find("hi") then data_line = l; break end
+      if l:find("ab") and l:find("hi") then
+        data_line = l
+        break
+      end
     end
     assert.truthy(data_line, "both cells should appear on same line when URL is stripped")
   end)
@@ -738,8 +791,12 @@ describe("parse_blocks table inline formatting", function()
     local found_bold = false
     local found_raw = false
     for _, l in ipairs(r.lines) do
-      if l:find("bold") then found_bold = true end
-      if l:find("%*%*bold%*%*") then found_raw = true end
+      if l:find("bold") then
+        found_bold = true
+      end
+      if l:find("%*%*bold%*%*") then
+        found_raw = true
+      end
     end
     assert.is_true(found_bold, "bold text should appear")
     assert.is_false(found_raw, "raw ** delimiters should be stripped")
@@ -751,8 +808,12 @@ describe("parse_blocks table inline formatting", function()
     local found_code = false
     local found_raw = false
     for _, l in ipairs(r.lines) do
-      if l:find("code") then found_code = true end
-      if l:find("`code`") then found_raw = true end
+      if l:find("code") then
+        found_code = true
+      end
+      if l:find("`code`") then
+        found_raw = true
+      end
     end
     assert.is_true(found_code, "code text should appear")
     assert.is_false(found_raw, "backtick delimiters should be stripped")

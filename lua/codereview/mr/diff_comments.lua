@@ -25,7 +25,9 @@ end
 --- @param direction number +1 forward, -1 backward
 --- @return table|nil next selection
 function M.cycle_row_selection(items, current, direction)
-  if #items == 0 then return nil end
+  if #items == 0 then
+    return nil
+  end
   if not current then
     return direction > 0 and items[1] or items[#items]
   end
@@ -34,15 +36,21 @@ function M.cycle_row_selection(items, current, direction)
   for i, item in ipairs(items) do
     if item.type == current.type then
       if item.type == "ai" and item.index == current.index then
-        pos = i; break
+        pos = i
+        break
       elseif item.type == "comment" and item.disc_id == current.disc_id and item.note_idx == current.note_idx then
-        pos = i; break
+        pos = i
+        break
       end
     end
   end
-  if not pos then return direction > 0 and items[1] or items[#items] end
+  if not pos then
+    return direction > 0 and items[1] or items[#items]
+  end
   local next_pos = pos + direction
-  if next_pos < 1 or next_pos > #items then return nil end
+  if next_pos < 1 or next_pos > #items then
+    return nil
+  end
   return items[next_pos]
 end
 
@@ -52,7 +60,9 @@ end
 --- @param optimistic table|nil  optimistic callbacks {add, remove, mark_failed, refresh}
 function M.create_comment_at_cursor(layout, state, optimistic)
   local line_data = state.line_data_cache[state.current_file]
-  if not line_data then return end
+  if not line_data then
+    return
+  end
   local cursor = vim.api.nvim_win_get_cursor(layout.main_win)
   local row = cursor[1]
   local data = line_data[row]
@@ -65,15 +75,15 @@ function M.create_comment_at_cursor(layout, state, optimistic)
     return
   end
   local file = state.files[state.current_file]
-  local line_text = vim.api.nvim_buf_get_lines(
-    vim.api.nvim_win_get_buf(layout.main_win), row - 1, row, false
-  )[1] or ""
-  local built_opt = optimistic and {
-    add = optimistic.add(file.old_path, file.new_path, data.item.old_line, data.item.new_line),
-    remove = optimistic.remove,
-    mark_failed = optimistic.mark_failed,
-    refresh = optimistic.refresh,
-  } or nil
+  local line_text = vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(layout.main_win), row - 1, row, false)[1] or ""
+  local built_opt = optimistic
+      and {
+        add = optimistic.add(file.old_path, file.new_path, data.item.old_line, data.item.new_line),
+        remove = optimistic.remove,
+        mark_failed = optimistic.mark_failed,
+        refresh = optimistic.refresh,
+      }
+    or nil
   local comment = require("codereview.mr.comment")
   comment.create_inline(
     state.review,
@@ -92,10 +102,14 @@ end
 --- @param optimistic table|nil  optimistic callbacks {add, remove, mark_failed, refresh}
 function M.create_comment_range(layout, state, optimistic)
   local line_data = state.line_data_cache[state.current_file]
-  if not line_data then return end
+  if not line_data then
+    return
+  end
   -- Get visual selection range
   local s, e = vim.fn.line("v"), vim.fn.line(".")
-  if s > e then s, e = e, s end
+  if s > e then
+    s, e = e, s
+  end
   local start_data = line_data[s]
   local end_data = line_data[e]
   if not start_data or not end_data then
@@ -107,15 +121,21 @@ function M.create_comment_range(layout, state, optimistic)
     return
   end
   local file = state.files[state.current_file]
-  local line_text = vim.api.nvim_buf_get_lines(
-    vim.api.nvim_win_get_buf(layout.main_win), e - 1, e, false
-  )[1] or ""
-  local built_opt = optimistic and {
-    add = optimistic.add(file.old_path, file.new_path, end_data.item.old_line, end_data.item.new_line, start_data.item.new_line),
-    remove = optimistic.remove,
-    mark_failed = optimistic.mark_failed,
-    refresh = optimistic.refresh,
-  } or nil
+  local line_text = vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(layout.main_win), e - 1, e, false)[1] or ""
+  local built_opt = optimistic
+      and {
+        add = optimistic.add(
+          file.old_path,
+          file.new_path,
+          end_data.item.old_line,
+          end_data.item.new_line,
+          start_data.item.new_line
+        ),
+        remove = optimistic.remove,
+        mark_failed = optimistic.mark_failed,
+        refresh = optimistic.refresh,
+      }
+    or nil
   local comment = require("codereview.mr.comment")
   comment.create_inline_range(
     state.review,

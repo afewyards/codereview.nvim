@@ -17,6 +17,8 @@ describe("ai.providers", function()
     package.loaded["codereview.config"].get = function()
       return { ai = { provider = "nonexistent" } }
     end
-    assert.has_error(function() providers.get() end)
+    assert.has_error(function()
+      providers.get()
+    end)
   end)
 end)

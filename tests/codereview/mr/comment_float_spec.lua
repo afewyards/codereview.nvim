@@ -18,15 +18,21 @@ describe("mr.comment_float", function()
 
       -- Run vim.schedule callbacks immediately so self-heal fires synchronously
       orig_schedule_sh = vim.schedule
-      vim.schedule = function(fn) fn() end
+      vim.schedule = function(fn)
+        fn()
+      end
 
       package.loaded["codereview.config"] = {
-        get = function() return { diff = { comment_width = 60 } } end,
+        get = function()
+          return { diff = { comment_width = 60 } }
+        end,
       }
 
       -- Make diff_buf (99) distinguishable from popup buf
       orig_win_get_buf = vim.api.nvim_win_get_buf
-      vim.api.nvim_win_get_buf = function() return 99 end
+      vim.api.nvim_win_get_buf = function()
+        return 99
+      end
 
       -- Capture nvim_buf_attach callbacks per buf
       orig_buf_attach = vim.api.nvim_buf_attach
@@ -44,19 +50,27 @@ describe("mr.comment_float", function()
 
       -- Ensure use_inline is true (win_get_width >= 40) and nvim_open_win succeeds
       orig_win_get_width = vim.api.nvim_win_get_width
-      vim.api.nvim_win_get_width = function() return 80 end
+      vim.api.nvim_win_get_width = function()
+        return 80
+      end
 
       orig_open_win_sh = vim.api.nvim_open_win
       vim.api.nvim_open_win = function(buf, _, _)
         return orig_open_win_sh(buf, false, {
-          relative = "editor", width = 60, height = 3, row = 1, col = 1,
+          relative = "editor",
+          width = 60,
+          height = 3,
+          row = 1,
+          col = 1,
         })
       end
 
       -- Treat fake diff_buf (99) as valid so self-heal callback proceeds
       orig_buf_is_valid_sh = vim.api.nvim_buf_is_valid
       vim.api.nvim_buf_is_valid = function(b)
-        if b == 99 then return true end
+        if b == 99 then
+          return true
+        end
         return orig_buf_is_valid_sh(b)
       end
     end)
@@ -136,15 +150,21 @@ describe("mr.comment_float", function()
       reserve_space_called = false
 
       package.loaded["codereview.config"] = {
-        get = function() return { diff = { comment_width = 60 } } end,
+        get = function()
+          return { diff = { comment_width = 60 } }
+        end,
       }
 
       orig_win_get_buf = vim.api.nvim_win_get_buf
-      vim.api.nvim_win_get_buf = function() return 99 end
+      vim.api.nvim_win_get_buf = function()
+        return 99
+      end
 
       orig_buf_attach = vim.api.nvim_buf_attach
       vim.api.nvim_buf_attach = function(buf, _, _)
-        if buf == 99 then table.insert(attached_diff_bufs, buf) end
+        if buf == 99 then
+          table.insert(attached_diff_bufs, buf)
+        end
         return true
       end
 
@@ -153,13 +173,19 @@ describe("mr.comment_float", function()
         open_win_config = config
         -- Use a safe editor-relative fallback so the window actually opens
         return orig_open_win(buf, false, {
-          relative = "editor", width = 10, height = 3, row = 0, col = 0,
+          relative = "editor",
+          width = 10,
+          height = 3,
+          row = 0,
+          col = 0,
         })
       end
 
       -- Ensure use_inline is true and extmark calls on diff_buf (99) don't crash
       orig_win_get_width = vim.api.nvim_win_get_width
-      vim.api.nvim_win_get_width = function() return 80 end
+      vim.api.nvim_win_get_width = function()
+        return 80
+      end
 
       orig_buf_set_extmark_ov = vim.api.nvim_buf_set_extmark
       vim.api.nvim_buf_set_extmark = function(buf, ns, row, col, opts)
@@ -248,11 +274,15 @@ describe("mr.comment_float", function()
       buf_callbacks = {}
 
       package.loaded["codereview.config"] = {
-        get = function() return { diff = { comment_width = 60 } } end,
+        get = function()
+          return { diff = { comment_width = 60 } }
+        end,
       }
 
       orig_win_get_buf = vim.api.nvim_win_get_buf
-      vim.api.nvim_win_get_buf = function() return 99 end
+      vim.api.nvim_win_get_buf = function()
+        return 99
+      end
 
       -- Capture all buf_attach callbacks
       orig_buf_attach = vim.api.nvim_buf_attach
@@ -270,19 +300,27 @@ describe("mr.comment_float", function()
 
       -- Ensure use_inline is true; open a real editor-relative window so win is valid
       orig_win_get_width = vim.api.nvim_win_get_width
-      vim.api.nvim_win_get_width = function() return 80 end
+      vim.api.nvim_win_get_width = function()
+        return 80
+      end
 
       orig_open_win_dr = vim.api.nvim_open_win
       vim.api.nvim_open_win = function(buf, _, _)
         return orig_open_win_dr(buf, false, {
-          relative = "editor", width = 60, height = 3, row = 1, col = 1,
+          relative = "editor",
+          width = 60,
+          height = 3,
+          row = 1,
+          col = 1,
         })
       end
 
       -- Allow buf_is_valid(99) so the elseif branch in the resize handler can fire
       orig_buf_is_valid = vim.api.nvim_buf_is_valid
       vim.api.nvim_buf_is_valid = function(b)
-        if b == 99 then return true end
+        if b == 99 then
+          return true
+        end
         return orig_buf_is_valid(b)
       end
 
@@ -294,7 +332,9 @@ describe("mr.comment_float", function()
 
       -- Stub screenpos to avoid "Invalid line number" when anchor_line exceeds real buf lines
       orig_screenpos_dr = vim.fn.screenpos
-      vim.fn.screenpos = function() return { row = 0, col = 0 } end
+      vim.fn.screenpos = function()
+        return { row = 0, col = 0 }
+      end
     end)
 
     after_each(function()
@@ -311,7 +351,9 @@ describe("mr.comment_float", function()
 
     local function popup_buf_from_callbacks()
       for b, _ in pairs(buf_callbacks) do
-        if b ~= 99 then return b end
+        if b ~= 99 then
+          return b
+        end
       end
     end
 
@@ -320,13 +362,17 @@ describe("mr.comment_float", function()
       local update_space_called = false
       local ifloat = require("codereview.ui.inline_float")
       local orig_update = ifloat.update_space
-      ifloat.update_space = function() update_space_called = true end
+      ifloat.update_space = function()
+        update_space_called = true
+      end
 
       comment_float.open("Edit", {
         anchor_line = 5,
         win_id = vim.api.nvim_get_current_win(),
         spacer_offset = 2,
-        on_resize = function(h) on_resize_called_with = h end,
+        on_resize = function(h)
+          on_resize_called_with = h
+        end,
       })
 
       local popup_buf = popup_buf_from_callbacks()
@@ -346,13 +392,19 @@ describe("mr.comment_float", function()
       local ifloat = require("codereview.ui.inline_float")
       local orig_update = ifloat.update_space
       local orig_reserve = ifloat.reserve_space
-      ifloat.update_space = function() update_space_called = true end
-      ifloat.reserve_space = function() return 42 end  -- return valid extmark_id
+      ifloat.update_space = function()
+        update_space_called = true
+      end
+      ifloat.reserve_space = function()
+        return 42
+      end -- return valid extmark_id
 
       comment_float.open("Comment", {
         anchor_line = 5,
         win_id = vim.api.nvim_get_current_win(),
-        on_resize = function() on_resize_called = true end,
+        on_resize = function()
+          on_resize_called = true
+        end,
       })
 
       local popup_buf = popup_buf_from_callbacks()

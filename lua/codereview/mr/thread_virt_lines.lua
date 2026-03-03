@@ -1,22 +1,44 @@
 local M = {}
 
 local function parse_iso_time(iso_str)
-  if not iso_str then return nil end
+  if not iso_str then
+    return nil
+  end
   local y, mo, d, h, mi, s = iso_str:match("(%d+)-(%d+)-(%d+)T(%d+):(%d+):?(%d*)")
-  if not y then return nil end
-  return os.time({ year = tonumber(y), month = tonumber(mo), day = tonumber(d),
-    hour = tonumber(h), min = tonumber(mi), sec = tonumber(s) or 0 })
+  if not y then
+    return nil
+  end
+  return os.time({
+    year = tonumber(y),
+    month = tonumber(mo),
+    day = tonumber(d),
+    hour = tonumber(h),
+    min = tonumber(mi),
+    sec = tonumber(s) or 0,
+  })
 end
 
 local function format_time_relative(iso_str)
-  if not iso_str then return "" end
+  if not iso_str then
+    return ""
+  end
   local ts = parse_iso_time(iso_str)
-  if not ts then return "" end
+  if not ts then
+    return ""
+  end
   local diff = os.time() - ts
-  if diff < 60 then return "just now" end
-  if diff < 3600 then return math.floor(diff / 60) .. "m ago" end
-  if diff < 86400 then return math.floor(diff / 3600) .. "h ago" end
-  if diff < 86400 * 30 then return math.floor(diff / 86400) .. "d ago" end
+  if diff < 60 then
+    return "just now"
+  end
+  if diff < 3600 then
+    return math.floor(diff / 60) .. "m ago"
+  end
+  if diff < 86400 then
+    return math.floor(diff / 3600) .. "h ago"
+  end
+  if diff < 86400 * 30 then
+    return math.floor(diff / 86400) .. "d ago"
+  end
   local mo, d = iso_str:match("%d+-(%d+)-(%d+)")
   return mo and (mo .. "/" .. d) or ""
 end
@@ -33,7 +55,9 @@ local function wrap_text(text, width)
       local spans = markdown.find_spans(paragraph)
       local function in_span(pos)
         for _, r in ipairs(spans) do
-          if pos > r[1] and pos < r[2] then return true end
+          if pos > r[1] and pos < r[2] then
+            return true
+          end
         end
         return false
       end
@@ -53,7 +77,9 @@ local function wrap_text(text, width)
           line = line == "" and word or (line .. " " .. word)
         end
       end
-      if line ~= "" then table.insert(result, line) end
+      if line ~= "" then
+        table.insert(result, line)
+      end
     end
   end
   return result
@@ -74,7 +100,9 @@ local function md_virt_line(prefix, text, base_hl)
 end
 
 function M.is_resolved(discussion)
-  if discussion.resolved ~= nil then return discussion.resolved end
+  if discussion.resolved ~= nil then
+    return discussion.resolved
+  end
   local note = discussion.notes and discussion.notes[1]
   return note and note.resolved
 end
@@ -97,7 +125,9 @@ function M.build(disc, opts)
   local pad = string.rep(" ", gutter)
 
   local notes = disc.notes
-  if not notes or #notes == 0 then return { virt_lines = {}, spacer_offset = nil, sel_line_offset = nil } end
+  if not notes or #notes == 0 then
+    return { virt_lines = {}, spacer_offset = nil, sel_line_offset = nil }
+  end
 
   local editing_this = editing_note and editing_note.disc_id == disc.id
   local editing_note_idx = editing_this and editing_note.note_idx or nil
@@ -115,10 +145,12 @@ function M.build(disc, opts)
     or "CodeReviewCommentAuthor"
   local body_hl = is_err and "CodeReviewCommentFailed"
     or is_pending and "CodeReviewCommentPending"
-    or resolved and "CodeReviewComment" or "CodeReviewCommentUnresolved"
+    or resolved and "CodeReviewComment"
+    or "CodeReviewCommentUnresolved"
   local status_hl = is_err and "CodeReviewCommentFailed"
     or is_pending and "CodeReviewCommentPending"
-    or resolved and "CodeReviewCommentResolved" or "CodeReviewCommentUnresolved"
+    or resolved and "CodeReviewCommentResolved"
+    or "CodeReviewCommentUnresolved"
 
   local time_str = format_time_relative(first.created_at)
   local header_meta = time_str ~= "" and (" · " .. time_str) or ""
@@ -128,7 +160,7 @@ function M.build(disc, opts)
   local virt_lines = {}
   local spacer_offset = nil
   local sel_start = nil -- virt_line index where selected note starts
-  local sel_end = nil   -- virt_line index where selected note ends (exclusive)
+  local sel_end = nil -- virt_line index where selected note ends (exclusive)
 
   -- Helper: build prefix chunks for a line. When selected, prepend ██ in status_hl
   -- then remaining pad + suffix in suffix_hl. When not selected, pad + suffix in suffix_hl.
@@ -145,7 +177,9 @@ function M.build(disc, opts)
 
   -- Header: ┏ @author · 2h ago                       ● Unresolved
   local n1_sel = (sel_idx == 1)
-  if n1_sel then sel_start = 0 end
+  if n1_sel then
+    sel_start = 0
+  end
 
   local header_chunks = {}
   if n1_sel then
@@ -188,7 +222,10 @@ function M.build(disc, opts)
     spacer_offset = #virt_lines
     for _ = 1, spacer_height do
       if n1_sel then
-        table.insert(virt_lines, { { "██", status_hl }, { string.rep(" ", math.max(0, gutter - 2)) .. "┃" .. string.rep(" ", comment_width + 1), bdr } })
+        table.insert(virt_lines, {
+          { "██", status_hl },
+          { string.rep(" ", math.max(0, gutter - 2)) .. "┃" .. string.rep(" ", comment_width + 1), bdr },
+        })
       else
         table.insert(virt_lines, { { pad .. "┃" .. string.rep(" ", comment_width + 1), bdr } })
       end
@@ -211,7 +248,10 @@ function M.build(disc, opts)
         spacer_offset = #virt_lines
         for _ = 1, spacer_height do
           if ri_sel then
-            table.insert(virt_lines, { { "██", status_hl }, { string.rep(" ", math.max(0, gutter - 2)) .. "┃" .. string.rep(" ", comment_width + 1), bdr } })
+            table.insert(virt_lines, {
+              { "██", status_hl },
+              { string.rep(" ", math.max(0, gutter - 2)) .. "┃" .. string.rep(" ", comment_width + 1), bdr },
+            })
           else
             table.insert(virt_lines, { { pad .. "┃" .. string.rep(" ", comment_width + 1), bdr } })
           end
@@ -222,7 +262,9 @@ function M.build(disc, opts)
         if sel_start ~= nil and sel_end == nil and not ri_sel then
           sel_end = #virt_lines
         end
-        if ri_sel then sel_start = #virt_lines end
+        if ri_sel then
+          sel_start = #virt_lines
+        end
         table.insert(virt_lines, { { pad .. "┃", bdr } })
         -- Reply header
         local reply_header = {}

@@ -8,11 +8,19 @@ describe("mr.diff", function()
         { item = { new_line = 5, old_line = 5 }, type = "add" },
       }
       vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "line1" })
-      local discussions = {{
-        notes = {{ author = "You", body = "test", created_at = "2026-02-23T10:00:00Z",
-          position = { new_path = "a.lua", new_line = 5 } }},
-        is_optimistic = true,
-      }}
+      local discussions = {
+        {
+          notes = {
+            {
+              author = "You",
+              body = "test",
+              created_at = "2026-02-23T10:00:00Z",
+              position = { new_path = "a.lua", new_line = 5 },
+            },
+          },
+          is_optimistic = true,
+        },
+      }
       local file_diff = { new_path = "a.lua", old_path = "a.lua" }
       diff.place_comment_signs(buf, line_data, discussions, file_diff)
       local marks = vim.api.nvim_buf_get_extmarks(buf, -1, 0, -1, { details = true })
@@ -21,7 +29,9 @@ describe("mr.diff", function()
         if m[4] and m[4].virt_lines then
           for _, vl in ipairs(m[4].virt_lines) do
             for _, chunk in ipairs(vl) do
-              if chunk[2] == "CodeReviewCommentPending" then found_pending = true end
+              if chunk[2] == "CodeReviewCommentPending" then
+                found_pending = true
+              end
             end
           end
         end
@@ -36,11 +46,19 @@ describe("mr.diff", function()
         { item = { new_line = 5, old_line = 5 }, type = "add" },
       }
       vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "line1" })
-      local discussions = {{
-        notes = {{ author = "You", body = "test", created_at = "2026-02-23T10:00:00Z",
-          position = { new_path = "a.lua", new_line = 5 } }},
-        is_failed = true,
-      }}
+      local discussions = {
+        {
+          notes = {
+            {
+              author = "You",
+              body = "test",
+              created_at = "2026-02-23T10:00:00Z",
+              position = { new_path = "a.lua", new_line = 5 },
+            },
+          },
+          is_failed = true,
+        },
+      }
       local file_diff = { new_path = "a.lua", old_path = "a.lua" }
       diff.place_comment_signs(buf, line_data, discussions, file_diff)
       local marks = vim.api.nvim_buf_get_extmarks(buf, -1, 0, -1, { details = true })
@@ -49,7 +67,9 @@ describe("mr.diff", function()
         if m[4] and m[4].virt_lines then
           for _, vl in ipairs(m[4].virt_lines) do
             for _, chunk in ipairs(vl) do
-              if chunk[2] == "CodeReviewCommentFailed" then found_failed = true end
+              if chunk[2] == "CodeReviewCommentFailed" then
+                found_failed = true
+              end
             end
           end
         end
@@ -150,7 +170,9 @@ describe("mr.diff", function()
     local function make_buf(n)
       local buf = vim.api.nvim_create_buf(false, true)
       local lines = {}
-      for i = 1, n do lines[i] = "line " .. i end
+      for i = 1, n do
+        lines[i] = "line " .. i
+      end
       vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
       return buf
     end
@@ -159,30 +181,34 @@ describe("mr.diff", function()
       local buf = make_buf(20)
       local line_data = make_line_data({ 10, 11, 12, 13, 14, 15, 16 })
       local review = { head_sha = "new_sha" }
-      local discussions = {{
-        id = "d1",
-        notes = {{
-          author = "alice",
-          body = "outdated comment",
-          created_at = "2026-01-01T00:00:00Z",
-          position = {
-            new_path = "a.lua",
-            new_line = 10,
-            head_sha = "old_sha",
+      local discussions = {
+        {
+          id = "d1",
+          notes = {
+            {
+              author = "alice",
+              body = "outdated comment",
+              created_at = "2026-01-01T00:00:00Z",
+              position = {
+                new_path = "a.lua",
+                new_line = 10,
+                head_sha = "old_sha",
+              },
+              change_position = {
+                new_path = "a.lua",
+                new_line = 15,
+              },
+            },
           },
-          change_position = {
-            new_path = "a.lua",
-            new_line = 15,
-          },
-        }},
-      }}
+        },
+      }
       local file_diff = { new_path = "a.lua", old_path = "a.lua" }
       diff.place_comment_signs(buf, line_data, discussions, file_diff, nil, nil, review)
       local marks = vim.api.nvim_buf_get_extmarks(buf, -1, 0, -1, { details = true })
       local found_row = nil
       for _, m in ipairs(marks) do
         if m[4] and m[4].virt_lines then
-          found_row = m[2] + 1  -- 0-indexed to 1-indexed
+          found_row = m[2] + 1 -- 0-indexed to 1-indexed
         end
       end
       -- new_line=15 is the 6th entry in line_data
@@ -194,26 +220,32 @@ describe("mr.diff", function()
       local buf = make_buf(20)
       local line_data = make_line_data({ 10, 11, 12 })
       local review = { head_sha = "new_sha" }
-      local discussions = {{
-        id = "d1",
-        notes = {{
-          author = "alice",
-          body = "outdated comment",
-          created_at = "2026-01-01T00:00:00Z",
-          position = {
-            new_path = "a.lua",
-            new_line = 10,
-            head_sha = "old_sha",
-            -- no change_position
+      local discussions = {
+        {
+          id = "d1",
+          notes = {
+            {
+              author = "alice",
+              body = "outdated comment",
+              created_at = "2026-01-01T00:00:00Z",
+              position = {
+                new_path = "a.lua",
+                new_line = 10,
+                head_sha = "old_sha",
+                -- no change_position
+              },
+            },
           },
-        }},
-      }}
+        },
+      }
       local file_diff = { new_path = "a.lua", old_path = "a.lua" }
       diff.place_comment_signs(buf, line_data, discussions, file_diff, nil, nil, review)
       local marks = vim.api.nvim_buf_get_extmarks(buf, -1, 0, -1, { details = true })
       local has_virt_lines = false
       for _, m in ipairs(marks) do
-        if m[4] and m[4].virt_lines then has_virt_lines = true end
+        if m[4] and m[4].virt_lines then
+          has_virt_lines = true
+        end
       end
       assert.falsy(has_virt_lines, "Expected no virt_lines for outdated comment without change_position")
       vim.api.nvim_buf_delete(buf, { force = true })
@@ -223,19 +255,23 @@ describe("mr.diff", function()
       local buf = make_buf(25)
       local line_data = make_line_data({ 18, 19, 20, 21, 22 })
       local review = { head_sha = "new_sha" }
-      local discussions = {{
-        id = "d1",
-        notes = {{
-          author = "bob",
-          body = "gh outdated",
-          created_at = "2026-01-01T00:00:00Z",
-          position = {
-            new_path = "a.lua",
-            new_line = 20,
-            outdated = true,
+      local discussions = {
+        {
+          id = "d1",
+          notes = {
+            {
+              author = "bob",
+              body = "gh outdated",
+              created_at = "2026-01-01T00:00:00Z",
+              position = {
+                new_path = "a.lua",
+                new_line = 20,
+                outdated = true,
+              },
+            },
           },
-        }},
-      }}
+        },
+      }
       local file_diff = { new_path = "a.lua", old_path = "a.lua" }
       diff.place_comment_signs(buf, line_data, discussions, file_diff, nil, nil, review)
       local marks = vim.api.nvim_buf_get_extmarks(buf, -1, 0, -1, { details = true })
@@ -254,19 +290,23 @@ describe("mr.diff", function()
       local buf = make_buf(20)
       local line_data = make_line_data({ 5, 6, 7, 8 })
       local review = { head_sha = "current_sha" }
-      local discussions = {{
-        id = "d1",
-        notes = {{
-          author = "carol",
-          body = "normal comment",
-          created_at = "2026-01-01T00:00:00Z",
-          position = {
-            new_path = "a.lua",
-            new_line = 7,
-            head_sha = "current_sha",
+      local discussions = {
+        {
+          id = "d1",
+          notes = {
+            {
+              author = "carol",
+              body = "normal comment",
+              created_at = "2026-01-01T00:00:00Z",
+              position = {
+                new_path = "a.lua",
+                new_line = 7,
+                head_sha = "current_sha",
+              },
+            },
           },
-        }},
-      }}
+        },
+      }
       local file_diff = { new_path = "a.lua", old_path = "a.lua" }
       diff.place_comment_signs(buf, line_data, discussions, file_diff, nil, nil, review)
       local marks = vim.api.nvim_buf_get_extmarks(buf, -1, 0, -1, { details = true })
@@ -285,23 +325,27 @@ describe("mr.diff", function()
       local buf = make_buf(20)
       local line_data = make_line_data({ 10, 11, 12, 13, 14, 15 })
       local review = { head_sha = "new_sha" }
-      local discussions = {{
-        id = "d1",
-        notes = {{
-          author = "alice",
-          body = "outdated comment",
-          created_at = "2026-01-01T00:00:00Z",
-          position = {
-            new_path = "a.lua",
-            new_line = 10,
-            head_sha = "old_sha",
+      local discussions = {
+        {
+          id = "d1",
+          notes = {
+            {
+              author = "alice",
+              body = "outdated comment",
+              created_at = "2026-01-01T00:00:00Z",
+              position = {
+                new_path = "a.lua",
+                new_line = 10,
+                head_sha = "old_sha",
+              },
+              change_position = {
+                new_path = "a.lua",
+                new_line = 15,
+              },
+            },
           },
-          change_position = {
-            new_path = "a.lua",
-            new_line = 15,
-          },
-        }},
-      }}
+        },
+      }
       local file_diff = { new_path = "a.lua", old_path = "a.lua" }
       diff.place_comment_signs(buf, line_data, discussions, file_diff, nil, nil, review)
       local marks = vim.api.nvim_buf_get_extmarks(buf, -1, 0, -1, { details = true })
@@ -321,5 +365,4 @@ describe("mr.diff", function()
       vim.api.nvim_buf_delete(buf, { force = true })
     end)
   end)
-
 end)

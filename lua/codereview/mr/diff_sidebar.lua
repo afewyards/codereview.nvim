@@ -25,17 +25,21 @@ function M.render_summary(buf, state)
     end
   end)
   local detail = require("codereview.mr.detail")
-  local win_width = (state.layout and state.layout.main_win)
-    and vim.api.nvim_win_get_width(state.layout.main_win)
-    or tonumber(vim.o.columns) or 80
+  local win_width = (state.layout and state.layout.main_win) and vim.api.nvim_win_get_width(state.layout.main_win)
+    or tonumber(vim.o.columns)
+    or 80
   local pane_width = math.floor(win_width * 0.8)
 
   local header = detail.build_header_lines(state.review, pane_width)
   local lines = {}
-  for _, l in ipairs(header.lines) do table.insert(lines, l) end
+  for _, l in ipairs(header.lines) do
+    table.insert(lines, l)
+  end
 
   local commits_section = detail.build_commits_lines(state.commits, pane_width, state.commit_filter)
-  for _, l in ipairs(commits_section.lines) do table.insert(lines, l) end
+  for _, l in ipairs(commits_section.lines) do
+    table.insert(lines, l)
+  end
 
   local activity = detail.build_activity_lines(state.discussions, pane_width)
   for _, line in ipairs(activity.lines) do
@@ -108,9 +112,14 @@ function M.render_summary(buf, state)
             for id, node in query:iter_captures(root, cb.text, 0, -1) do
               local name = query.captures[id]
               local sr, sc, er, ec = node:range()
-              pcall(vim.api.nvim_buf_set_extmark, buf, SUMMARY_NS,
-                cb.start_row + sr, sc + cb.indent,
-                { end_row = cb.start_row + er, end_col = ec + cb.indent, hl_group = "@" .. name })
+              pcall(
+                vim.api.nvim_buf_set_extmark,
+                buf,
+                SUMMARY_NS,
+                cb.start_row + sr,
+                sc + cb.indent,
+                { end_row = cb.start_row + er, end_col = ec + cb.indent, hl_group = "@" .. name }
+              )
             end
           end
         end
@@ -121,7 +130,7 @@ function M.render_summary(buf, state)
   -- Build summary row map (buffer row -> discussion)
   state.summary_row_map = {}
   for offset, entry in pairs(activity.row_map) do
-    state.summary_row_map[header_count + commits_count + offset + 1] = entry  -- +1 for 1-indexed rows
+    state.summary_row_map[header_count + commits_count + offset + 1] = entry -- +1 for 1-indexed rows
   end
 
   vim.bo[buf].modifiable = false

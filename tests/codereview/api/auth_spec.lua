@@ -101,7 +101,9 @@ describe("auth", function()
   end)
 
   describe("get_token with platform", function()
-    before_each(function() auth.reset() end)
+    before_each(function()
+      auth.reset()
+    end)
     it("reads GITHUB_TOKEN for github", function()
       vim.env.GITHUB_TOKEN = "ghp_test"
       assert.equal("ghp_test", auth.get_token("github"))

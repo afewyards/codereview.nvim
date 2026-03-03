@@ -7,7 +7,7 @@ describe("mr.diff_render", function()
     it("maps new_line to its row", function()
       local line_data = {
         { type = "context", item = { new_line = 1, old_line = 1 } },
-        { type = "add",     item = { new_line = 2 } },
+        { type = "add", item = { new_line = 2 } },
         { type = "context", item = { new_line = 3, old_line = 2 } },
       }
       local m = diff_render.build_line_to_row(line_data)
@@ -19,20 +19,20 @@ describe("mr.diff_render", function()
     it("maps old_line to row when no new_line", function()
       local line_data = {
         { type = "context", item = { new_line = 1, old_line = 1 } },
-        { type = "delete",  item = { old_line = 2 } },
-        { type = "add",     item = { new_line = 3 } },
+        { type = "delete", item = { old_line = 2 } },
+        { type = "add", item = { new_line = 3 } },
       }
       local m = diff_render.build_line_to_row(line_data)
       assert.equals(1, m[1])
-      assert.equals(2, m[2])  -- delete row: old_line=2
-      assert.equals(3, m[3])  -- add row: new_line=3
+      assert.equals(2, m[2]) -- delete row: old_line=2
+      assert.equals(3, m[3]) -- add row: new_line=3
     end)
 
     it("new_line takes priority when same number exists as old_line", function()
       -- delete old_line=5, then add new_line=5 — new_line wins
       local line_data = {
-        { type = "delete",  item = { old_line = 5 } },
-        { type = "add",     item = { new_line = 5 } },
+        { type = "delete", item = { old_line = 5 } },
+        { type = "add", item = { new_line = 5 } },
       }
       local m = diff_render.build_line_to_row(line_data)
       -- row 2 (add, new_line=5) should win over row 1 (delete, old_line=5)
@@ -60,7 +60,7 @@ describe("mr.diff_render", function()
       local all_line_data = {
         { type = "file_header", file_idx = 1 },
         { type = "context", item = { new_line = 1, old_line = 1 }, file_idx = 1 },
-        { type = "add",     item = { new_line = 2 },               file_idx = 1 },
+        { type = "add", item = { new_line = 2 }, file_idx = 1 },
         { type = "file_header", file_idx = 2 },
         { type = "context", item = { new_line = 1, old_line = 1 }, file_idx = 2 },
       }
@@ -73,7 +73,7 @@ describe("mr.diff_render", function()
     it("maps file_idx:old_line for delete-only rows", function()
       local all_line_data = {
         { type = "delete", item = { old_line = 7 }, file_idx = 1 },
-        { type = "add",    item = { new_line = 7 }, file_idx = 1 },
+        { type = "add", item = { new_line = 7 }, file_idx = 1 },
       }
       local m = diff_render.build_line_to_row_scroll(all_line_data)
       -- new_line=7 wins for key "1:7"
@@ -95,7 +95,6 @@ describe("mr.diff_render", function()
       assert.same({}, m)
     end)
   end)
-
 
   describe("render_all_files", function()
     it("returns file_sections with correct boundaries", function()
@@ -176,7 +175,9 @@ describe("mr.diff_render", function()
       local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
       local found = false
       for _, l in ipairs(lines) do
-        if l:find("no changes") then found = true end
+        if l:find("no changes") then
+          found = true
+        end
       end
       assert.truthy(found)
       vim.api.nvim_buf_delete(buf, { force = true })
@@ -234,7 +235,11 @@ describe("mr.diff_render", function()
     pending("yanking a line does not include line number prefix (requires real Neovim)", function()
       local buf = vim.api.nvim_create_buf(false, true)
       local win = vim.api.nvim_open_win(buf, true, {
-        relative = "editor", width = 80, height = 10, row = 0, col = 0,
+        relative = "editor",
+        width = 80,
+        height = 10,
+        row = 0,
+        col = 0,
       })
       local files = {
         { new_path = "a.lua", old_path = "a.lua", diff = "@@ -1,1 +1,1 @@\n-old\n+new\n" },
@@ -243,7 +248,10 @@ describe("mr.diff_render", function()
       local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
       local target_row
       for i, l in ipairs(lines) do
-        if l == "new" then target_row = i break end
+        if l == "new" then
+          target_row = i
+          break
+        end
       end
       assert.truthy(target_row)
       vim.api.nvim_win_set_cursor(win, { target_row, 0 })
@@ -259,7 +267,8 @@ describe("mr.diff_render", function()
     it("populates cache on first call", function()
       local buf = vim.api.nvim_create_buf(false, true)
       local file_diff = {
-        new_path = "foo.lua", old_path = "foo.lua",
+        new_path = "foo.lua",
+        old_path = "foo.lua",
         diff = "@@ -1,2 +1,2 @@\n ctx\n-old\n+new\n",
       }
       local review = {}
@@ -278,7 +287,8 @@ describe("mr.diff_render", function()
     it("returns same line_data shape on second call (cache hit)", function()
       local buf = vim.api.nvim_create_buf(false, true)
       local file_diff = {
-        new_path = "bar.lua", old_path = "bar.lua",
+        new_path = "bar.lua",
+        old_path = "bar.lua",
         diff = "@@ -1,2 +1,2 @@\n ctx\n-old\n+new\n",
       }
       local review = {}
@@ -298,7 +308,8 @@ describe("mr.diff_render", function()
     it("uses different cache keys for different contexts", function()
       local buf = vim.api.nvim_create_buf(false, true)
       local file_diff = {
-        new_path = "baz.lua", old_path = "baz.lua",
+        new_path = "baz.lua",
+        old_path = "baz.lua",
         diff = "@@ -1,2 +1,2 @@\n ctx\n-old\n+new\n",
       }
       local review = {}
@@ -316,7 +327,8 @@ describe("mr.diff_render", function()
     it("does not error when diff_cache is nil", function()
       local buf = vim.api.nvim_create_buf(false, true)
       local file_diff = {
-        new_path = "no_cache.lua", old_path = "no_cache.lua",
+        new_path = "no_cache.lua",
+        old_path = "no_cache.lua",
         diff = "@@ -1,1 +1,1 @@\n-old\n+new\n",
       }
       local review = {}
@@ -330,7 +342,8 @@ describe("mr.diff_render", function()
     it("uses filter SHAs instead of review SHAs when commit_filter is active", function()
       local buf = vim.api.nvim_create_buf(false, true)
       local file_diff = {
-        new_path = "src/foo.lua", old_path = "src/foo.lua",
+        new_path = "src/foo.lua",
+        old_path = "src/foo.lua",
         diff = "@@ -1,1 +1,1 @@\n-old\n+new\n",
       }
       local review = { base_sha = "review_base", head_sha = "review_head" }
@@ -354,8 +367,12 @@ describe("mr.diff_render", function()
       local found_from = false
       local found_to = false
       for _, v in ipairs(captured_cmd) do
-        if v == "filter_from" then found_from = true end
-        if v == "filter_to" then found_to = true end
+        if v == "filter_from" then
+          found_from = true
+        end
+        if v == "filter_to" then
+          found_to = true
+        end
       end
       assert.truthy(found_from, "git diff should use filter from_sha")
       assert.truthy(found_to, "git diff should use filter to_sha")
@@ -364,7 +381,8 @@ describe("mr.diff_render", function()
     it("does not use filter SHAs when commit_filter is nil", function()
       local buf = vim.api.nvim_create_buf(false, true)
       local file_diff = {
-        new_path = "src/bar.lua", old_path = "src/bar.lua",
+        new_path = "src/bar.lua",
+        old_path = "src/bar.lua",
         diff = "@@ -1,1 +1,1 @@\n-old\n+new\n",
       }
       local review = { base_sha = "review_base", head_sha = "review_head" }
@@ -387,8 +405,12 @@ describe("mr.diff_render", function()
       local found_base = false
       local found_head = false
       for _, v in ipairs(captured_cmd) do
-        if v == "review_base" then found_base = true end
-        if v == "review_head" then found_head = true end
+        if v == "review_base" then
+          found_base = true
+        end
+        if v == "review_head" then
+          found_head = true
+        end
       end
       assert.truthy(found_base, "git diff should use review base_sha")
       assert.truthy(found_head, "git diff should use review head_sha")
@@ -397,7 +419,8 @@ describe("mr.diff_render", function()
     it("uses different cache keys for filter vs no-filter", function()
       local buf = vim.api.nvim_create_buf(false, true)
       local file_diff = {
-        new_path = "cached.lua", old_path = "cached.lua",
+        new_path = "cached.lua",
+        old_path = "cached.lua",
         diff = "@@ -1,1 +1,1 @@\n-old\n+new\n",
       }
       local review = {}
@@ -405,7 +428,9 @@ describe("mr.diff_render", function()
       local diff_cache = {}
 
       local orig_system = vim.fn.system
-      vim.fn.system = function() return "" end
+      vim.fn.system = function()
+        return ""
+      end
 
       diff_render.render_file_diff(buf, file_diff, review, {}, 3, nil, nil, nil, nil, diff_cache, nil)
       diff_render.render_file_diff(buf, file_diff, review, {}, 3, nil, nil, nil, nil, diff_cache, commit_filter)
@@ -495,31 +520,40 @@ describe("mr.diff_render", function()
       local discussions = {
         {
           id = "d1",
-          notes = {{
-            id = "n1",
-            body = "comment on a.lua",
-            author = "user1",
-            created_at = "2026-01-01T00:00:00Z",
-            position = { new_path = "a.lua", new_line = 2 },
-          }},
+          notes = {
+            {
+              id = "n1",
+              body = "comment on a.lua",
+              author = "user1",
+              created_at = "2026-01-01T00:00:00Z",
+              position = { new_path = "a.lua", new_line = 2 },
+            },
+          },
         },
         {
           id = "d2",
-          notes = {{
-            id = "n2",
-            body = "comment on b.lua",
-            author = "user2",
-            created_at = "2026-01-01T00:00:00Z",
-            position = { new_path = "b.lua", new_line = 6 },
-          }},
+          notes = {
+            {
+              id = "n2",
+              body = "comment on b.lua",
+              author = "user2",
+              created_at = "2026-01-01T00:00:00Z",
+              position = { new_path = "b.lua", new_line = 6 },
+            },
+          },
         },
       }
-      local result = diff_render.render_all_files(buf, files, { diff_refs = nil }, discussions, 3, nil, nil, nil, nil, nil, nil)
+      local result =
+        diff_render.render_all_files(buf, files, { diff_refs = nil }, discussions, 3, nil, nil, nil, nil, nil, nil)
       local found_d1, found_d2 = false, false
       for _, discs in pairs(result.row_discussions) do
         for _, d in ipairs(discs) do
-          if d.id == "d1" then found_d1 = true end
-          if d.id == "d2" then found_d2 = true end
+          if d.id == "d1" then
+            found_d1 = true
+          end
+          if d.id == "d2" then
+            found_d2 = true
+          end
         end
       end
       assert.is_true(found_d1, "discussion on a.lua should be placed")
@@ -535,18 +569,23 @@ describe("mr.diff_render", function()
       local discussions = {
         {
           id = "d_other",
-          notes = {{
-            id = "n_other",
-            body = "comment on other file",
-            author = "user1",
-            created_at = "2026-01-01T00:00:00Z",
-            position = { new_path = "other.lua", new_line = 1 },
-          }},
+          notes = {
+            {
+              id = "n_other",
+              body = "comment on other file",
+              author = "user1",
+              created_at = "2026-01-01T00:00:00Z",
+              position = { new_path = "other.lua", new_line = 1 },
+            },
+          },
         },
       }
-      local result = diff_render.render_all_files(buf, files, { diff_refs = nil }, discussions, 3, nil, nil, nil, nil, nil, nil)
+      local result =
+        diff_render.render_all_files(buf, files, { diff_refs = nil }, discussions, 3, nil, nil, nil, nil, nil, nil)
       local total = 0
-      for _ in pairs(result.row_discussions) do total = total + 1 end
+      for _ in pairs(result.row_discussions) do
+        total = total + 1
+      end
       assert.equals(0, total)
       vim.api.nvim_buf_delete(buf, { force = true })
     end)
@@ -560,7 +599,7 @@ describe("mr.diff_render", function()
       local diff_ns = vim.api.nvim_create_namespace("codereview_diff")
 
       -- Place extmarks on rows 2 (target) and 4 (other)
-      vim.api.nvim_buf_set_extmark(buf, aidraft_ns, 1, 0, { virt_lines = { { { "AI", "hl" } } } })  -- row=2, 0-indexed=1
+      vim.api.nvim_buf_set_extmark(buf, aidraft_ns, 1, 0, { virt_lines = { { { "AI", "hl" } } } }) -- row=2, 0-indexed=1
       vim.api.nvim_buf_set_extmark(buf, aidraft_ns, 3, 0, { virt_lines = { { { "AI2", "hl" } } } }) -- row=4, 0-indexed=3
 
       -- Also place a virt_lines extmark on target row in DIFF_NS
@@ -601,7 +640,9 @@ describe("mr.diff_render", function()
       local ai_marks = vim.api.nvim_buf_get_extmarks(buf, aidraft_ns, { 1, 0 }, { 1, -1 }, { details = true })
       local has_virt_lines = false
       for _, m in ipairs(ai_marks) do
-        if m[4] and m[4].virt_lines then has_virt_lines = true end
+        if m[4] and m[4].virt_lines then
+          has_virt_lines = true
+        end
       end
       assert.truthy(has_virt_lines, "AI suggestion should be re-rendered as virt_lines")
 
@@ -652,7 +693,8 @@ describe("mr.diff_render", function()
 
     it("round-trips anchor through per-file line_data", function()
       local buf = vim.api.nvim_create_buf(false, true)
-      local file = { new_path = "b.lua", old_path = "b.lua", diff = "@@ -10,3 +10,3 @@\n ctx10\n-old10\n+new10\n ctx11\n" }
+      local file =
+        { new_path = "b.lua", old_path = "b.lua", diff = "@@ -10,3 +10,3 @@\n ctx10\n-old10\n+new10\n ctx11\n" }
       local ld = diff_render.render_file_diff(buf, file, { diff_refs = nil }, {}, 8)
 
       local diff = require("codereview.mr.diff")
@@ -730,8 +772,14 @@ describe("render_all_files batch git diff", function()
     local diff_text_a = "@@ -1,2 +1,2 @@\n ctx\n-old\n+new\n"
     local diff_text_b = "@@ -5,2 +5,2 @@\n ctx\n-old2\n+new2\n"
     local diff_cache = {
-      ["a.lua:3"] = { hunks = diff_parser.parse_hunks(diff_text_a), display = diff_parser.build_display(diff_parser.parse_hunks(diff_text_a), 3) },
-      ["b.lua:3"] = { hunks = diff_parser.parse_hunks(diff_text_b), display = diff_parser.build_display(diff_parser.parse_hunks(diff_text_b), 3) },
+      ["a.lua:3"] = {
+        hunks = diff_parser.parse_hunks(diff_text_a),
+        display = diff_parser.build_display(diff_parser.parse_hunks(diff_text_a), 3),
+      },
+      ["b.lua:3"] = {
+        hunks = diff_parser.parse_hunks(diff_text_b),
+        display = diff_parser.build_display(diff_parser.parse_hunks(diff_text_b), 3),
+      },
     }
     local files = {
       { new_path = "a.lua", old_path = "a.lua", diff = diff_text_a },

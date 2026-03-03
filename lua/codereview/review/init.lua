@@ -40,20 +40,29 @@ local function render_file_suggestions(diff_state, layout, suggestions)
     -- Re-render current view to show new suggestions
     if diff_state.scroll_mode then
       local result = diff_mod.render_all_files(
-        layout.main_buf, diff_state.files, diff_state.review,
-        diff_state.discussions, diff_state.context,
-        diff_state.file_contexts, diff_state.ai_suggestions,
-        diff_state.row_selection, diff_state.current_user
+        layout.main_buf,
+        diff_state.files,
+        diff_state.review,
+        diff_state.discussions,
+        diff_state.context,
+        diff_state.file_contexts,
+        diff_state.ai_suggestions,
+        diff_state.row_selection,
+        diff_state.current_user
       )
       diff_state_mod.apply_scroll_result(diff_state, result)
     else
       local file = diff_state.files and diff_state.files[diff_state.current_file]
       if file then
         local ld, rd, ra = diff_mod.render_file_diff(
-          layout.main_buf, file, diff_state.review,
-          diff_state.discussions, diff_state.context,
+          layout.main_buf,
+          file,
+          diff_state.review,
+          diff_state.discussions,
+          diff_state.context,
           diff_state.ai_suggestions,
-          diff_state.row_selection, diff_state.current_user
+          diff_state.row_selection,
+          diff_state.current_user
         )
         diff_state_mod.apply_file_result(diff_state, diff_state.current_file, ld, rd, ra)
       end
@@ -69,25 +78,35 @@ end
 --- Fetch file content if available, respecting max_file_size.
 --- Returns content string or nil.
 local function fetch_file_content(diff_state, review, path, deleted)
-  if deleted then return nil end
+  if deleted then
+    return nil
+  end
   local provider = diff_state.provider
   local ctx = diff_state.ctx
-  if not provider or not provider.get_file_content or not ctx then return nil end
+  if not provider or not provider.get_file_content or not ctx then
+    return nil
+  end
 
   local cfg = require("codereview.config").get()
   local max_size = cfg.ai.max_file_size or 500
-  if max_size == 0 then return nil end
+  if max_size == 0 then
+    return nil
+  end
 
   local client = require("codereview.api.client")
   local content, err = provider.get_file_content(client, ctx, review.head_sha, path)
   if not content then
-    if err then log.debug("AI: could not fetch content for " .. path .. ": " .. err) end
+    if err then
+      log.debug("AI: could not fetch content for " .. path .. ": " .. err)
+    end
     return nil
   end
 
   -- Check line count
   local line_count = 1
-  for _ in content:gmatch("\n") do line_count = line_count + 1 end
+  for _ in content:gmatch("\n") do
+    line_count = line_count + 1
+  end
   if line_count > max_size then
     log.debug(string.format("AI: skipping content for %s (%d lines > %d max)", path, line_count, max_size))
     return nil

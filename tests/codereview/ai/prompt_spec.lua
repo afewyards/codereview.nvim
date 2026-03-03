@@ -5,64 +5,76 @@ vim.json = vim.json or {}
 -- Use cjson if available, otherwise a simple converter
 local ok, cjson = pcall(require, "cjson")
 if ok then
-  vim.json.decode = vim.json.decode or function(s) return cjson.decode(s) end
+  vim.json.decode = vim.json.decode or function(s)
+    return cjson.decode(s)
+  end
 else
   -- Minimal JSON array decoder for test data: handles arrays of flat string/number objects
-  vim.json.decode = vim.json.decode or function(s)
-    s = s:match("^%s*(.-)%s*$")
-    -- Handle empty array
-    if s == "[]" then return {} end
-    -- Strip outer brackets
-    local inner = s:match("^%[(.*)%]$")
-    if not inner then error("not an array: " .. s) end
-    local result = {}
-    -- Split on object boundaries: },{ or }  {
-    -- We parse each {...} object individually
-    local depth = 0
-    local obj_start = nil
-    for i = 1, #inner do
-      local c = inner:sub(i, i)
-      if c == "{" then
-        depth = depth + 1
-        if depth == 1 then obj_start = i end
-      elseif c == "}" then
-        depth = depth - 1
-        if depth == 0 and obj_start then
-          local obj_str = inner:sub(obj_start, i)
-          local obj = {}
-          -- Parse key-value pairs from flat object
-          local function json_unescape(s)
-            return (s:gsub("\\n", "\n"):gsub("\\t", "\t"):gsub("\\\\", "\\")):gsub('\\"', '"')
+  vim.json.decode = vim.json.decode
+    or function(s)
+      s = s:match("^%s*(.-)%s*$")
+      -- Handle empty array
+      if s == "[]" then
+        return {}
+      end
+      -- Strip outer brackets
+      local inner = s:match("^%[(.*)%]$")
+      if not inner then
+        error("not an array: " .. s)
+      end
+      local result = {}
+      -- Split on object boundaries: },{ or }  {
+      -- We parse each {...} object individually
+      local depth = 0
+      local obj_start = nil
+      for i = 1, #inner do
+        local c = inner:sub(i, i)
+        if c == "{" then
+          depth = depth + 1
+          if depth == 1 then
+            obj_start = i
           end
-          for key, val in obj_str:gmatch('"([^"]+)"%s*:%s*"([^"]*)"') do
-            obj[key] = json_unescape(val)
+        elseif c == "}" then
+          depth = depth - 1
+          if depth == 0 and obj_start then
+            local obj_str = inner:sub(obj_start, i)
+            local obj = {}
+            -- Parse key-value pairs from flat object
+            local function json_unescape(s)
+              return (s:gsub("\\n", "\n"):gsub("\\t", "\t"):gsub("\\\\", "\\")):gsub('\\"', '"')
+            end
+            for key, val in obj_str:gmatch('"([^"]+)"%s*:%s*"([^"]*)"') do
+              obj[key] = json_unescape(val)
+            end
+            for key, val in obj_str:gmatch('"([^"]+)"%s*:%s*(-?%d+)') do
+              obj[key] = tonumber(val)
+            end
+            table.insert(result, obj)
+            obj_start = nil
           end
-          for key, val in obj_str:gmatch('"([^"]+)"%s*:%s*(-?%d+)') do
-            obj[key] = tonumber(val)
-          end
-          table.insert(result, obj)
-          obj_start = nil
         end
       end
+      return result
     end
-    return result
-  end
 end
 
-vim.trim = vim.trim or function(s) return s:match("^%s*(.-)%s*$") end
-vim.split = vim.split or function(s, sep)
-  local parts = {}
-  local escaped = sep:gsub("([%(%)%.%%%+%-%*%?%[%^%$])", "%%%1")
-  local pattern = "([^" .. escaped .. "]*)"
-  for part in s:gmatch(pattern) do
-    table.insert(parts, part)
-  end
-  -- Remove trailing empty string artifact from gmatch
-  while #parts > 0 and parts[#parts] == "" do
-    table.remove(parts)
-  end
-  return parts
+vim.trim = vim.trim or function(s)
+  return s:match("^%s*(.-)%s*$")
 end
+vim.split = vim.split
+  or function(s, sep)
+    local parts = {}
+    local escaped = sep:gsub("([%(%)%.%%%+%-%*%?%[%^%$])", "%%%1")
+    local pattern = "([^" .. escaped .. "]*)"
+    for part in s:gmatch(pattern) do
+      table.insert(parts, part)
+    end
+    -- Remove trailing empty string artifact from gmatch
+    while #parts > 0 and parts[#parts] == "" do
+      table.remove(parts)
+    end
+    return parts
+  end
 
 local prompt = require("codereview.ai.prompt")
 
@@ -72,7 +84,9 @@ describe("ai.prompt", function()
       local diff = "@@ -10,3 +10,4 @@\n context\n-old\n+new\n+added\n"
       local result = prompt.annotate_diff_with_lines(diff)
       local lines = {}
-      for l in (result .. "\n"):gmatch("(.-)\n") do table.insert(lines, l) end
+      for l in (result .. "\n"):gmatch("(.-)\n") do
+        table.insert(lines, l)
+      end
       -- hunk header unchanged
       assert.equals("@@ -10,3 +10,4 @@", lines[1])
       -- context line gets new line number (10)
@@ -104,7 +118,7 @@ describe("ai.prompt", function()
       local result = prompt.annotate_diff_with_lines(diff)
       -- All annotated lines should start with "L" followed by a 3-digit-wide number
       for line in (result .. "\n"):gmatch("(.-)\n") do
-        if line:sub(1,1) == "L" then
+        if line:sub(1, 1) == "L" then
           -- "L" then digits/spaces then ":"
           assert.truthy(line:match("^L%s*%d+:"), "expected Lnnn: prefix, got: " .. line)
         end
@@ -273,7 +287,8 @@ describe("ai.prompt", function()
 
   describe("parse_review_output", function()
     it("extracts JSON array from code block", function()
-      local output = 'Here are my findings:\n\n```json\n[{"file": "src/auth.lua", "line": 15, "severity": "warning", "comment": "Missing error check"}, {"file": "src/auth.lua", "line": 42, "severity": "info", "comment": "Consider renaming"}]\n```'
+      local output =
+        'Here are my findings:\n\n```json\n[{"file": "src/auth.lua", "line": 15, "severity": "warning", "comment": "Missing error check"}, {"file": "src/auth.lua", "line": 42, "severity": "info", "comment": "Consider renaming"}]\n```'
       local suggestions = prompt.parse_review_output(output)
       assert.equals(2, #suggestions)
       assert.equals("src/auth.lua", suggestions[1].file)
@@ -283,7 +298,8 @@ describe("ai.prompt", function()
     end)
 
     it("preserves newlines in comment fields", function()
-      local output = '```json\n[{"file": "src/auth.lua", "line": 10, "severity": "warning", "comment": "Missing nil check.\\n\\nAdd a guard before accessing resp.body."}]\n```'
+      local output =
+        '```json\n[{"file": "src/auth.lua", "line": 10, "severity": "warning", "comment": "Missing nil check.\\n\\nAdd a guard before accessing resp.body."}]\n```'
       local suggestions = prompt.parse_review_output(output)
       assert.equals(1, #suggestions)
       assert.truthy(suggestions[1].comment:find("\n"), "comment should contain real newlines")
@@ -296,7 +312,7 @@ describe("ai.prompt", function()
     end)
 
     it("handles malformed JSON gracefully", function()
-      local suggestions = prompt.parse_review_output('```json\n{broken\n```')
+      local suggestions = prompt.parse_review_output("```json\n{broken\n```")
       assert.equals(0, #suggestions)
     end)
 
@@ -308,7 +324,8 @@ describe("ai.prompt", function()
     it("filters out suggestions below review_level threshold", function()
       local config = require("codereview.config")
       config.setup({ ai = { review_level = "warning" } })
-      local output = '```json\n[{"file": "a.lua", "line": 1, "severity": "info", "comment": "low"}, {"file": "a.lua", "line": 2, "severity": "warning", "comment": "mid"}, {"file": "a.lua", "line": 3, "severity": "error", "comment": "high"}]\n```'
+      local output =
+        '```json\n[{"file": "a.lua", "line": 1, "severity": "info", "comment": "low"}, {"file": "a.lua", "line": 2, "severity": "warning", "comment": "mid"}, {"file": "a.lua", "line": 3, "severity": "error", "comment": "high"}]\n```'
       local suggestions = prompt.parse_review_output(output)
       assert.equals(2, #suggestions)
       assert.equals("warning", suggestions[1].severity)
@@ -319,7 +336,8 @@ describe("ai.prompt", function()
     it("keeps all suggestions when review_level is info", function()
       local config = require("codereview.config")
       config.setup({ ai = { review_level = "info" } })
-      local output = '```json\n[{"file": "a.lua", "line": 1, "severity": "info", "comment": "low"}, {"file": "a.lua", "line": 2, "severity": "suggestion", "comment": "sug"}]\n```'
+      local output =
+        '```json\n[{"file": "a.lua", "line": 1, "severity": "info", "comment": "low"}, {"file": "a.lua", "line": 2, "severity": "suggestion", "comment": "sug"}]\n```'
       local suggestions = prompt.parse_review_output(output)
       assert.equals(2, #suggestions)
       config.reset()
@@ -471,7 +489,8 @@ describe("ai.prompt", function()
 
   describe("parse_summary_output", function()
     it("extracts file-to-summary map from JSON block", function()
-      local output = '```json\n{"src/auth.lua": "Fixed token refresh logic", "src/config.lua": "Added timeout setting"}\n```'
+      local output =
+        '```json\n{"src/auth.lua": "Fixed token refresh logic", "src/config.lua": "Added timeout setting"}\n```'
       local summaries = prompt.parse_summary_output(output)
       assert.equals("Fixed token refresh logic", summaries["src/auth.lua"])
       assert.equals("Added timeout setting", summaries["src/config.lua"])

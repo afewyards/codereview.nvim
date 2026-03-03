@@ -38,7 +38,9 @@ function M.open_input_popup(title, callback, opts)
   vim.api.nvim_create_autocmd("WinLeave", {
     buffer = buf,
     callback = function()
-      if handle.closed then return true end
+      if handle.closed then
+        return true
+      end
       local text = handle.get_text()
       if text ~= "" then
         local choice = vim.fn.confirm("Discard comment?", "&Discard\n&Submit\n&Cancel", 3)
@@ -83,7 +85,9 @@ end
 function M.build_thread_lines(disc)
   local lines = {}
   local notes = disc.notes or {}
-  if #notes == 0 then return lines end
+  if #notes == 0 then
+    return lines
+  end
 
   local first = notes[1]
 
@@ -98,12 +102,7 @@ function M.build_thread_lines(disc)
     end
   end
 
-  table.insert(lines, string.format(
-    "@%s (%s)%s",
-    first.author,
-    detail.format_time(first.created_at),
-    resolved_str
-  ))
+  table.insert(lines, string.format("@%s (%s)%s", first.author, detail.format_time(first.created_at), resolved_str))
 
   for _, body_line in ipairs(markdown.to_lines(first.body)) do
     table.insert(lines, "  " .. body_line)
@@ -113,11 +112,7 @@ function M.build_thread_lines(disc)
   for i = 2, #notes do
     local reply = notes[i]
     table.insert(lines, "")
-    table.insert(lines, string.format(
-      "  -> @%s (%s):",
-      reply.author,
-      detail.format_time(reply.created_at)
-    ))
+    table.insert(lines, string.format("  -> @%s (%s):", reply.author, detail.format_time(reply.created_at)))
     for _, body_line in ipairs(markdown.to_lines(reply.body)) do
       table.insert(lines, "     " .. body_line)
     end
@@ -135,8 +130,12 @@ function M.show_thread(disc, mr)
   }
 
   local all_lines = {}
-  for _, l in ipairs(thread_lines) do table.insert(all_lines, l) end
-  for _, l in ipairs(hints) do table.insert(all_lines, l) end
+  for _, l in ipairs(thread_lines) do
+    table.insert(all_lines, l)
+  end
+  for _, l in ipairs(hints) do
+    table.insert(all_lines, l)
+  end
 
   local width = 70
   local height = math.min(#all_lines + 2, 30)
@@ -161,7 +160,9 @@ function M.show_thread(disc, mr)
     title_pos = "center",
   })
 
-  local close = function() pcall(vim.api.nvim_win_close, win, true) end
+  local close = function()
+    pcall(vim.api.nvim_win_close, win, true)
+  end
   local map_opts = { buffer = buf, nowait = true }
 
   vim.keymap.set("n", "q", close, map_opts)
@@ -184,7 +185,9 @@ end
 
 function M.reply(disc, mr, optimistic, opts)
   opts = opts or {}
-  if not opts.action_type then opts.action_type = "reply" end
+  if not opts.action_type then
+    opts.action_type = "reply"
+  end
   if not opts.context_text and disc.notes and disc.notes[1] then
     local first = disc.notes[1]
     local snippet = (first.body or ""):sub(1, 60)
@@ -198,20 +201,24 @@ function M.reply(disc, mr, optimistic, opts)
     vim.schedule(function()
       local provider, client, ctx = get_provider()
       if not provider then
-        if note and optimistic.remove_reply then optimistic.remove_reply(disc, note) end
+        if note and optimistic.remove_reply then
+          optimistic.remove_reply(disc, note)
+        end
         return
       end
-      M.post_with_retry(
-        function() return provider.reply_to_discussion(client, ctx, mr, disc.id, text) end,
-        function()
-          vim.notify("Reply posted", vim.log.levels.INFO)
-          if optimistic and optimistic.refresh then optimistic.refresh() end
-        end,
-        function(err)
-          vim.notify("Failed to post reply: " .. err, vim.log.levels.ERROR)
-          if note and optimistic.mark_reply_failed then optimistic.mark_reply_failed(note) end
+      M.post_with_retry(function()
+        return provider.reply_to_discussion(client, ctx, mr, disc.id, text)
+      end, function()
+        vim.notify("Reply posted", vim.log.levels.INFO)
+        if optimistic and optimistic.refresh then
+          optimistic.refresh()
         end
-      )
+      end, function(err)
+        vim.notify("Failed to post reply: " .. err, vim.log.levels.ERROR)
+        if note and optimistic.mark_reply_failed then
+          optimistic.mark_reply_failed(note)
+        end
+      end)
     end)
   end, opts)
 end
@@ -227,17 +234,23 @@ function M.edit_note(disc, note, mr, on_success, opts)
   opts.action_type = "edit"
   opts.prefill = note.body
   M.open_input_popup("Edit comment", function(text)
-    if text == note.body then return end  -- no change
+    if text == note.body then
+      return
+    end -- no change
     vim.schedule(function()
       local provider, client, ctx = get_provider()
-      if not provider then return end
+      if not provider then
+        return
+      end
       local _, err = provider.edit_note(client, ctx, mr, disc.id, note.id, text)
       if err then
         vim.notify("Edit failed: " .. err, vim.log.levels.ERROR)
         return
       end
       note.body = text
-      if on_success then on_success() end
+      if on_success then
+        on_success()
+      end
     end)
   end, opts)
 end
@@ -249,10 +262,14 @@ end
 --- @param on_success fun(result?: table)  called after successful delete
 function M.delete_note(disc, note, mr, on_success)
   vim.ui.input({ prompt = "Delete this comment? (Y/n): ", default = "y" }, function(input)
-    if not input or input:lower():match("^n") then return end
+    if not input or input:lower():match("^n") then
+      return
+    end
     vim.schedule(function()
       local provider, client, ctx = get_provider()
-      if not provider then return end
+      if not provider then
+        return
+      end
       local _, err = provider.delete_note(client, ctx, mr, disc.id, note.id)
       if err then
         vim.notify("Delete failed: " .. err, vim.log.levels.ERROR)
@@ -267,9 +284,13 @@ function M.delete_note(disc, note, mr, on_success)
       end
       -- If thread is now empty, signal caller to remove the discussion
       if #disc.notes == 0 then
-        if on_success then on_success({ removed_disc = true }) end
+        if on_success then
+          on_success({ removed_disc = true })
+        end
       else
-        if on_success then on_success() end
+        if on_success then
+          on_success()
+        end
       end
     end)
   end)
@@ -285,10 +306,14 @@ function M.delete_draft(disc, mr, on_success)
     return
   end
   vim.ui.input({ prompt = "Delete this draft comment? (Y/n): ", default = "y" }, function(input)
-    if not input or input:lower():match("^n") then return end
+    if not input or input:lower():match("^n") then
+      return
+    end
     vim.schedule(function()
       local provider, client, ctx = get_provider()
-      if not provider then return end
+      if not provider then
+        return
+      end
       if not provider.delete_draft_note then
         vim.notify("Draft deletion not supported on this platform", vim.log.levels.WARN)
         return
@@ -298,17 +323,23 @@ function M.delete_draft(disc, mr, on_success)
         vim.notify("Delete draft failed: " .. err, vim.log.levels.ERROR)
         return
       end
-      if on_success then on_success() end
+      if on_success then
+        on_success()
+      end
     end)
   end)
 end
 
 function M.resolve_toggle(disc, mr, callback)
   local first = disc.notes and disc.notes[1]
-  if not first then return end
+  if not first then
+    return
+  end
 
   local provider, client, ctx = get_provider()
-  if not provider then return end
+  if not provider then
+    return
+  end
 
   local currently_resolved = first.resolved
   local _, err = provider.resolve_discussion(client, ctx, mr, disc.id, not currently_resolved, disc.node_id)
@@ -343,46 +374,54 @@ function M.create_comment(mr, opts)
       vim.schedule(function()
         local provider, client, ctx = get_provider()
         if not provider then
-          if disc and opts.optimistic.remove then opts.optimistic.remove(disc) end
+          if disc and opts.optimistic.remove then
+            opts.optimistic.remove(disc)
+          end
           return
         end
-        M.post_with_retry(
-          function() return opts.api_fn(provider, client, ctx, mr, text) end,
-          function()
-            vim.notify(opts.success_msg or "Comment posted", vim.log.levels.INFO)
-            if opts.optimistic.refresh then opts.optimistic.refresh() end
-          end,
-          function(err)
-            vim.notify((opts.failure_msg or "Failed to post comment") .. ": " .. err, vim.log.levels.ERROR)
-            if disc and opts.optimistic.mark_failed then opts.optimistic.mark_failed(disc) end
+        M.post_with_retry(function()
+          return opts.api_fn(provider, client, ctx, mr, text)
+        end, function()
+          vim.notify(opts.success_msg or "Comment posted", vim.log.levels.INFO)
+          if opts.optimistic.refresh then
+            opts.optimistic.refresh()
           end
-        )
+        end, function(err)
+          vim.notify((opts.failure_msg or "Failed to post comment") .. ": " .. err, vim.log.levels.ERROR)
+          if disc and opts.optimistic.mark_failed then
+            opts.optimistic.mark_failed(disc)
+          end
+        end)
       end)
     elseif opts.use_retry then
       -- Retry path without optimistic UI
       vim.schedule(function()
         local provider, client, ctx = get_provider()
-        if not provider then return end
-        M.post_with_retry(
-          function() return opts.api_fn(provider, client, ctx, mr, text) end,
-          function()
-            vim.notify(opts.success_msg or "Comment posted", vim.log.levels.INFO)
-          end,
-          function(err)
-            vim.notify((opts.failure_msg or "Failed to post comment") .. ": " .. err, vim.log.levels.ERROR)
-          end
-        )
+        if not provider then
+          return
+        end
+        M.post_with_retry(function()
+          return opts.api_fn(provider, client, ctx, mr, text)
+        end, function()
+          vim.notify(opts.success_msg or "Comment posted", vim.log.levels.INFO)
+        end, function(err)
+          vim.notify((opts.failure_msg or "Failed to post comment") .. ": " .. err, vim.log.levels.ERROR)
+        end)
       end)
     else
       -- Draft path: synchronous, no optimistic, no retry
       local provider, client, ctx = get_provider()
-      if not provider then return end
+      if not provider then
+        return
+      end
       local result, err = opts.api_fn(provider, client, ctx, mr, text)
       if err then
         vim.notify((opts.failure_msg or "Failed to create draft comment") .. ": " .. err, vim.log.levels.ERROR)
       else
         vim.notify(opts.success_msg or "Draft comment created", vim.log.levels.INFO)
-        if opts.on_success then opts.on_success(text, result) end
+        if opts.on_success then
+          opts.on_success(text, result)
+        end
       end
     end
   end, popup_opts)
@@ -391,14 +430,18 @@ end
 function M.create_mr_comment(review, provider, ctx, on_success)
   -- No opts: summary view has no line context, always uses fallback centered float
   M.open_input_popup("Comment on MR", function(text)
-    if not provider or not ctx then return end
+    if not provider or not ctx then
+      return
+    end
     local client_mod = require("codereview.api.client")
     local _, err = provider.post_comment(client_mod, ctx, review, text, nil)
     if err then
       vim.notify("Failed to post comment: " .. err, vim.log.levels.ERROR)
     else
       vim.notify("Comment posted", vim.log.levels.INFO)
-      if on_success then on_success() end
+      if on_success then
+        on_success()
+      end
     end
   end)
 end
@@ -417,7 +460,9 @@ function M.post_with_retry(api_fn, on_success, on_failure, opts)
     end
     attempt = attempt + 1
     if attempt >= max then
-      vim.schedule(function() on_failure(err) end)
+      vim.schedule(function()
+        on_failure(err)
+      end)
       return
     end
     vim.defer_fn(try, delay)

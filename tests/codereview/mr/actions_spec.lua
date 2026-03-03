@@ -11,10 +11,18 @@ describe("mr.actions", function()
     mock_client = {}
 
     mock_provider = {
-      approve = spy.new(function() return { ok = true }, nil end),
-      unapprove = spy.new(function() return { ok = true }, nil end),
-      merge = spy.new(function() return { ok = true }, nil end),
-      close = spy.new(function() return { ok = true }, nil end),
+      approve = spy.new(function()
+        return { ok = true }, nil
+      end),
+      unapprove = spy.new(function()
+        return { ok = true }, nil
+      end),
+      merge = spy.new(function()
+        return { ok = true }, nil
+      end),
+      close = spy.new(function()
+        return { ok = true }, nil
+      end),
     }
 
     stub(providers, "detect").returns(mock_provider, mock_ctx, nil)
@@ -53,10 +61,15 @@ describe("mr.actions", function()
     end)
 
     it("calls vim.notify with WARN when provider returns an error", function()
-      mock_provider.unapprove = spy.new(function() return nil, "unapprove failed" end)
+      mock_provider.unapprove = spy.new(function()
+        return nil, "unapprove failed"
+      end)
       local notified_msg, notified_level
       _G.vim = _G.vim or {}
-      _G.vim.notify = function(msg, level) notified_msg = msg; notified_level = level end
+      _G.vim.notify = function(msg, level)
+        notified_msg = msg
+        notified_level = level
+      end
       _G.vim.log = _G.vim.log or {}
       _G.vim.log.levels = _G.vim.log.levels or { WARN = 3 }
 

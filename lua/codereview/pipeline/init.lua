@@ -65,9 +65,9 @@ function M.open(diff_state)
     col = col,
     style = "minimal",
     border = "rounded",
-    title = {{ title, "CodeReviewFloatTitle" }},
+    title = { { title, "CodeReviewFloatTitle" } },
     title_pos = "center",
-    footer = {{ " q:close  r:retry  c:cancel  p:play  o:browser  R:refresh ", "CodeReviewFloatFooterText" }},
+    footer = { { " q:close  r:retry  c:cancel  p:play  o:browser  R:refresh ", "CodeReviewFloatFooterText" } },
     footer_pos = "center",
     zindex = 45,
   })
@@ -75,7 +75,9 @@ function M.open(diff_state)
   current_handle = { buf = buf, win = win, closed = false, row_map = content.row_map }
 
   function current_handle.close()
-    if current_handle.closed then return end
+    if current_handle.closed then
+      return
+    end
     current_handle.closed = true
     pipeline_state.stop_polling(pstate)
     log_view.close()
@@ -86,14 +88,18 @@ function M.open(diff_state)
 
   -- Redraw helper
   local function redraw()
-    if current_handle and current_handle.closed then return end
+    if current_handle and current_handle.closed then
+      return
+    end
     local c = render.build_lines(pstate.pipeline, pstate.stages, pstate.collapsed)
     if vim.api.nvim_buf_is_valid(buf) then
       vim.bo[buf].modifiable = true
       vim.api.nvim_buf_set_lines(buf, 0, -1, false, c.lines)
       vim.bo[buf].modifiable = false
     end
-    if current_handle then current_handle.row_map = c.row_map end
+    if current_handle then
+      current_handle.row_map = c.row_map
+    end
   end
 
   -- Keymaps
@@ -105,7 +111,9 @@ function M.open(diff_state)
 
     on_toggle = function(row)
       local entry = current_handle.row_map[row]
-      if not entry then return end
+      if not entry then
+        return
+      end
       if entry.job then
         -- Open log for this job
         local trace, err = pstate.provider.get_job_trace(pstate.client, pstate.ctx, pstate.review, entry.job.id)
@@ -123,7 +131,9 @@ function M.open(diff_state)
 
     on_retry = function(row)
       local entry = current_handle.row_map[row]
-      if not entry or not entry.job then return end
+      if not entry or not entry.job then
+        return
+      end
       local _, err = pstate.provider.retry_job(pstate.client, pstate.ctx, pstate.review, entry.job.id)
       if err then
         vim.notify("Retry failed: " .. err, vim.log.levels.ERROR)
@@ -136,7 +146,9 @@ function M.open(diff_state)
 
     on_cancel = function(row)
       local entry = current_handle.row_map[row]
-      if not entry or not entry.job then return end
+      if not entry or not entry.job then
+        return
+      end
       local _, err = pstate.provider.cancel_job(pstate.client, pstate.ctx, pstate.review, entry.job.id)
       if err then
         vim.notify("Cancel failed: " .. err, vim.log.levels.ERROR)
@@ -149,7 +161,9 @@ function M.open(diff_state)
 
     on_play = function(row)
       local entry = current_handle.row_map[row]
-      if not entry or not entry.job then return end
+      if not entry or not entry.job then
+        return
+      end
       local _, err = pstate.provider.play_job(pstate.client, pstate.ctx, pstate.review, entry.job.id)
       if err then
         vim.notify("Play failed: " .. err, vim.log.levels.ERROR)
@@ -180,7 +194,9 @@ function M.open(diff_state)
   vim.api.nvim_create_autocmd("WinClosed", {
     pattern = tostring(win),
     once = true,
-    callback = function() current_handle.close() end,
+    callback = function()
+      current_handle.close()
+    end,
   })
 
   -- Start polling if pipeline is not terminal

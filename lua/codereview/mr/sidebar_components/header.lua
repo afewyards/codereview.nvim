@@ -6,14 +6,14 @@ local M = {}
 
 local CI_ICONS = {
   success = "●",
-  failed  = "✗",
+  failed = "✗",
   running = "◐",
   pending = "◐",
 }
 
 local CI_HLS = {
   success = "CodeReviewFileAdded",
-  failed  = "CodeReviewFileDeleted",
+  failed = "CodeReviewFileDeleted",
   running = "CodeReviewSpinner",
   pending = "CodeReviewSpinner",
 }
@@ -24,9 +24,9 @@ local CI_HLS = {
 --- @return table  { lines: string[], highlights: table[], row_map: table }
 function M.render(state_or_review, width)
   width = width or 30
-  local lines      = {}
+  local lines = {}
   local highlights = {}
-  local row_map    = {}
+  local row_map = {}
 
   local review, commit_filter
   if state_or_review.review then
@@ -37,9 +37,9 @@ function M.render(state_or_review, width)
   end
 
   -- Line 1: #ID title  (title truncated so total fits in width)
-  local id_prefix  = string.format("#%d ", review.id or 0)
-  local title_max  = math.max(0, width - #id_prefix)
-  local title      = (review.title or ""):sub(1, title_max)
+  local id_prefix = string.format("#%d ", review.id or 0)
+  local title_max = math.max(0, width - #id_prefix)
+  local title = (review.title or ""):sub(1, title_max)
   table.insert(lines, id_prefix .. title)
 
   -- Line 2: source_branch → target_branch
@@ -65,12 +65,12 @@ function M.render(state_or_review, width)
   end
 
   -- Line 3: compact status indicators
-  local parts   = {}
-  local ci_col  = nil   -- byte-start of CI icon in the assembled line (for highlight)
+  local parts = {}
+  local ci_col = nil -- byte-start of CI icon in the assembled line (for highlight)
 
   -- CI indicator
   local ci_status = review.pipeline_status
-  local ci_icon   = CI_ICONS[ci_status]
+  local ci_icon = CI_ICONS[ci_status]
   if ci_icon then
     ci_col = 0
     table.insert(parts, ci_icon)
@@ -78,8 +78,8 @@ function M.render(state_or_review, width)
 
   -- Approvals: ✓N/M when required > 0, ✓N when approved > 0
   local approved_by = type(review.approved_by) == "table" and review.approved_by or {}
-  local required    = type(review.approvals_required) == "number" and review.approvals_required or 0
-  local approved_n  = #approved_by
+  local required = type(review.approvals_required) == "number" and review.approvals_required or 0
+  local approved_n = #approved_by
   if required > 0 then
     table.insert(parts, string.format("✓%d/%d", approved_n, required))
   elseif approved_n > 0 then

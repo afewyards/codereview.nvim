@@ -4,7 +4,9 @@ describe("mr.diff_sidebar", function()
   describe("render_summary", function()
     before_each(function()
       package.loaded["codereview.mr.list"] = {
-        pipeline_icon = function() return "✓" end,
+        pipeline_icon = function()
+          return "✓"
+        end,
       }
       -- detail.lua requires client/git/endpoints at top level; stub them too
       package.loaded["codereview.api.client"] = {}
@@ -68,11 +70,16 @@ describe("mr.diff_sidebar", function()
       local buf = vim.api.nvim_create_buf(false, true)
       local state = {
         review = {
-          id = 1, title = "Test", author = "me",
-          source_branch = "feat", target_branch = "main",
-          state = "opened", pipeline_status = "success",
+          id = 1,
+          title = "Test",
+          author = "me",
+          source_branch = "feat",
+          target_branch = "main",
+          state = "opened",
+          pipeline_status = "success",
           description = "",
-          approved_by = {}, approvals_required = 0,
+          approved_by = {},
+          approvals_required = 0,
         },
         discussions = {},
       }
@@ -86,11 +93,15 @@ describe("mr.diff_sidebar", function()
     before_each(function()
       -- Stub codereview.mr.list so render_sidebar works without plenary
       package.loaded["codereview.mr.list"] = {
-        pipeline_icon = function(_) return "[--]" end,
+        pipeline_icon = function(_)
+          return "[--]"
+        end,
       }
       -- Stub session so status component works cleanly
       package.loaded["codereview.review.session"] = {
-        get = function() return { active = false } end,
+        get = function()
+          return { active = false }
+        end,
       }
     end)
 
@@ -143,7 +154,10 @@ describe("mr.diff_sidebar", function()
       diff_sidebar.render_sidebar(buf, state)
       local summary_row = nil
       for row, entry in pairs(state.sidebar_row_map) do
-        if entry.type == "summary" then summary_row = row break end
+        if entry.type == "summary" then
+          summary_row = row
+          break
+        end
       end
       local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
       assert.truthy(lines[summary_row]:find("▸"))

@@ -3,30 +3,65 @@ local detail = require("codereview.mr.detail")
 describe("summary redesign integration", function()
   it("renders complete summary with all sections", function()
     local review = {
-      id = 99, title = "Big feature", author = "dev",
-      source_branch = "feat/big", target_branch = "main",
-      state = "opened", pipeline_status = "success",
-      approved_by = { "reviewer" }, approvals_required = 2,
+      id = 99,
+      title = "Big feature",
+      author = "dev",
+      source_branch = "feat/big",
+      target_branch = "main",
+      state = "opened",
+      pipeline_status = "success",
+      approved_by = { "reviewer" },
+      approvals_required = 2,
       description = "This is a **bold** description",
       merge_status = "can_be_merged",
     }
     local discussions = {
-      { id = "d1", resolved = false, notes = {{
-        id = 1, author = "bot", body = "assigned to @dev",
-        created_at = "2026-02-20T11:00:00Z", system = true,
-        resolvable = false, resolved = false,
-      }}},
-      { id = "d2", resolved = false, notes = {{
-        id = 2, author = "alice", body = "Please fix this",
-        created_at = "2026-02-25T14:00:00Z", system = false,
-        resolvable = true, resolved = false,
-        position = { new_path = "src/main.ts", new_line = 10 },
-      }}},
-      { id = "d3", resolved = false, notes = {{
-        id = 3, author = "bob", body = "LGTM overall",
-        created_at = "2026-02-25T15:00:00Z", system = false,
-        resolvable = true, resolved = false,
-      }}},
+      {
+        id = "d1",
+        resolved = false,
+        notes = {
+          {
+            id = 1,
+            author = "bot",
+            body = "assigned to @dev",
+            created_at = "2026-02-20T11:00:00Z",
+            system = true,
+            resolvable = false,
+            resolved = false,
+          },
+        },
+      },
+      {
+        id = "d2",
+        resolved = false,
+        notes = {
+          {
+            id = 2,
+            author = "alice",
+            body = "Please fix this",
+            created_at = "2026-02-25T14:00:00Z",
+            system = false,
+            resolvable = true,
+            resolved = false,
+            position = { new_path = "src/main.ts", new_line = 10 },
+          },
+        },
+      },
+      {
+        id = "d3",
+        resolved = false,
+        notes = {
+          {
+            id = 3,
+            author = "bob",
+            body = "LGTM overall",
+            created_at = "2026-02-25T15:00:00Z",
+            system = false,
+            resolvable = true,
+            resolved = false,
+          },
+        },
+      },
     }
 
     local header = detail.build_header_lines(review, 70)
@@ -57,10 +92,15 @@ describe("summary redesign integration", function()
 
   it("renders summary with no discussions", function()
     local review = {
-      id = 1, title = "Simple", author = "me",
-      source_branch = "fix", target_branch = "main",
-      state = "merged", description = "",
-      approved_by = {}, approvals_required = 0,
+      id = 1,
+      title = "Simple",
+      author = "me",
+      source_branch = "fix",
+      target_branch = "main",
+      state = "merged",
+      description = "",
+      approved_by = {},
+      approvals_required = 0,
     }
 
     local header = detail.build_header_lines(review, 60)
@@ -80,12 +120,22 @@ describe("summary redesign integration", function()
 
   it("has no file_path row_map entries for inline discussions (excluded)", function()
     local discussions = {
-      { id = "d1", resolved = false, notes = {{
-        id = 1, author = "alice", body = "Fix",
-        created_at = "2026-02-25T14:00:00Z", system = false,
-        resolvable = true, resolved = false,
-        position = { new_path = "src/foo.ts", new_line = 5 },
-      }}},
+      {
+        id = "d1",
+        resolved = false,
+        notes = {
+          {
+            id = 1,
+            author = "alice",
+            body = "Fix",
+            created_at = "2026-02-25T14:00:00Z",
+            system = false,
+            resolvable = true,
+            resolved = false,
+            position = { new_path = "src/foo.ts", new_line = 5 },
+          },
+        },
+      },
     }
 
     local result = detail.build_activity_lines(discussions, 70)
@@ -101,24 +151,46 @@ describe("summary redesign integration", function()
 
   it("has thread_start row_map entries only for general discussions (inline excluded)", function()
     local discussions = {
-      { id = "d1", resolved = false, notes = {{
-        id = 1, author = "alice", body = "General comment",
-        created_at = "2026-02-25T14:00:00Z", system = false,
-        resolvable = true, resolved = false,
-      }}},
-      { id = "d2", resolved = true, notes = {{
-        id = 2, author = "bob", body = "Inline note",
-        created_at = "2026-02-25T15:00:00Z", system = false,
-        resolvable = true, resolved = true,
-        position = { new_path = "a.ts", new_line = 1 },
-      }}},
+      {
+        id = "d1",
+        resolved = false,
+        notes = {
+          {
+            id = 1,
+            author = "alice",
+            body = "General comment",
+            created_at = "2026-02-25T14:00:00Z",
+            system = false,
+            resolvable = true,
+            resolved = false,
+          },
+        },
+      },
+      {
+        id = "d2",
+        resolved = true,
+        notes = {
+          {
+            id = 2,
+            author = "bob",
+            body = "Inline note",
+            created_at = "2026-02-25T15:00:00Z",
+            system = false,
+            resolvable = true,
+            resolved = true,
+            position = { new_path = "a.ts", new_line = 1 },
+          },
+        },
+      },
     }
 
     local result = detail.build_activity_lines(discussions, 70)
 
     local thread_starts = 0
     for _, entry in pairs(result.row_map) do
-      if entry.type == "thread_start" then thread_starts = thread_starts + 1 end
+      if entry.type == "thread_start" then
+        thread_starts = thread_starts + 1
+      end
     end
     assert.equals(1, thread_starts)
   end)

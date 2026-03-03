@@ -1,16 +1,22 @@
 -- Stub vim globals for busted
 _G.vim = _G.vim or {}
 vim.fn = vim.fn or {}
-vim.fn.jobstart = vim.fn.jobstart or function() return 1 end
+vim.fn.jobstart = vim.fn.jobstart or function()
+  return 1
+end
 vim.fn.chansend = vim.fn.chansend or function() end
 vim.fn.chanclose = vim.fn.chanclose or function() end
 vim.notify = vim.notify or function() end
-vim.schedule = vim.schedule or function(fn) fn() end
+vim.schedule = vim.schedule or function(fn)
+  fn()
+end
 vim.log = vim.log or { levels = { INFO = 1, ERROR = 2, WARN = 3 } }
 vim.api = vim.api or {}
 vim.api.nvim_set_current_win = vim.api.nvim_set_current_win or function() end
 vim.json = vim.json or {}
-vim.json.decode = vim.json.decode or function() return {} end
+vim.json.decode = vim.json.decode or function()
+  return {}
+end
 
 -- Stub config
 package.loaded["codereview.config"] = {
@@ -41,12 +47,14 @@ local captured_calls = {}
 local mock_provider = {
   run = function(prompt, callback, opts)
     table.insert(captured_calls, { prompt = prompt, opts = opts })
-    callback('```json\n[]\n```')
+    callback("```json\n[]\n```")
     return 1
   end,
 }
 package.loaded["codereview.ai.providers"] = {
-  get = function() return mock_provider end,
+  get = function()
+    return mock_provider
+  end,
 }
 -- Keep subprocess stub for backward compat (same table so mutations propagate)
 package.loaded["codereview.ai.subprocess"] = mock_provider
@@ -66,8 +74,12 @@ package.loaded["codereview.review.session"] = {
 
 -- Stub diff module
 package.loaded["codereview.mr.diff"] = {
-  render_file_diff = function() return {}, {}, {} end,
-  render_all_files = function() return { file_sections = {}, line_data = {}, row_discussions = {}, row_ai = {} } end,
+  render_file_diff = function()
+    return {}, {}, {}
+  end,
+  render_all_files = function()
+    return { file_sections = {}, line_data = {}, row_discussions = {}, row_ai = {} }
+  end,
   render_sidebar = function() end,
 }
 
@@ -103,8 +115,10 @@ describe("review.init routing", function()
     assert.truthy(first.prompt:find("summariz"), "first prompt should be summary prompt")
     -- Phase 2: per-file calls (one per file)
     assert.truthy(#captured_calls >= 3, "should have summary + 2 file calls")
-    assert.truthy(captured_calls[2].prompt:find("a.lua") or captured_calls[3].prompt:find("a.lua"),
-      "per-file prompts should reference file paths")
+    assert.truthy(
+      captured_calls[2].prompt:find("a.lua") or captured_calls[3].prompt:find("a.lua"),
+      "per-file prompts should reference file paths"
+    )
   end)
 
   it("uses direct review prompt for single-file MRs", function()
@@ -140,7 +154,9 @@ describe("render_file_suggestions focus guard", function()
     orig_set_current_win = vim.api.nvim_set_current_win
     orig_schedule = vim.schedule
     -- Run scheduled callbacks immediately so assertions see their effects synchronously
-    vim.schedule = function(fn) fn() end
+    vim.schedule = function(fn)
+      fn()
+    end
     package.loaded["codereview.ai.subprocess"].run = function(prompt, callback)
       callback('```json\n[{"file":"a.lua","line":1,"severity":"suggestion","comment":"test note"}]\n```')
       return 1
@@ -156,13 +172,22 @@ describe("render_file_suggestions focus guard", function()
 
   it("skips set_current_win when current window is a float", function()
     local set_win_calls = {}
-    vim.api.nvim_set_current_win = function(w) table.insert(set_win_calls, w) end
-    vim.api.nvim_get_current_win = function() return 999 end
+    vim.api.nvim_set_current_win = function(w)
+      table.insert(set_win_calls, w)
+    end
+    vim.api.nvim_get_current_win = function()
+      return 999
+    end
     local diff_state = {
       files = { { new_path = "a.lua", diff = "@@ -0,0 +1 @@\n+test note\n" } },
-      discussions = {}, ai_suggestions = {}, view_mode = "diff",
-      current_file = 1, scroll_mode = false,
-      line_data_cache = {}, row_disc_cache = {}, row_ai_cache = {},
+      discussions = {},
+      ai_suggestions = {},
+      view_mode = "diff",
+      current_file = 1,
+      scroll_mode = false,
+      line_data_cache = {},
+      row_disc_cache = {},
+      row_ai_cache = {},
     }
     local layout = { main_buf = 0, sidebar_buf = 0, main_win = 1, sidebar_win = 2 }
     review_mod.start({ title = "T", description = "d" }, diff_state, layout)
@@ -171,13 +196,22 @@ describe("render_file_suggestions focus guard", function()
 
   it("calls set_current_win when current window is main_win", function()
     local set_win_calls = {}
-    vim.api.nvim_set_current_win = function(w) table.insert(set_win_calls, w) end
-    vim.api.nvim_get_current_win = function() return 1 end
+    vim.api.nvim_set_current_win = function(w)
+      table.insert(set_win_calls, w)
+    end
+    vim.api.nvim_get_current_win = function()
+      return 1
+    end
     local diff_state = {
       files = { { new_path = "a.lua", diff = "@@ -0,0 +1 @@\n+test note\n" } },
-      discussions = {}, ai_suggestions = {}, view_mode = "diff",
-      current_file = 1, scroll_mode = false,
-      line_data_cache = {}, row_disc_cache = {}, row_ai_cache = {},
+      discussions = {},
+      ai_suggestions = {},
+      view_mode = "diff",
+      current_file = 1,
+      scroll_mode = false,
+      line_data_cache = {},
+      row_disc_cache = {},
+      row_ai_cache = {},
     }
     local layout = { main_buf = 0, sidebar_buf = 0, main_win = 1, sidebar_win = 2 }
     review_mod.start({ title = "T", description = "d" }, diff_state, layout)
@@ -192,7 +226,9 @@ describe("review.start_file", function()
     captured_calls = {}
     orig_schedule_sf = vim.schedule
     -- Run scheduled callbacks immediately so assertions see their effects synchronously
-    vim.schedule = function(fn) fn() end
+    vim.schedule = function(fn)
+      fn()
+    end
   end)
 
   after_each(function()
@@ -311,9 +347,10 @@ describe("file content in per-file review", function()
     -- Should have fetched content for both files
     assert.equals(2, #content_fetch_calls)
     -- Per-file prompts (calls 2 and 3) should contain full file content
-    assert.truthy(captured_calls[2].prompt:find("Full File Content") or
-                  captured_calls[3].prompt:find("Full File Content"),
-      "per-file prompts should include full file content")
+    assert.truthy(
+      captured_calls[2].prompt:find("Full File Content") or captured_calls[3].prompt:find("Full File Content"),
+      "per-file prompts should include full file content"
+    )
   end)
 
   it("skips content fetch for deleted files", function()
@@ -355,7 +392,9 @@ describe("file content in per-file review", function()
         table.insert(content_fetch_calls, path)
         -- Return content with many lines (exceeds default 500)
         local lines = {}
-        for i = 1, 501 do lines[i] = "line " .. i end
+        for i = 1, 501 do
+          lines[i] = "line " .. i
+        end
         return table.concat(lines, "\n")
       end,
     }
@@ -383,8 +422,10 @@ describe("file content in per-file review", function()
     -- But the per-file prompts should NOT have Full File Content for big files
     -- (both files return 501 lines which exceeds default 500)
     for i = 2, #captured_calls do
-      assert.falsy(captured_calls[i].prompt:find("Full File Content"),
-        "per-file prompt should not include full file content for files exceeding max_file_size")
+      assert.falsy(
+        captured_calls[i].prompt:find("Full File Content"),
+        "per-file prompt should not include full file content for files exceeding max_file_size"
+      )
     end
   end)
 end)

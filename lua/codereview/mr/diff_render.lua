@@ -10,7 +10,7 @@ local md_virt_line = tvl.md_virt_line
 local is_resolved = tvl.is_resolved
 
 -- LINE_NR_WIDTH: "%5d | %-5d " = 5+3+5+1 = 14 chars
-local LINE_NR_WIDTH = 14  -- luacheck: ignore
+local LINE_NR_WIDTH = 14 -- luacheck: ignore
 local COMMENT_PAD = string.rep(" ", 4)
 
 -- nvim_create_namespace returns the same ID for the same name — safe to declare
@@ -21,7 +21,7 @@ local SEPARATOR_NS = vim.api.nvim_create_namespace("codereview_separator")
 
 -- Module-level cache for syntax file paths to avoid repeated runtimepath scans.
 -- Persists across re-renders within the same session.
-local syntax_file_cache = {}  -- { [filetype] = path_string | false }
+local syntax_file_cache = {} -- { [filetype] = path_string | false }
 
 -- Track SHAs we've already attempted to fetch to avoid repeated network calls.
 local fetched_shas = {}
@@ -30,7 +30,9 @@ local fetched_shas = {}
 --- Only attempts once per unique SHA pair.
 function M.ensure_git_objects(base_sha, head_sha)
   local key = base_sha .. head_sha
-  if fetched_shas[key] then return end
+  if fetched_shas[key] then
+    return
+  end
   fetched_shas[key] = true
   vim.fn.system({ "git", "fetch", "origin", base_sha, head_sha })
 end
@@ -50,7 +52,9 @@ local function apply_line_hl(buf, row, hl_group)
 end
 
 local function apply_word_hl(buf, row, col_start, col_end, hl_group)
-  if col_start >= col_end then return end
+  if col_start >= col_end then
+    return
+  end
   vim.api.nvim_buf_set_extmark(buf, DIFF_NS, row, col_start, {
     end_col = col_end,
     hl_group = hl_group,
@@ -66,7 +70,9 @@ M.apply_word_hl = apply_word_hl
 local function place_hunk_separators(buf, data_list, file_scoped)
   vim.api.nvim_buf_clear_namespace(buf, SEPARATOR_NS, 0, -1)
   local cfg = config.get().diff
-  if cfg.separator_lines <= 0 or cfg.separator_char == "" then return end
+  if cfg.separator_lines <= 0 or cfg.separator_char == "" then
+    return
+  end
   local win_width = 80
   if vim.api.nvim_list_wins then
     for _, w in ipairs(vim.api.nvim_list_wins()) do
@@ -138,16 +144,26 @@ end
 
 local function is_outdated(discussion, review)
   local note = discussion.notes and discussion.notes[1]
-  if not note then return false end
-  if note.position and note.position.outdated then return true end
-  if not review or not review.head_sha then return false end
-  if not note.position or not note.position.head_sha then return false end
+  if not note then
+    return false
+  end
+  if note.position and note.position.outdated then
+    return true
+  end
+  if not review or not review.head_sha then
+    return false
+  end
+  if not note.position or not note.position.head_sha then
+    return false
+  end
   return note.position.head_sha ~= review.head_sha
 end
 
 local function discussion_matches_file(discussion, file_diff, review)
   local note = discussion.notes and discussion.notes[1]
-  if not note or not note.position then return false end
+  if not note or not note.position then
+    return false
+  end
   if is_outdated(discussion, review) and note.change_position then
     local cp = note.change_position
     local path = cp.new_path or cp.old_path
@@ -160,7 +176,9 @@ end
 
 local function discussion_line(discussion, review)
   local note = discussion.notes and discussion.notes[1]
-  if not note or not note.position then return nil end
+  if not note or not note.position then
+    return nil
+  end
   if is_outdated(discussion, review) then
     if note.position.outdated then
       -- GitHub outdated: new_line is already set to the fallback originalLine
@@ -245,19 +263,22 @@ local function render_ai_suggestions_at_row(buf, row, sugs, row_selection)
     local body_hl = drafted and "CodeReviewComment" or sev_body
 
     -- Header: ◆ AI · {severity} [✓ drafted]
-    local header_label = drafted
-      and (" ◆ AI · " .. severity .. " ✓ drafted ")
+    local header_label = drafted and (" ◆ AI · " .. severity .. " ✓ drafted ")
       or (" ◆ AI · " .. severity .. " ")
     local header_fill = math.max(0, 62 - #header_label)
 
-    local sel_pre = is_selected and "██  " or COMMENT_PAD  -- luacheck: ignore
+    local sel_pre = is_selected and "██  " or COMMENT_PAD -- luacheck: ignore
     local sel_blk = is_selected and { "██", ai_status_hl } or nil
 
-    if is_selected then sel_ai_offset = #virt_lines end
+    if is_selected then
+      sel_ai_offset = #virt_lines
+    end
 
     -- Header line
     local header_line = {}
-    if sel_blk then table.insert(header_line, sel_blk) end
+    if sel_blk then
+      table.insert(header_line, sel_blk)
+    end
     table.insert(header_line, { (is_selected and "  " or COMMENT_PAD) .. top_l .. header_label, bdr })
     table.insert(header_line, { string.rep(top_fill_c, header_fill), bdr })
     table.insert(virt_lines, header_line)
@@ -334,7 +355,9 @@ function M.update_selection_at_row(buf, row, row_selection, row_ai, row_disc, cu
   if row_ai and row_ai[row] then
     local ai_count, ai_sel = render_ai_suggestions_at_row(buf, row, row_ai[row], row_selection)
     virt_offset = ai_count or 0
-    if ai_sel then sel_virt_offset = ai_sel end
+    if ai_sel then
+      sel_virt_offset = ai_sel
+    end
   end
 
   -- Re-render comment threads at row
@@ -409,7 +432,17 @@ end
 
 -- ─── Comment sign placement ────────────────────────────────────────────────────
 
-function M.place_comment_signs(buf, line_data, discussions, file_diff, row_selection, current_user, review, editing_note, line_to_row)
+function M.place_comment_signs(
+  buf,
+  line_data,
+  discussions,
+  file_diff,
+  row_selection,
+  current_user,
+  review,
+  editing_note,
+  line_to_row
+)
   -- Remove old signs for this buffer
   pcall(vim.fn.sign_unplace, "CodeReview", { buffer = buf })
 
@@ -421,8 +454,7 @@ function M.place_comment_signs(buf, line_data, discussions, file_diff, row_selec
     if discussion_matches_file(discussion, file_diff, review) then
       local target_line, range_start, outdated = discussion_line(discussion, review)
       if target_line then
-        local sign_name = is_resolved(discussion) and "CodeReviewCommentSign"
-          or "CodeReviewUnresolvedSign"
+        local sign_name = is_resolved(discussion) and "CodeReviewCommentSign" or "CodeReviewUnresolvedSign"
         -- Place signs on all lines in the range (visual only; navigation uses target_line)
         if range_start and range_start ~= target_line then
           for ln = range_start, target_line - 1 do
@@ -458,7 +490,9 @@ function M.place_comment_signs(buf, line_data, discussions, file_diff, row_selec
           end
 
           -- Store discussion for this row
-          if not row_discussions[row] then row_discussions[row] = {} end
+          if not row_discussions[row] then
+            row_discussions[row] = {}
+          end
           table.insert(row_discussions[row], discussion)
         end
       end
@@ -508,7 +542,9 @@ function M.place_ai_suggestions(buf, line_data, suggestions, file_diff, row_sele
           end
         end
         if matched_row then
-          if not row_ai_map[matched_row] then row_ai_map[matched_row] = {} end
+          if not row_ai_map[matched_row] then
+            row_ai_map[matched_row] = {}
+          end
           table.insert(row_ai_map[matched_row], suggestion)
         end
       end
@@ -562,7 +598,9 @@ function M.place_ai_suggestions_all(buf, all_line_data, file_sections, suggestio
             end
           end
           if matched_row then
-            if not scroll_row_ai[matched_row] then scroll_row_ai[matched_row] = {} end
+            if not scroll_row_ai[matched_row] then
+              scroll_row_ai[matched_row] = {}
+            end
             table.insert(scroll_row_ai[matched_row], suggestion)
           end
           break
@@ -581,7 +619,19 @@ end
 
 -- ─── Diff rendering ───────────────────────────────────────────────────────────
 
-function M.render_file_diff(buf, file_diff, review, discussions, context, ai_suggestions, row_selection, current_user, editing_note, diff_cache, commit_filter)
+function M.render_file_diff(
+  buf,
+  file_diff,
+  review,
+  discussions,
+  context,
+  ai_suggestions,
+  row_selection,
+  current_user,
+  editing_note,
+  diff_cache,
+  commit_filter
+)
   local parser = require("codereview.mr.diff_parser")
   if not context then
     context = config.get().diff.context
@@ -605,11 +655,13 @@ function M.render_file_diff(buf, file_diff, review, discussions, context, ai_sug
     local head_sha = commit_filter and commit_filter.to_sha or review.head_sha
     if base_sha and head_sha and path then
       local result = vim.fn.system({
-        "git", "diff",
+        "git",
+        "diff",
         "-U" .. context,
         base_sha,
         head_sha,
-        "--", path,
+        "--",
+        path,
       })
       if vim.v.shell_error == 0 and result ~= "" then
         diff_text = result
@@ -622,7 +674,9 @@ function M.render_file_diff(buf, file_diff, review, discussions, context, ai_sug
     -- Get file line count for BOF/EOF detection
     if path and head_sha then
       local wc = vim.fn.system({
-        "git", "show", head_sha .. ":" .. path,
+        "git",
+        "show",
+        head_sha .. ":" .. path,
       })
       if vim.v.shell_error == 0 then
         file_line_count = select(2, wc:gsub("\n", "\n"))
@@ -702,12 +756,8 @@ function M.render_file_diff(buf, file_diff, review, discussions, context, ai_sug
       if prev_delete_row == row - 1 and prev_delete_text then
         local segments = parser.word_diff(prev_delete_text, data.item.text or "")
         for _, seg in ipairs(segments) do
-          apply_word_hl(buf, prev_delete_row,
-            seg.old_start, seg.old_end,
-            "CodeReviewDiffDeleteWord")
-          apply_word_hl(buf, row,
-            seg.new_start, seg.new_end,
-            "CodeReviewDiffAddWord")
+          apply_word_hl(buf, prev_delete_row, seg.old_start, seg.old_end, "CodeReviewDiffDeleteWord")
+          apply_word_hl(buf, row, seg.new_start, seg.new_end, "CodeReviewDiffAddWord")
         end
       end
       prev_delete_row = nil
@@ -730,7 +780,16 @@ function M.render_file_diff(buf, file_diff, review, discussions, context, ai_sug
 
   local row_discussions = {}
   if discussions then
-    row_discussions = M.place_comment_signs(buf, line_data, discussions, file_diff, row_selection, current_user, review, editing_note) or {}
+    row_discussions = M.place_comment_signs(
+      buf,
+      line_data,
+      discussions,
+      file_diff,
+      row_selection,
+      current_user,
+      review,
+      editing_note
+    ) or {}
   end
 
   local row_ai = {}
@@ -749,7 +808,9 @@ local function index_discussions_by_path(discussions, review)
   local by_path = {}
   for _, disc in ipairs(discussions or {}) do
     local note = disc.notes and disc.notes[1]
-    if not note or not note.position then goto continue end
+    if not note or not note.position then
+      goto continue
+    end
     local path
     if is_outdated(disc, review) and note.change_position then
       local cp = note.change_position
@@ -767,7 +828,19 @@ local function index_discussions_by_path(discussions, review)
   return by_path
 end
 
-function M.render_all_files(buf, files, review, discussions, context, file_contexts, ai_suggestions, row_selection, current_user, editing_note, diff_cache)
+function M.render_all_files(
+  buf,
+  files,
+  review,
+  discussions,
+  context,
+  file_contexts,
+  ai_suggestions,
+  row_selection,
+  current_user,
+  editing_note,
+  diff_cache
+)
   local parser = require("codereview.mr.diff_parser")
   context = context or config.get().diff.context
   file_contexts = file_contexts or {}
@@ -789,7 +862,9 @@ function M.render_all_files(buf, files, review, discussions, context, file_conte
     end
     if #uncached_paths > 0 then
       local cmd = { "git", "diff", "-U" .. context, review.base_sha, review.head_sha, "--" }
-      for _, p in ipairs(uncached_paths) do table.insert(cmd, p) end
+      for _, p in ipairs(uncached_paths) do
+        table.insert(cmd, p)
+      end
       local result = vim.fn.system(cmd)
       if vim.v.shell_error == 0 and result ~= "" then
         local batch = parser.parse_batch_diff(result)
@@ -836,15 +911,25 @@ function M.render_all_files(buf, files, review, discussions, context, file_conte
       local diff_text = file_diff.diff or ""
       if review.base_sha and review.head_sha and fpath then
         local result = vim.fn.system({
-          "git", "diff", "-U" .. file_ctx,
-          review.base_sha, review.head_sha, "--", fpath,
+          "git",
+          "diff",
+          "-U" .. file_ctx,
+          review.base_sha,
+          review.head_sha,
+          "--",
+          fpath,
         })
         -- Only fetch missing objects when user explicitly changed context
         if vim.v.shell_error ~= 0 and file_ctx ~= context then
           M.ensure_git_objects(review.base_sha, review.head_sha)
           result = vim.fn.system({
-            "git", "diff", "-U" .. file_ctx,
-            review.base_sha, review.head_sha, "--", fpath,
+            "git",
+            "diff",
+            "-U" .. file_ctx,
+            review.base_sha,
+            review.head_sha,
+            "--",
+            fpath,
           })
         end
         if vim.v.shell_error == 0 and result ~= "" then
@@ -920,12 +1005,8 @@ function M.render_all_files(buf, files, review, discussions, context, file_conte
       if prev_delete_row == row - 1 and prev_delete_text then
         local segments = parser.word_diff(prev_delete_text, data.item.text or "")
         for _, seg in ipairs(segments) do
-          apply_word_hl(buf, prev_delete_row,
-            seg.old_start, seg.old_end,
-            "CodeReviewDiffDeleteWord")
-          apply_word_hl(buf, row,
-            seg.new_start, seg.new_end,
-            "CodeReviewDiffAddWord")
+          apply_word_hl(buf, prev_delete_row, seg.old_start, seg.old_end, "CodeReviewDiffDeleteWord")
+          apply_word_hl(buf, row, seg.new_start, seg.new_end, "CodeReviewDiffAddWord")
         end
       end
       prev_delete_row = nil
@@ -972,22 +1053,38 @@ function M.render_all_files(buf, files, review, discussions, context, file_conte
               if all_line_data[i] and all_line_data[i].type == "delete" then
                 if span_start then
                   region_idx = region_idx + 1
-                  pcall(vim.cmd, string.format(
-                    'syntax region GlabRegion_%d_%d start="\\%%%dl" end="\\%%%dl" contains=@%s keepend',
-                    section.file_idx, region_idx, span_start, i - 1, loaded_fts[ft]
-                  ))
+                  pcall(
+                    vim.cmd,
+                    string.format(
+                      'syntax region GlabRegion_%d_%d start="\\%%%dl" end="\\%%%dl" contains=@%s keepend',
+                      section.file_idx,
+                      region_idx,
+                      span_start,
+                      i - 1,
+                      loaded_fts[ft]
+                    )
+                  )
                   span_start = nil
                 end
               else
-                if not span_start then span_start = i end
+                if not span_start then
+                  span_start = i
+                end
               end
             end
             if span_start then
               region_idx = region_idx + 1
-              pcall(vim.cmd, string.format(
-                'syntax region GlabRegion_%d_%d start="\\%%%dl" end="\\%%%dl" contains=@%s keepend',
-                section.file_idx, region_idx, span_start, content_end, loaded_fts[ft]
-              ))
+              pcall(
+                vim.cmd,
+                string.format(
+                  'syntax region GlabRegion_%d_%d start="\\%%%dl" end="\\%%%dl" contains=@%s keepend',
+                  section.file_idx,
+                  region_idx,
+                  span_start,
+                  content_end,
+                  loaded_fts[ft]
+                )
+              )
             end
           end
         end
@@ -1008,8 +1105,7 @@ function M.render_all_files(buf, files, review, discussions, context, file_conte
     for _, disc in ipairs(disc_by_path[fpath] or {}) do
       local target_line, range_start, disc_outdated = discussion_line(disc, review)
       if target_line then
-        local sign_name = is_resolved(disc) and "CodeReviewCommentSign"
-          or "CodeReviewUnresolvedSign"
+        local sign_name = is_resolved(disc) and "CodeReviewCommentSign" or "CodeReviewUnresolvedSign"
         local file_prefix = section.file_idx .. ":"
         -- Place signs on range lines using O(1) lookups
         if range_start and range_start ~= target_line then
@@ -1039,11 +1135,14 @@ function M.render_all_files(buf, files, review, discussions, context, file_conte
               gutter = 4,
             })
             pcall(vim.api.nvim_buf_set_extmark, buf, DIFF_NS, i - 1, 0, {
-              virt_lines = result.virt_lines, virt_lines_above = false,
+              virt_lines = result.virt_lines,
+              virt_lines_above = false,
             })
           end
 
-          if not all_row_discussions[i] then all_row_discussions[i] = {} end
+          if not all_row_discussions[i] then
+            all_row_discussions[i] = {}
+          end
           table.insert(all_row_discussions[i], disc)
         end
       end
@@ -1052,7 +1151,14 @@ function M.render_all_files(buf, files, review, discussions, context, file_conte
 
   local all_row_ai = {}
   if ai_suggestions then
-    all_row_ai = M.place_ai_suggestions_all(buf, all_line_data, file_sections, ai_suggestions, row_selection, scroll_map) or {}
+    all_row_ai = M.place_ai_suggestions_all(
+      buf,
+      all_line_data,
+      file_sections,
+      ai_suggestions,
+      row_selection,
+      scroll_map
+    ) or {}
   end
 
   return {

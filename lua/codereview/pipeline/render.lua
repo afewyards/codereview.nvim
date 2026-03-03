@@ -5,11 +5,20 @@ local M = {}
 local pipeline_state = require("codereview.pipeline.state")
 
 local STATUS_ICONS = {
-  success = "✓", failed = "✗", running = "◷", pending = "○",
-  canceled = "⊘", skipped = "⊘", manual = "○", created = "○",
+  success = "✓",
+  failed = "✗",
+  running = "◷",
+  pending = "○",
+  canceled = "⊘",
+  skipped = "⊘",
+  manual = "○",
+  created = "○",
   -- GitHub-specific conclusions
-  neutral = "○", action_required = "⚠",
-  in_progress = "◷", queued = "○", timed_out = "✗",
+  neutral = "○",
+  action_required = "⚠",
+  in_progress = "◷",
+  queued = "○",
+  timed_out = "✗",
 }
 
 local STAGE_ICONS = { expanded = "▾", collapsed = "▸" }
@@ -38,7 +47,9 @@ function M.build_lines(pipeline, stages, collapsed)
     -- Count job statuses for summary
     local passed, total = 0, #stage.jobs
     for _, j in ipairs(stage.jobs) do
-      if j.status == "success" then passed = passed + 1 end
+      if j.status == "success" then
+        passed = passed + 1
+      end
     end
     local summary = total > 0 and string.format(" (%d/%d passed)", passed, total) or ""
 
@@ -52,10 +63,17 @@ function M.build_lines(pipeline, stages, collapsed)
         local job_dur = pipeline_state.format_duration(job.duration)
         local af = job.allow_failure and "  [allow failure]" or ""
         local status_text = (job.status == "running" or job.status == "in_progress" or job.status == "pending")
-          and job.status or ""
+            and job.status
+          or ""
 
-        local line = string.format("  %s %-20s %s%s%s", job_icon, job.name, job_dur, af,
-          status_text ~= "" and ("  " .. status_text) or "")
+        local line = string.format(
+          "  %s %-20s %s%s%s",
+          job_icon,
+          job.name,
+          job_dur,
+          af,
+          status_text ~= "" and ("  " .. status_text) or ""
+        )
         table.insert(lines, line)
         row_map[jrow] = { stage = stage.name, job = job }
       end

@@ -9,7 +9,7 @@ describe("picker.files", function()
       }
       local discussions = {
         { resolved = false, notes = { { position = { new_path = "src/auth.lua", new_line = 10 } } } },
-        { resolved = true,  notes = { { position = { new_path = "src/auth.lua", new_line = 20 } } } },
+        { resolved = true, notes = { { position = { new_path = "src/auth.lua", new_line = 20 } } } },
       }
       local ai_suggestions = {
         { file = "src/auth.lua", line = 15, severity = "warning", comment = "test", status = "pending" },

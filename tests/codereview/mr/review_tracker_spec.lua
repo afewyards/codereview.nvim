@@ -4,10 +4,10 @@ describe("mr.review_tracker", function()
   describe("init_file", function()
     it("returns correct structure with hunks from line_data", function()
       local line_data = {
-        { type = "add",     item = { hunk_idx = 1, text = "+foo" } },
+        { type = "add", item = { hunk_idx = 1, text = "+foo" } },
         { type = "context", item = { hunk_idx = 1, text = " bar" } },
-        { type = "add",     item = { hunk_idx = 2, text = "+baz" } },
-        { type = "delete",  item = { hunk_idx = 2, text = "-qux" } },
+        { type = "add", item = { hunk_idx = 2, text = "+baz" } },
+        { type = "delete", item = { hunk_idx = 2, text = "-qux" } },
       }
       local status = tracker.init_file("src/foo.lua", line_data, nil)
       assert.equals("src/foo.lua", status.path)
@@ -37,9 +37,9 @@ describe("mr.review_tracker", function()
   describe("mark_visible", function()
     it("marks hunks in viewport as seen and transitions status", function()
       local line_data = {
-        { type = "add",     item = { hunk_idx = 1, text = "+foo" } },
+        { type = "add", item = { hunk_idx = 1, text = "+foo" } },
         { type = "context", item = { hunk_idx = 1, text = " bar" } },
-        { type = "add",     item = { hunk_idx = 2, text = "+baz" } },
+        { type = "add", item = { hunk_idx = 2, text = "+baz" } },
       }
       local status = tracker.init_file("src/foo.lua", line_data, nil)
       -- Viewport covering only row 1 (hunk 1 start)

@@ -29,9 +29,9 @@ describe("sidebar_components.footer", function()
       files = {},
       file_review_status = {},
       discussions = {
-        { local_draft = false, resolved = false },  -- unresolved: counts
-        { local_draft = true,  resolved = false },  -- local draft: skip
-        { local_draft = false, resolved = true  },  -- resolved: skip
+        { local_draft = false, resolved = false }, -- unresolved: counts
+        { local_draft = true, resolved = false }, -- local draft: skip
+        { local_draft = false, resolved = true }, -- resolved: skip
       },
     }
     local lines = footer.build(state, 30)

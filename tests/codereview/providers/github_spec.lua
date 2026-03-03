@@ -9,7 +9,8 @@ describe("providers.github", function()
   describe("normalize_pr", function()
     it("maps GitHub PR fields to normalized review", function()
       local pr = {
-        number = 99, title = "Add feature",
+        number = 99,
+        title = "Add feature",
         user = { login = "bob" },
         head = { ref = "feat/x", sha = "bbb" },
         base = { ref = "main", sha = "aaa" },
@@ -21,13 +22,14 @@ describe("providers.github", function()
       assert.equal(99, r.id)
       assert.equal("bob", r.author)
       assert.equal("aaa", r.base_sha)
-      assert.equal("aaa", r.start_sha)  -- GitHub: start_sha = base_sha
+      assert.equal("aaa", r.start_sha) -- GitHub: start_sha = base_sha
       assert.equal("feat/x", r.source_branch)
     end)
 
     it("maps mergeable=true to can_be_merged", function()
       local pr = {
-        number = 1, title = "T",
+        number = 1,
+        title = "T",
         user = { login = "alice" },
         head = { ref = "a", sha = "bbb" },
         base = { ref = "main", sha = "aaa" },
@@ -41,7 +43,8 @@ describe("providers.github", function()
 
     it("maps mergeable=false to cannot_be_merged", function()
       local pr = {
-        number = 1, title = "T",
+        number = 1,
+        title = "T",
         user = { login = "alice" },
         head = { ref = "a", sha = "bbb" },
         base = { ref = "main", sha = "aaa" },
@@ -55,7 +58,8 @@ describe("providers.github", function()
 
     it("merge_status is nil when mergeable is nil", function()
       local pr = {
-        number = 1, title = "T",
+        number = 1,
+        title = "T",
         user = { login = "alice" },
         head = { ref = "a", sha = "bbb" },
         base = { ref = "main", sha = "aaa" },
@@ -74,14 +78,30 @@ describe("providers.github", function()
           isResolved = true,
           diffSide = "RIGHT",
           startDiffSide = nil,
-          comments = { nodes = {
-            { databaseId = 1, author = { login = "alice" }, body = "root comment",
-              createdAt = "2026-01-01T00:00:00Z", path = "foo.lua", line = 10,
-              startLine = nil, commit = { oid = "sha123" } },
-            { databaseId = 2, author = { login = "bob" }, body = "reply",
-              createdAt = "2026-01-01T00:01:00Z", path = "foo.lua", line = 10,
-              startLine = nil, commit = { oid = "sha123" } },
-          }},
+          comments = {
+            nodes = {
+              {
+                databaseId = 1,
+                author = { login = "alice" },
+                body = "root comment",
+                createdAt = "2026-01-01T00:00:00Z",
+                path = "foo.lua",
+                line = 10,
+                startLine = nil,
+                commit = { oid = "sha123" },
+              },
+              {
+                databaseId = 2,
+                author = { login = "bob" },
+                body = "reply",
+                createdAt = "2026-01-01T00:01:00Z",
+                path = "foo.lua",
+                line = 10,
+                startLine = nil,
+                commit = { oid = "sha123" },
+              },
+            },
+          },
         },
       }
       local discussions = github.normalize_graphql_threads(threads)
@@ -103,34 +123,64 @@ describe("providers.github", function()
     end)
 
     it("falls back to originalLine when line is nil (outdated comment)", function()
-      local threads = { {
-        id = "PRRT_outdated", isResolved = false, isOutdated = true,
-        diffSide = "RIGHT", startDiffSide = nil,
-        comments = { nodes = { {
-          databaseId = 10, author = { login = "alice" },
-          body = "old feedback", createdAt = "2026-01-01T00:00:00Z",
-          path = "foo.lua", line = vim.NIL, originalLine = 20,
-          startLine = vim.NIL, originalStartLine = vim.NIL,
-          outdated = true, commit = { oid = "old-sha" },
-        } } },
-      } }
+      local threads = {
+        {
+          id = "PRRT_outdated",
+          isResolved = false,
+          isOutdated = true,
+          diffSide = "RIGHT",
+          startDiffSide = nil,
+          comments = {
+            nodes = {
+              {
+                databaseId = 10,
+                author = { login = "alice" },
+                body = "old feedback",
+                createdAt = "2026-01-01T00:00:00Z",
+                path = "foo.lua",
+                line = vim.NIL,
+                originalLine = 20,
+                startLine = vim.NIL,
+                originalStartLine = vim.NIL,
+                outdated = true,
+                commit = { oid = "old-sha" },
+              },
+            },
+          },
+        },
+      }
       local discussions = github.normalize_graphql_threads(threads)
       assert.equal(20, discussions[1].notes[1].position.new_line)
       assert.is_true(discussions[1].notes[1].position.outdated)
     end)
 
     it("sets outdated=false for current comments", function()
-      local threads = { {
-        id = "PRRT_current", isResolved = false, isOutdated = false,
-        diffSide = "RIGHT", startDiffSide = nil,
-        comments = { nodes = { {
-          databaseId = 11, author = { login = "bob" },
-          body = "current", createdAt = "2026-01-01T00:00:00Z",
-          path = "bar.lua", line = 5, originalLine = 5,
-          startLine = vim.NIL, originalStartLine = vim.NIL,
-          outdated = false, commit = { oid = "cur-sha" },
-        } } },
-      } }
+      local threads = {
+        {
+          id = "PRRT_current",
+          isResolved = false,
+          isOutdated = false,
+          diffSide = "RIGHT",
+          startDiffSide = nil,
+          comments = {
+            nodes = {
+              {
+                databaseId = 11,
+                author = { login = "bob" },
+                body = "current",
+                createdAt = "2026-01-01T00:00:00Z",
+                path = "bar.lua",
+                line = 5,
+                originalLine = 5,
+                startLine = vim.NIL,
+                originalStartLine = vim.NIL,
+                outdated = false,
+                commit = { oid = "cur-sha" },
+              },
+            },
+          },
+        },
+      }
       local discussions = github.normalize_graphql_threads(threads)
       assert.equal(5, discussions[1].notes[1].position.new_line)
       assert.is_false(discussions[1].notes[1].position.outdated)
@@ -165,21 +215,33 @@ describe("providers.github", function()
     -- Verify that all interface methods exist and accept the unified (client, ctx, review, ...) pattern.
     -- We pass mock objects; we do not make real HTTP calls.
     local function make_client(stub)
-      return setmetatable({}, { __index = function(_, k) return stub[k] or function() return nil, "stub" end end })
+      return setmetatable({}, {
+        __index = function(_, k)
+          return stub[k] or function()
+            return nil, "stub"
+          end
+        end,
+      })
     end
 
-    local ctx = { base_url = "https://api.github.com", project = "owner/repo", host = "github.com", platform = "github" }
+    local ctx =
+      { base_url = "https://api.github.com", project = "owner/repo", host = "github.com", platform = "github" }
     local review = { id = 42, sha = "deadbeef", base_sha = "aaa", head_sha = "bbb", start_sha = "aaa" }
 
     before_each(function()
       -- Stub auth so no env var is needed
       package.loaded["codereview.api.auth"] = {
-        get_token = function() return "ghp_test", "pat" end,
+        get_token = function()
+          return "ghp_test", "pat"
+        end,
       }
       -- Stub plenary.curl to prevent real HTTP calls
       package.loaded["plenary.curl"] = {
         request = function()
-          return { status = 200, body = vim.json.encode({ data = { repository = { pullRequest = { reviewThreads = { nodes = {} } } } } }) }
+          return {
+            status = 200,
+            body = vim.json.encode({ data = { repository = { pullRequest = { reviewThreads = { nodes = {} } } } } }),
+          }
         end,
       }
     end)
@@ -206,11 +268,19 @@ describe("providers.github", function()
       local client = make_client({
         get = function(_, path, _)
           called_path = path
-          return { data = {
-            number = 42, title = "T", user = { login = "u" },
-            head = { ref = "br", sha = "hhh" }, base = { ref = "main", sha = "bbb" },
-            state = "open", html_url = "https://github.com/o/r/pull/42", body = "",
-          } }, nil
+          return {
+            data = {
+              number = 42,
+              title = "T",
+              user = { login = "u" },
+              head = { ref = "br", sha = "hhh" },
+              base = { ref = "main", sha = "bbb" },
+              state = "open",
+              html_url = "https://github.com/o/r/pull/42",
+              body = "",
+            },
+          },
+            nil
         end,
       })
       local r, err = github.get_review(client, ctx, 42)
@@ -250,7 +320,9 @@ describe("providers.github", function()
         .. '"startLine":null,'
         .. '"commit":{"oid":"abc"}}]}}]}}}}}'
       package.loaded["plenary.curl"] = {
-        request = function() return { status = 200, body = body } end,
+        request = function()
+          return { status = 200, body = body }
+        end,
       }
       local discs, err = github.get_discussions(make_client({}), ctx, review)
       assert.is_nil(err)
@@ -293,7 +365,10 @@ describe("providers.github", function()
     it("post_comment inline posts to pulls comments endpoint", function()
       local called_path
       local client = make_client({
-        post = function(_, path, _) called_path = path return {}, nil end,
+        post = function(_, path, _)
+          called_path = path
+          return {}, nil
+        end,
       })
       local position = { new_path = "foo.lua", new_line = 10, side = "RIGHT", commit_sha = "abc" }
       github.post_comment(client, ctx, review, "body text", position)
@@ -303,7 +378,10 @@ describe("providers.github", function()
     it("post_comment general posts to issues comments endpoint", function()
       local called_path
       local client = make_client({
-        post = function(_, path, _) called_path = path return {}, nil end,
+        post = function(_, path, _)
+          called_path = path
+          return {}, nil
+        end,
       })
       github.post_comment(client, ctx, review, "general comment", nil)
       assert.equal("/repos/owner/repo/issues/42/comments", called_path)
@@ -312,7 +390,10 @@ describe("providers.github", function()
     it("reply_to_discussion posts to replies endpoint", function()
       local called_path
       local client = make_client({
-        post = function(_, path, _) called_path = path return {}, nil end,
+        post = function(_, path, _)
+          called_path = path
+          return {}, nil
+        end,
       })
       github._pending_review_id = nil
       github.reply_to_discussion(client, ctx, review, "99", "reply body")
@@ -322,7 +403,11 @@ describe("providers.github", function()
     it("reply_to_discussion routes through pending review when one exists", function()
       local called_path, called_body
       local client = make_client({
-        post = function(_, path, opts) called_path = path called_body = opts.body return {}, nil end,
+        post = function(_, path, opts)
+          called_path = path
+          called_body = opts.body
+          return {}, nil
+        end,
       })
       github._pending_review_id = 777
       github._pending_review_node_id = "PRR_node"
@@ -337,7 +422,11 @@ describe("providers.github", function()
     it("close patches PR with state=closed", function()
       local called_path, called_body
       local client = make_client({
-        patch = function(_, path, opts) called_path = path called_body = opts.body return {}, nil end,
+        patch = function(_, path, opts)
+          called_path = path
+          called_body = opts.body
+          return {}, nil
+        end,
       })
       github.close(client, ctx, review)
       assert.equal("/repos/owner/repo/pulls/42", called_path)
@@ -347,7 +436,11 @@ describe("providers.github", function()
     it("approve posts APPROVE review", function()
       local called_path, called_body
       local client = make_client({
-        post = function(_, path, opts) called_path = path called_body = opts.body return {}, nil end,
+        post = function(_, path, opts)
+          called_path = path
+          called_body = opts.body
+          return {}, nil
+        end,
       })
       github.approve(client, ctx, review)
       assert.equal("/repos/owner/repo/pulls/42/reviews", called_path)
@@ -357,7 +450,11 @@ describe("providers.github", function()
     it("merge puts with merge_method=merge by default", function()
       local called_path, called_body
       local client = make_client({
-        put = function(_, path, opts) called_path = path called_body = opts.body return {}, nil end,
+        put = function(_, path, opts)
+          called_path = path
+          called_body = opts.body
+          return {}, nil
+        end,
       })
       github.merge(client, ctx, review, {})
       assert.equal("/repos/owner/repo/pulls/42/merge", called_path)
@@ -367,7 +464,10 @@ describe("providers.github", function()
     it("merge uses squash when opts.squash=true", function()
       local called_body
       local client = make_client({
-        put = function(_, _, opts) called_body = opts.body return {}, nil end,
+        put = function(_, _, opts)
+          called_body = opts.body
+          return {}, nil
+        end,
       })
       github.merge(client, ctx, review, { squash = true })
       assert.equal("squash", called_body.merge_method)
@@ -381,7 +481,9 @@ describe("providers.github", function()
           table.insert(mutations, body.query)
           return {
             status = 200,
-            body = vim.json.encode({ data = { resolveReviewThread = { thread = { id = "PRRT_1", isResolved = true } } } }),
+            body = vim.json.encode({
+              data = { resolveReviewThread = { thread = { id = "PRRT_1", isResolved = true } } },
+            }),
           }
         end,
       }
@@ -397,7 +499,9 @@ describe("providers.github", function()
   describe("get_current_user", function()
     before_each(function()
       package.loaded["codereview.api.auth"] = {
-        get_token = function() return "ghp_test", "pat" end,
+        get_token = function()
+          return "ghp_test", "pat"
+        end,
       }
       github._cached_user = nil
     end)
@@ -437,7 +541,9 @@ describe("providers.github", function()
   describe("create_draft_comment", function()
     before_each(function()
       package.loaded["codereview.api.auth"] = {
-        get_token = function() return "ghp_test", "pat" end,
+        get_token = function()
+          return "ghp_test", "pat"
+        end,
       }
       github._pending_review_id = nil
       github._pending_review_node_id = nil
@@ -463,7 +569,8 @@ describe("providers.github", function()
       }
       local ctx = { base_url = "https://api.github.com", project = "owner/repo" }
       local review = { id = 42, sha = "abc123" }
-      local result, err = github.create_draft_comment(mock_client, ctx, review, { body = "Fix this", path = "foo.lua", line = 10 })
+      local result, err =
+        github.create_draft_comment(mock_client, ctx, review, { body = "Fix this", path = "foo.lua", line = 10 })
       assert.is_nil(err)
       -- Only ONE POST (to /reviews), with comments array in the body
       assert.equal(1, #posted_paths)
@@ -496,7 +603,8 @@ describe("providers.github", function()
       }
       local ctx = { base_url = "https://api.github.com", project = "owner/repo" }
       local review = { id = 42, sha = "abc123" }
-      local result, err = github.create_draft_comment(mock_client, ctx, review, { body = "And this", path = "bar.lua", line = 20 })
+      local result, err =
+        github.create_draft_comment(mock_client, ctx, review, { body = "And this", path = "bar.lua", line = 20 })
       assert.is_nil(err)
       -- NO client.post calls (GraphQL goes through plenary.curl, not the client)
       assert.equal(0, client_post_calls)
@@ -519,7 +627,8 @@ describe("providers.github", function()
       }
       local ctx = { base_url = "https://api.github.com", project = "owner/repo" }
       local review = { id = 42, sha = "abc123" }
-      local result, err = github.create_draft_comment(mock_client, ctx, review, { body = "Fix", path = "x.lua", line = 1 })
+      local result, err =
+        github.create_draft_comment(mock_client, ctx, review, { body = "Fix", path = "x.lua", line = 1 })
       assert.is_nil(result)
       assert.equal("network error", err)
       assert.is_nil(github._pending_review_id)
@@ -535,7 +644,9 @@ describe("providers.github", function()
   describe("create_review", function()
     before_each(function()
       package.loaded["codereview.api.auth"] = {
-        get_token = function() return "ghp_test", "pat" end,
+        get_token = function()
+          return "ghp_test", "pat"
+        end,
       }
     end)
     after_each(function()
@@ -590,7 +701,9 @@ describe("providers.github", function()
   describe("edit_note", function()
     before_each(function()
       package.loaded["codereview.api.auth"] = {
-        get_token = function() return "ghp_test", "pat" end,
+        get_token = function()
+          return "ghp_test", "pat"
+        end,
       }
     end)
     after_each(function()
@@ -618,7 +731,9 @@ describe("providers.github", function()
   describe("delete_note", function()
     before_each(function()
       package.loaded["codereview.api.auth"] = {
-        get_token = function() return "ghp_test", "pat" end,
+        get_token = function()
+          return "ghp_test", "pat"
+        end,
       }
     end)
     after_each(function()
@@ -645,7 +760,9 @@ end)
 describe("get_pending_review_drafts", function()
   before_each(function()
     package.loaded["codereview.api.auth"] = {
-      get_token = function() return "ghp_test", "pat" end,
+      get_token = function()
+        return "ghp_test", "pat"
+      end,
     }
     github._pending_review_id = nil
     github._pending_review_node_id = nil
@@ -660,15 +777,26 @@ describe("get_pending_review_drafts", function()
     local mock_client = {
       get = function(_, path, _)
         if path:find("/reviews$") then
-          return { data = {
-            { id = 100, state = "APPROVED", user = { login = "bob" } },
-            { id = 200, state = "PENDING", node_id = "PRR_abc", user = { login = "alice" } },
-          } }
+          return {
+            data = {
+              { id = 100, state = "APPROVED", user = { login = "bob" } },
+              { id = 200, state = "PENDING", node_id = "PRR_abc", user = { login = "alice" } },
+            },
+          }
         elseif path:find("/reviews/200/comments") then
-          return { data = {
-            { id = 1, body = "fix this", path = "foo.lua", line = 10, side = "RIGHT",
-              created_at = "2026-01-01T00:00:00Z", user = { login = "alice" } },
-          } }
+          return {
+            data = {
+              {
+                id = 1,
+                body = "fix this",
+                path = "foo.lua",
+                line = 10,
+                side = "RIGHT",
+                created_at = "2026-01-01T00:00:00Z",
+                user = { login = "alice" },
+              },
+            },
+          }
         end
       end,
     }
@@ -720,7 +848,9 @@ end)
 describe("discard_pending_review", function()
   before_each(function()
     package.loaded["codereview.api.auth"] = {
-      get_token = function() return "ghp_test", "pat" end,
+      get_token = function()
+        return "ghp_test", "pat"
+      end,
     }
     github._pending_review_id = 200
     github._pending_review_node_id = "PRR_abc"
@@ -748,7 +878,11 @@ describe("discard_pending_review", function()
 
   it("returns nil when no pending review", function()
     github._pending_review_id = nil
-    local mock_client = { delete = function() error("should not be called") end }
+    local mock_client = {
+      delete = function()
+        error("should not be called")
+      end,
+    }
     local ctx = { base_url = "https://api.github.com", project = "owner/repo" }
     local _, err = github.discard_pending_review(mock_client, ctx, { id = 1 })
     assert.truthy(err:find("No pending"))
@@ -758,7 +892,9 @@ end)
 describe("get_commits", function()
   before_each(function()
     package.loaded["codereview.api.auth"] = {
-      get_token = function() return "ghp_test", "pat" end,
+      get_token = function()
+        return "ghp_test", "pat"
+      end,
     }
   end)
   after_each(function()
@@ -767,11 +903,24 @@ describe("get_commits", function()
 
   it("fetches and normalizes PR commits", function()
     local raw_commits = {
-      { sha = "sha1full1234", commit = { message = "First commit\n\nMore details", author = { name = "Alice", date = "2026-03-01T10:00:00Z" } }, author = { login = "alice" } },
-      { sha = "sha2full5678", commit = { message = "Second commit", author = { name = "Bob", date = "2026-03-01T11:00:00Z" } }, author = { login = "bob" } },
+      {
+        sha = "sha1full1234",
+        commit = {
+          message = "First commit\n\nMore details",
+          author = { name = "Alice", date = "2026-03-01T10:00:00Z" },
+        },
+        author = { login = "alice" },
+      },
+      {
+        sha = "sha2full5678",
+        commit = { message = "Second commit", author = { name = "Bob", date = "2026-03-01T11:00:00Z" } },
+        author = { login = "bob" },
+      },
     }
     local mock_client = {
-      paginate_all_url = function(_, _) return raw_commits end,
+      paginate_all_url = function(_, _)
+        return raw_commits
+      end,
     }
     local ctx = { base_url = "https://api.github.com", project = "owner/repo" }
     local review = { id = 99 }
@@ -792,7 +941,9 @@ end)
 describe("get_last_reviewed_sha", function()
   before_each(function()
     package.loaded["codereview.api.auth"] = {
-      get_token = function() return "ghp_test", "pat" end,
+      get_token = function()
+        return "ghp_test", "pat"
+      end,
     }
   end)
   after_each(function()
@@ -804,8 +955,18 @@ describe("get_last_reviewed_sha", function()
       paginate_all_url = function(url, _)
         return {
           { user = { login = "me" }, commit_id = "old_sha", submitted_at = "2026-02-28T12:00:00Z", state = "APPROVED" },
-          { user = { login = "other" }, commit_id = "other_sha", submitted_at = "2026-03-01T12:00:00Z", state = "APPROVED" },
-          { user = { login = "me" }, commit_id = "latest_sha", submitted_at = "2026-03-01T10:00:00Z", state = "CHANGES_REQUESTED" },
+          {
+            user = { login = "other" },
+            commit_id = "other_sha",
+            submitted_at = "2026-03-01T12:00:00Z",
+            state = "APPROVED",
+          },
+          {
+            user = { login = "me" },
+            commit_id = "latest_sha",
+            submitted_at = "2026-03-01T10:00:00Z",
+            state = "CHANGES_REQUESTED",
+          },
         }
       end,
     }
@@ -816,7 +977,9 @@ describe("get_last_reviewed_sha", function()
 
   it("returns nil when user has no reviews", function()
     local mock_client = {
-      paginate_all_url = function(_, _) return {} end,
+      paginate_all_url = function(_, _)
+        return {}
+      end,
     }
     local ctx = { base_url = "https://api.github.com", project = "owner/repo" }
     local sha = github.get_last_reviewed_sha(mock_client, ctx, { id = 99 }, "me")
@@ -842,7 +1005,9 @@ describe("get_file_content", function()
     local ctx = { base_url = "https://api.github.com", project = "owner/repo" }
     local auth = require("codereview.api.auth")
     local orig_get_token = auth.get_token
-    auth.get_token = function() return "fake-token", "bearer" end
+    auth.get_token = function()
+      return "fake-token", "bearer"
+    end
 
     local content, err = github.get_file_content(mock_client, ctx, "abc123", "src/auth.lua")
 
@@ -853,12 +1018,16 @@ describe("get_file_content", function()
 
   it("returns nil on API error", function()
     local mock_client = {
-      get = function() return nil, "HTTP 404" end,
+      get = function()
+        return nil, "HTTP 404"
+      end,
     }
     local ctx = { base_url = "https://api.github.com", project = "owner/repo" }
     local auth = require("codereview.api.auth")
     local orig_get_token = auth.get_token
-    auth.get_token = function() return "fake-token", "bearer" end
+    auth.get_token = function()
+      return "fake-token", "bearer"
+    end
 
     local content, err = github.get_file_content(mock_client, ctx, "abc123", "missing.lua")
 
@@ -871,7 +1040,9 @@ end)
 describe("publish_review with pending review", function()
   before_each(function()
     package.loaded["codereview.api.auth"] = {
-      get_token = function() return "ghp_test", "pat" end,
+      get_token = function()
+        return "ghp_test", "pat"
+      end,
     }
     github._pending_review_id = nil
     github._pending_review_node_id = nil
@@ -904,7 +1075,9 @@ describe("publish_review with pending review", function()
 
   it("returns { data = true } without API calls when _pending_review_id is nil", function()
     local mock_client = {
-      post = function() error("should not be called") end,
+      post = function()
+        error("should not be called")
+      end,
     }
     local ctx = { base_url = "https://api.github.com", project = "owner/repo" }
     local result, err = github.publish_review(mock_client, ctx, { id = 42, sha = "abc" })
@@ -923,7 +1096,9 @@ describe("publish_review with pending review", function()
         return { status = 200, data = {} }
       end,
       post = function(_, path, opts)
-        if path:find("/events") then posted_body = opts.body end
+        if path:find("/events") then
+          posted_body = opts.body
+        end
         return { status = 200, data = {} }, nil
       end,
     }
@@ -940,8 +1115,12 @@ describe("publish_review with pending review", function()
 
     before_each(function()
       mock_client = {
-        get = function() return { data = {}, status = 200 } end,
-        post = function() return { data = {}, status = 200 } end,
+        get = function()
+          return { data = {}, status = 200 }
+        end,
+        post = function()
+          return { data = {}, status = 200 }
+        end,
       }
     end)
 
@@ -951,12 +1130,17 @@ describe("publish_review with pending review", function()
           return {
             data = {
               total_count = 1,
-              check_suites = {{
-                id = 100, status = "completed", conclusion = "success",
-                head_sha = "abc123",
-                app = { name = "GitHub Actions" },
-                created_at = "2026-01-01", updated_at = "2026-01-02",
-              }},
+              check_suites = {
+                {
+                  id = 100,
+                  status = "completed",
+                  conclusion = "success",
+                  head_sha = "abc123",
+                  app = { name = "GitHub Actions" },
+                  created_at = "2026-01-01",
+                  updated_at = "2026-01-02",
+                },
+              },
             },
             status = 200,
           }
@@ -985,12 +1169,26 @@ describe("publish_review with pending review", function()
             data = {
               total_count = 2,
               check_runs = {
-                { id = 1, name = "build", status = "completed", conclusion = "success",
-                  started_at = "2026-01-01", completed_at = "2026-01-02",
-                  html_url = "https://github.com/run/1", app = { name = "GitHub Actions" } },
-                { id = 2, name = "test", status = "in_progress", conclusion = nil,
-                  started_at = "2026-01-01", completed_at = nil,
-                  html_url = "https://github.com/run/2", app = { name = "GitHub Actions" } },
+                {
+                  id = 1,
+                  name = "build",
+                  status = "completed",
+                  conclusion = "success",
+                  started_at = "2026-01-01",
+                  completed_at = "2026-01-02",
+                  html_url = "https://github.com/run/1",
+                  app = { name = "GitHub Actions" },
+                },
+                {
+                  id = 2,
+                  name = "test",
+                  status = "in_progress",
+                  conclusion = nil,
+                  started_at = "2026-01-01",
+                  completed_at = nil,
+                  html_url = "https://github.com/run/2",
+                  app = { name = "GitHub Actions" },
+                },
               },
             },
             status = 200,
@@ -1015,11 +1213,21 @@ describe("publish_review with pending review", function()
         return { data = {}, status = 201 }
       end
       mock_client.get = function()
-        return { data = { total_count = 1,
-          check_runs = {{ id = 1, name = "test", status = "completed",
-            app = { name = "GitHub Actions" },
-            details_url = "https://github.com/owner/repo/actions/runs/555/job/1" }},
-        }, status = 200 }
+        return {
+          data = {
+            total_count = 1,
+            check_runs = {
+              {
+                id = 1,
+                name = "test",
+                status = "completed",
+                app = { name = "GitHub Actions" },
+                details_url = "https://github.com/owner/repo/actions/runs/555/job/1",
+              },
+            },
+          },
+          status = 200,
+        }
       end
       local ok, err = github.retry_job(mock_client, ctx, review, 1)
       -- May return nil if workflow run extraction fails; test the path was attempted
@@ -1034,11 +1242,21 @@ describe("publish_review with pending review", function()
         return { data = {}, status = 202 }
       end
       mock_client.get = function()
-        return { data = { total_count = 1,
-          check_runs = {{ id = 1, name = "test", status = "in_progress",
-            app = { name = "GitHub Actions" },
-            details_url = "https://github.com/owner/repo/actions/runs/555/job/1" }},
-        }, status = 200 }
+        return {
+          data = {
+            total_count = 1,
+            check_runs = {
+              {
+                id = 1,
+                name = "test",
+                status = "in_progress",
+                app = { name = "GitHub Actions" },
+                details_url = "https://github.com/owner/repo/actions/runs/555/job/1",
+              },
+            },
+          },
+          status = 200,
+        }
       end
       local ok, err = github.cancel_job(mock_client, ctx, review, 1)
       assert.is_true(posted or ok ~= nil or err ~= nil)

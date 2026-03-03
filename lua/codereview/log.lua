@@ -13,12 +13,16 @@ end
 local function log_path()
   local git = require("codereview.git")
   local root = git.get_repo_root()
-  if root then return root .. "/.codereview.log" end
+  if root then
+    return root .. "/.codereview.log"
+  end
   return vim.fn.stdpath("cache") .. "/codereview.log"
 end
 
 local function write(level, msg)
-  if not enabled() then return end
+  if not enabled() then
+    return
+  end
   local ts = os.date("%Y-%m-%d %H:%M:%S")
   local line = string.format("[%s] %s  %s\n", ts, NAMES[level] or "?", msg)
   local f = io.open(log_path(), "a")
@@ -28,11 +32,21 @@ local function write(level, msg)
   end
 end
 
-function M.debug(msg) write(LEVELS.DEBUG, msg) end
-function M.info(msg) write(LEVELS.INFO, msg) end
-function M.warn(msg) write(LEVELS.WARN, msg) end
-function M.error(msg) write(LEVELS.ERROR, msg) end
+function M.debug(msg)
+  write(LEVELS.DEBUG, msg)
+end
+function M.info(msg)
+  write(LEVELS.INFO, msg)
+end
+function M.warn(msg)
+  write(LEVELS.WARN, msg)
+end
+function M.error(msg)
+  write(LEVELS.ERROR, msg)
+end
 
-function M.path() return log_path() end
+function M.path()
+  return log_path()
+end
 
 return M

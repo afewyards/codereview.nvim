@@ -30,7 +30,9 @@ describe("keymaps", function()
       assert.equals("v", all.create_range_comment.mode)
       assert.equals("Q", all.quit.key)
       local count = 0
-      for _ in pairs(all) do count = count + 1 end
+      for _ in pairs(all) do
+        count = count + 1
+      end
       assert.equals(34, count)
     end)
 
@@ -92,7 +94,9 @@ describe("keymaps", function()
       local warned = false
       local orig = vim.notify
       vim.notify = function(msg)
-        if msg:match("Unknown keymap action") then warned = true end
+        if msg:match("Unknown keymap action") then
+          warned = true
+        end
       end
       keymaps.setup({ bogus_action = "x" })
       vim.notify = orig
@@ -131,8 +135,12 @@ describe("keymaps", function()
       orig_tbl_extend = vim.tbl_extend
       vim.tbl_extend = function(_, a, b)
         local t = {}
-        for k, v in pairs(a) do t[k] = v end
-        for k, v in pairs(b) do t[k] = v end
+        for k, v in pairs(a) do
+          t[k] = v
+        end
+        for k, v in pairs(b) do
+          t[k] = v
+        end
         return t
       end
     end)
@@ -146,11 +154,19 @@ describe("keymaps", function()
       keymaps.setup()
       local called = {}
       local registered_fn
-      vim.keymap = { set = function(_, _, fn) registered_fn = fn end }
+      vim.keymap = {
+        set = function(_, _, fn)
+          registered_fn = fn
+        end,
+      }
 
       keymaps.apply(0, {
-        accept_suggestion = function() table.insert(called, "accept") end,
-        approve = function() table.insert(called, "approve") end,
+        accept_suggestion = function()
+          table.insert(called, "accept")
+        end,
+        approve = function()
+          table.insert(called, "approve")
+        end,
       })
 
       assert.is_not_nil(registered_fn)
@@ -163,7 +179,11 @@ describe("keymaps", function()
       keymaps.setup()
       local orig_fn = function() end
       local registered_fns = {}
-      vim.keymap = { set = function(_, key, fn) registered_fns[key] = fn end }
+      vim.keymap = {
+        set = function(_, key, fn)
+          registered_fns[key] = fn
+        end,
+      }
 
       keymaps.apply(0, {
         quit = orig_fn,

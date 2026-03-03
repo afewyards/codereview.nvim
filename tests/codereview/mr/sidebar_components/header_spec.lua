@@ -25,32 +25,36 @@ describe("sidebar_components.header", function()
     it("shows correct CI icon for each pipeline status", function()
       local statuses = {
         { status = "success", icon = "●" },
-        { status = "failed",  icon = "✗" },
+        { status = "failed", icon = "✗" },
         { status = "running", icon = "◐" },
         { status = "pending", icon = "◐" },
       }
       for _, s in ipairs(statuses) do
         local review = {
-          id = 1, title = "T", source_branch = "a", target_branch = "b",
+          id = 1,
+          title = "T",
+          source_branch = "a",
+          target_branch = "b",
           pipeline_status = s.status,
-          approved_by = {}, approvals_required = 0,
+          approved_by = {},
+          approvals_required = 0,
           merge_status = "can_be_merged",
         }
         local result = header.render(review, 30)
-        assert.truthy(
-          result.lines[3]:find(s.icon, 1, true),
-          "Expected " .. s.icon .. " for status " .. s.status
-        )
+        assert.truthy(result.lines[3]:find(s.icon, 1, true), "Expected " .. s.icon .. " for status " .. s.status)
       end
     end)
 
     it("shows commit filter indicator when state has commit_filter", function()
       local state = {
         review = {
-          id = 1, title = "Test MR",
-          source_branch = "feature", target_branch = "main",
+          id = 1,
+          title = "Test MR",
+          source_branch = "feature",
+          target_branch = "main",
           pipeline_status = nil,
-          approved_by = {}, approvals_required = 0,
+          approved_by = {},
+          approvals_required = 0,
           merge_status = "can_be_merged",
         },
         commit_filter = { label = "Fix login redirect" },
@@ -59,7 +63,9 @@ describe("sidebar_components.header", function()
       assert.equals(5, #result.lines)
       local found = false
       for _, line in ipairs(result.lines) do
-        if line:match("Fix login redirect") then found = true end
+        if line:match("Fix login redirect") then
+          found = true
+        end
       end
       assert.is_true(found, "Expected commit filter label in header")
     end)
@@ -67,10 +73,13 @@ describe("sidebar_components.header", function()
     it("renders 4 lines when no commit_filter", function()
       local state = {
         review = {
-          id = 1, title = "Test MR",
-          source_branch = "feature", target_branch = "main",
+          id = 1,
+          title = "Test MR",
+          source_branch = "feature",
+          target_branch = "main",
           pipeline_status = nil,
-          approved_by = {}, approvals_required = 0,
+          approved_by = {},
+          approvals_required = 0,
           merge_status = "can_be_merged",
         },
         commit_filter = nil,
@@ -82,8 +91,10 @@ describe("sidebar_components.header", function()
     it("shows approvals and conflict indicators", function()
       -- With required approvals and conflicts
       local review = {
-        id = 7, title = "WIP",
-        source_branch = "feature", target_branch = "main",
+        id = 7,
+        title = "WIP",
+        source_branch = "feature",
+        target_branch = "main",
         pipeline_status = nil,
         approved_by = { "alice", "bob" },
         approvals_required = 3,
@@ -95,10 +106,13 @@ describe("sidebar_components.header", function()
 
       -- No conflicts, no approvals
       local review2 = {
-        id = 8, title = "Clean",
-        source_branch = "feat", target_branch = "main",
+        id = 8,
+        title = "Clean",
+        source_branch = "feat",
+        target_branch = "main",
         pipeline_status = nil,
-        approved_by = {}, approvals_required = 0,
+        approved_by = {},
+        approvals_required = 0,
         merge_status = "can_be_merged",
       }
       local result2 = header.render(review2, 30)

@@ -4,7 +4,11 @@
 require("tests.unit_helper")
 
 package.preload["codereview.providers"] = function()
-  return { detect = function() return nil, nil, "stub" end }
+  return {
+    detect = function()
+      return nil, nil, "stub"
+    end,
+  }
 end
 package.preload["codereview.api.client"] = function()
   return {}
@@ -20,10 +24,24 @@ describe("note selection + edit + delete", function()
       id = "d1",
       resolved = false,
       notes = {
-        { id = 1, author = "testuser", body = "original", created_at = "2026-02-23T10:00:00Z",
-          system = false, resolvable = true, resolved = false },
-        { id = 2, author = "testuser", body = "reply text", created_at = "2026-02-23T10:05:00Z",
-          system = false, resolvable = true, resolved = false },
+        {
+          id = 1,
+          author = "testuser",
+          body = "original",
+          created_at = "2026-02-23T10:00:00Z",
+          system = false,
+          resolvable = true,
+          resolved = false,
+        },
+        {
+          id = 2,
+          author = "testuser",
+          body = "reply text",
+          created_at = "2026-02-23T10:05:00Z",
+          system = false,
+          resolvable = true,
+          resolved = false,
+        },
       },
     }
   end)
@@ -32,13 +50,13 @@ describe("note selection + edit + delete", function()
     it("updates note body in-place", function()
       disc.notes[1].body = "edited text"
       assert.equals("edited text", disc.notes[1].body)
-      assert.equals(2, #disc.notes)  -- other notes untouched
+      assert.equals(2, #disc.notes) -- other notes untouched
     end)
 
     it("can edit reply body", function()
       disc.notes[2].body = "updated reply"
       assert.equals("updated reply", disc.notes[2].body)
-      assert.equals("original", disc.notes[1].body)  -- root note untouched
+      assert.equals("original", disc.notes[1].body) -- root note untouched
     end)
   end)
 

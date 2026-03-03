@@ -12,7 +12,9 @@ local discussion_matches_file = diff_render.discussion_matches_file
 local function count_file_comments(file, discussions)
   local n = 0
   for _, disc in ipairs(discussions or {}) do
-    if discussion_matches_file(disc, file) then n = n + 1 end
+    if discussion_matches_file(disc, file) then
+      n = n + 1
+    end
   end
   return n
 end
@@ -31,7 +33,9 @@ local function count_file_ai(file, suggestions)
   local n = 0
   local path = file.new_path or file.old_path
   for _, s in ipairs(suggestions or {}) do
-    if s.file == path and s.status ~= "dismissed" then n = n + 1 end
+    if s.file == path and s.status ~= "dismissed" then
+      n = n + 1
+    end
   end
   return n
 end
@@ -39,8 +43,8 @@ end
 -- ─── Review status icons ───────────────────────────────────────────────────
 
 local ICON_UNVISITED = "○"
-local ICON_PARTIAL   = "◑"
-local ICON_REVIEWED  = "●"
+local ICON_PARTIAL = "◑"
+local ICON_REVIEWED = "●"
 
 local function get_review_icon(path, state)
   local info = state.file_review_status and state.file_review_status[path]
@@ -76,13 +80,16 @@ local function render_file_entry(state, files, entry, lines, row_map, max_name_b
 
   local name = entry.name
   local max_name = max_name_base - #cstr - #ustr - #aistr
-  if #name > max_name then name = ".." .. name:sub(-(max_name - 2)) end
+  if #name > max_name then
+    name = ".." .. name:sub(-(max_name - 2))
+  end
 
   table.insert(lines, string.format("  %s %s%s%s%s", review_icon, name, cstr, ustr, aistr))
-  local review_status = (state.file_review_status
+  local review_status = (
+    state.file_review_status
     and state.file_review_status[path]
-    and state.file_review_status[path].status)
-    or "unvisited"
+    and state.file_review_status[path].status
+  ) or "unvisited"
   row_map[#lines] = { type = "file", idx = entry.idx, path = path, review_status = review_status }
 end
 

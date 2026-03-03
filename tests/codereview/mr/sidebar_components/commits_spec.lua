@@ -65,7 +65,9 @@ describe("sidebar commits component", function()
 
   it("defaults collapsed when > 8 commits", function()
     local commits = {}
-    for i = 1, 10 do table.insert(commits, { sha = "sha" .. i, title = "Commit " .. i }) end
+    for i = 1, 10 do
+      table.insert(commits, { sha = "sha" .. i, title = "Commit " .. i })
+    end
     local state = { commits = commits, commit_filter = nil, collapsed_commits = nil }
     local lines, row_map = {}, {}
     commits_comp.render(state, lines, row_map, 40)
@@ -87,7 +89,9 @@ describe("sidebar commits component", function()
     commits_comp.render(state, lines, row_map, 40)
     local found = false
     for _, line in ipairs(lines) do
-      if line:match("Since last review") then found = true end
+      if line:match("Since last review") then
+        found = true
+      end
     end
     assert.is_true(found)
   end)

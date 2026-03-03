@@ -67,7 +67,9 @@ end
 --- @param output string
 --- @return string
 function M.parse_review_summary(output)
-  if not output or output == "" then return "" end
+  if not output or output == "" then
+    return ""
+  end
 
   -- Try ```markdown block first
   local markdown_content = output:match("```markdown%s*\n(.-)\n```")

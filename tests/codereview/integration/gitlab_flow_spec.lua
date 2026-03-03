@@ -5,7 +5,11 @@ require("tests.unit_helper")
 
 -- Stub modules that pull in vim API or network deps
 package.preload["codereview.providers"] = function()
-  return { detect = function() return nil, nil, "stub" end }
+  return {
+    detect = function()
+      return nil, nil, "stub"
+    end,
+  }
 end
 package.preload["codereview.api.client"] = function()
   return {}
@@ -37,10 +41,10 @@ describe("GitLab integration flow", function()
       local review = gitlab.normalize_mr(raw_mr)
 
       assert.equal(42, review.id)
-      assert.equal("alice", review.author)       -- string, not nested object
+      assert.equal("alice", review.author) -- string, not nested object
       assert.equal("aaa", review.base_sha)
       assert.equal("bbb", review.head_sha)
-      assert.equal("ccc", review.start_sha)      -- preserved from diff_refs
+      assert.equal("ccc", review.start_sha) -- preserved from diff_refs
       assert.equal("success", review.pipeline_status)
       assert.equal(1, #review.approved_by)
       assert.equal("bob", review.approved_by[1]) -- string, not nested object
@@ -85,14 +89,18 @@ describe("GitLab integration flow", function()
       -- Should contain #42 (not !42 which would be GitLab-specific raw notation)
       local found_id = false
       for _, line in ipairs(lines) do
-        if line:find("#42") then found_id = true end
+        if line:find("#42") then
+          found_id = true
+        end
       end
       assert.is_true(found_id, "header should contain #42")
 
       -- Approvals should be rendered as count format
       local found_approvals = false
       for _, line in ipairs(lines) do
-        if line:find("2/2 approved") then found_approvals = true end
+        if line:find("2/2 approved") then
+          found_approvals = true
+        end
       end
       assert.is_true(found_approvals, "header should contain 2/2 approved")
     end)
@@ -115,7 +123,9 @@ describe("GitLab integration flow", function()
 
       local found_ok = false
       for _, line in ipairs(lines) do
-        if line:find("%[ok%]") then found_ok = true end
+        if line:find("%[ok%]") then
+          found_ok = true
+        end
       end
       assert.is_true(found_ok, "success pipeline should show [ok] icon")
     end)
@@ -128,13 +138,13 @@ describe("GitLab integration flow", function()
           notes = {
             {
               id = 1,
-              author = "alice",       -- already a string (normalized)
+              author = "alice", -- already a string (normalized)
               body = "looks good",
               created_at = "2026-01-01T10:00:00Z",
               system = false,
               resolvable = false,
               resolved = false,
-              position = nil,         -- general comment, no diff position
+              position = nil, -- general comment, no diff position
             },
           },
         },
@@ -146,7 +156,9 @@ describe("GitLab integration flow", function()
 
       local found_author = false
       for _, line in ipairs(result.lines) do
-        if line:find("@alice") then found_author = true end
+        if line:find("@alice") then
+          found_author = true
+        end
       end
       assert.is_true(found_author, "activity should render @alice")
     end)
@@ -174,7 +186,9 @@ describe("GitLab integration flow", function()
       local found_system = false
       for _, line in ipairs(result.lines) do
         -- System notes now render with a Nerd Font icon (3-byte UTF-8 starting with 0xef)
-        if line:find("\xef", 1, true) and line:find("@gitlab") then found_system = true end
+        if line:find("\xef", 1, true) and line:find("@gitlab") then
+          found_system = true
+        end
       end
       assert.is_true(found_system, "system notes should render with Nerd Font icon")
     end)
@@ -202,7 +216,9 @@ describe("GitLab integration flow", function()
       -- Inline comments should NOT appear in the summary — they belong in the diff
       local found_bob = false
       for _, line in ipairs(result.lines) do
-        if line:find("@bob") then found_bob = true end
+        if line:find("@bob") then
+          found_bob = true
+        end
       end
       assert.is_false(found_bob, "inline discussion should not appear in Discussions section")
     end)
@@ -214,12 +230,12 @@ describe("GitLab integration flow", function()
         notes = {
           {
             id = 1,
-            author = "alice",       -- string (normalized)
+            author = "alice", -- string (normalized)
             body = "change this please",
             created_at = "2026-01-01T10:00:00Z",
             resolvable = true,
             resolved = true,
-            resolved_by = "bob",    -- string (normalized)
+            resolved_by = "bob", -- string (normalized)
             position = { new_path = "foo.lua", new_line = 10 },
           },
         },
@@ -235,7 +251,9 @@ describe("GitLab integration flow", function()
       -- Resolved by bob should appear somewhere
       local found_resolved_by = false
       for _, line in ipairs(lines) do
-        if line:find("bob") then found_resolved_by = true end
+        if line:find("bob") then
+          found_resolved_by = true
+        end
       end
       assert.is_true(found_resolved_by, "thread should mention resolved_by bob")
     end)
@@ -260,7 +278,9 @@ describe("GitLab integration flow", function()
 
       local found_unresolved = false
       for _, line in ipairs(lines) do
-        if line:find("Unresolved") then found_unresolved = true end
+        if line:find("Unresolved") then
+          found_unresolved = true
+        end
       end
       assert.is_true(found_unresolved, "unresolved thread should show [Unresolved]")
     end)
@@ -293,7 +313,9 @@ describe("GitLab integration flow", function()
 
       local found_reply = false
       for _, line in ipairs(lines) do
-        if line:find("@bob") then found_reply = true end
+        if line:find("@bob") then
+          found_reply = true
+        end
       end
       assert.is_true(found_reply, "reply author should be rendered")
     end)
@@ -314,7 +336,9 @@ describe("outdated comment flow", function()
   local function make_buf(n)
     local buf = vim.api.nvim_create_buf(false, true)
     local lines = {}
-    for i = 1, n do lines[i] = "line " .. i end
+    for i = 1, n do
+      lines[i] = "line " .. i
+    end
     vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
     return buf
   end
@@ -331,7 +355,7 @@ describe("outdated comment flow", function()
     local marks = vim.api.nvim_buf_get_extmarks(buf, -1, 0, -1, { details = true })
     for _, m in ipairs(marks) do
       if m[4] and m[4].virt_lines then
-        return m[2] + 1  -- convert 0-indexed to 1-indexed
+        return m[2] + 1 -- convert 0-indexed to 1-indexed
       end
     end
     return nil
@@ -419,8 +443,8 @@ describe("outdated comment flow", function()
               body = "This is outdated",
               createdAt = "2026-01-15T09:30:00Z",
               path = "src/bar.lua",
-              line = vim.NIL,         -- nil because the line no longer exists at HEAD
-              originalLine = 30,      -- where the comment was originally placed
+              line = vim.NIL, -- nil because the line no longer exists at HEAD
+              originalLine = 30, -- where the comment was originally placed
               startLine = vim.NIL,
               originalStartLine = vim.NIL,
               outdated = true,

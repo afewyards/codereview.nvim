@@ -68,7 +68,9 @@ function M.create(opts)
 end
 
 function M.close(layout)
-  if not layout then return end
+  if not layout then
+    return
+  end
   if M.saved_visual then
     vim.api.nvim_set_hl(0, "Visual", M.saved_visual)
     M.saved_visual = nil

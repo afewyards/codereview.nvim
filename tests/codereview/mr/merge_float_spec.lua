@@ -35,7 +35,8 @@ describe("merge_float", function()
     end)
 
     it("renders cycle item", function()
-      local item = { type = "cycle", key = "merge_method", label = "Method", values = { "merge", "squash", "rebase" }, idx = 2 }
+      local item =
+        { type = "cycle", key = "merge_method", label = "Method", values = { "merge", "squash", "rebase" }, idx = 2 }
       assert.equals("  Method: ◀ squash ▶", merge_float.render_line(item))
     end)
   end)

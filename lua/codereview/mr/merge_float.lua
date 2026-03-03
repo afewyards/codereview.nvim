@@ -19,10 +19,14 @@ function M.build_items(platform)
   local items = {}
   for _, t in ipairs(template) do
     local item = {}
-    for k, v in pairs(t) do item[k] = v end
+    for k, v in pairs(t) do
+      item[k] = v
+    end
     if item.values then
       local vals = {}
-      for _, v in ipairs(item.values) do vals[#vals + 1] = v end
+      for _, v in ipairs(item.values) do
+        vals[#vals + 1] = v
+      end
       item.values = vals
     end
     items[#items + 1] = item
@@ -50,7 +54,9 @@ function M.collect_opts(items)
   local opts = {}
   for _, item in ipairs(items) do
     if item.type == "checkbox" then
-      if item.checked then opts[item.key] = true end
+      if item.checked then
+        opts[item.key] = true
+      end
     elseif item.type == "cycle" then
       opts[item.key] = item.values[item.idx]
     end
@@ -97,7 +103,7 @@ function M.open(review, platform, on_merge)
 
   redraw()
 
-  local height = #items + 4  -- blank + items + blank + button + blank
+  local height = #items + 4 -- blank + items + blank + button + blank
   local width = 40
   local row = math.floor((vim.o.lines - height) / 2)
   local col = math.floor((vim.o.columns - width) / 2)
@@ -136,7 +142,9 @@ function M.open(review, platform, on_merge)
 
   local closed = false
   local function close()
-    if closed then return end
+    if closed then
+      return
+    end
     closed = true
     pcall(vim.api.nvim_win_close, win, true)
   end
@@ -221,7 +229,9 @@ function M.open(review, platform, on_merge)
   vim.api.nvim_create_autocmd("CursorMoved", {
     buffer = buf,
     callback = function()
-      if closed then return true end
+      if closed then
+        return true
+      end
       clamp_cursor()
     end,
   })
@@ -230,7 +240,9 @@ function M.open(review, platform, on_merge)
   vim.api.nvim_create_autocmd("WinClosed", {
     pattern = tostring(win),
     once = true,
-    callback = function() close() end,
+    callback = function()
+      close()
+    end,
   })
 
   return { buf = buf, win = win, close = close }

@@ -37,14 +37,14 @@ end
 
 -- ─── Comment/annotation helpers (delegated to diff_comments) ────────────────
 
-M.build_row_items     = diff_comments.build_row_items
+M.build_row_items = diff_comments.build_row_items
 M.cycle_row_selection = diff_comments.cycle_row_selection
 
 -- ─── Render functions (delegated to diff_render) ────────────────────────────
 
 M.place_comment_signs = diff_render.place_comment_signs
-M.render_file_diff    = diff_render.render_file_diff
-M.render_all_files    = diff_render.render_all_files
+M.render_file_diff = diff_render.render_file_diff
+M.render_all_files = diff_render.render_all_files
 
 -- ─── Sidebar and summary rendering (delegated to diff_sidebar) ───────────────
 
@@ -53,9 +53,9 @@ M.render_summary = diff_sidebar.render_summary
 
 -- ─── Navigation helpers (delegated to diff_nav) ───────────────────────────────
 
-M.jump_to_file       = diff_nav.jump_to_file
-M.jump_to_comment    = diff_nav.jump_to_comment
-M.find_anchor        = diff_nav.find_anchor
+M.jump_to_file = diff_nav.jump_to_file
+M.jump_to_comment = diff_nav.jump_to_comment
+M.find_anchor = diff_nav.find_anchor
 M.find_row_for_anchor = diff_nav.find_row_for_anchor
 
 -- ─── Keymaps ─────────────────────────────────────────────────────────────────
@@ -100,14 +100,40 @@ function M.open(review, discussions)
 
   -- Fetch current user for note authorship checks (edit/delete guards)
   local user = provider.get_current_user(client_mod, ctx)
-  if user then state.current_user = user end
+  if user then
+    state.current_user = user
+  end
 
   if #files > 0 then
     if state.scroll_mode then
-      local render_result = M.render_all_files(layout.main_buf, files, review, state.discussions, state.context, state.file_contexts, state.ai_suggestions, state.row_selection, state.current_user, nil, state.git_diff_cache)
+      local render_result = M.render_all_files(
+        layout.main_buf,
+        files,
+        review,
+        state.discussions,
+        state.context,
+        state.file_contexts,
+        state.ai_suggestions,
+        state.row_selection,
+        state.current_user,
+        nil,
+        state.git_diff_cache
+      )
       diff_state.apply_scroll_result(state, render_result)
     else
-      local line_data, row_disc, row_ai = M.render_file_diff(layout.main_buf, files[1], review, state.discussions, state.context, state.ai_suggestions, state.row_selection, state.current_user, nil, state.git_diff_cache, state.commit_filter)
+      local line_data, row_disc, row_ai = M.render_file_diff(
+        layout.main_buf,
+        files[1],
+        review,
+        state.discussions,
+        state.context,
+        state.ai_suggestions,
+        state.row_selection,
+        state.current_user,
+        nil,
+        state.git_diff_cache,
+        state.commit_filter
+      )
       diff_state.apply_file_result(state, 1, line_data, row_disc, row_ai)
     end
   else
@@ -132,10 +158,34 @@ function M.open(review, discussions)
       -- Re-render to show draft markers
       M.render_sidebar(layout.sidebar_buf, state)
       if state.scroll_mode then
-        local render_result = M.render_all_files(layout.main_buf, state.files, review, state.discussions, state.context, state.file_contexts, state.ai_suggestions, state.row_selection, state.current_user, nil, state.git_diff_cache)
+        local render_result = M.render_all_files(
+          layout.main_buf,
+          state.files,
+          review,
+          state.discussions,
+          state.context,
+          state.file_contexts,
+          state.ai_suggestions,
+          state.row_selection,
+          state.current_user,
+          nil,
+          state.git_diff_cache
+        )
         diff_state.apply_scroll_result(state, render_result)
       else
-        M.render_file_diff(layout.main_buf, state.files[state.current_file], review, state.discussions, state.context, state.ai_suggestions, state.row_selection, state.current_user, nil, state.git_diff_cache, state.commit_filter)
+        M.render_file_diff(
+          layout.main_buf,
+          state.files[state.current_file],
+          review,
+          state.discussions,
+          state.context,
+          state.ai_suggestions,
+          state.row_selection,
+          state.current_user,
+          nil,
+          state.git_diff_cache,
+          state.commit_filter
+        )
       end
     end
   end)

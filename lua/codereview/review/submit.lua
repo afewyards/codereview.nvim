@@ -66,7 +66,9 @@ function M.submit_and_publish(review, ai_suggestions, opts)
   M.bulk_publish(review, opts)
   -- Dismiss all AI suggestions
   if ai_suggestions then
-    for _, s in ipairs(ai_suggestions) do s.status = "dismissed" end
+    for _, s in ipairs(ai_suggestions) do
+      s.status = "dismissed"
+    end
   end
 end
 

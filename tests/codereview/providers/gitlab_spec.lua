@@ -8,15 +8,19 @@ describe("providers.gitlab", function()
   describe("normalize_mr", function()
     it("maps GitLab MR fields to normalized review", function()
       local mr = {
-        iid = 42, title = "Fix bug",
+        iid = 42,
+        title = "Fix bug",
         author = { username = "alice" },
-        source_branch = "fix/bug", target_branch = "main",
+        source_branch = "fix/bug",
+        target_branch = "main",
         state = "opened",
         diff_refs = { base_sha = "aaa", head_sha = "bbb", start_sha = "ccc" },
-        web_url = "https://gitlab.com/mr/42", description = "desc",
+        web_url = "https://gitlab.com/mr/42",
+        description = "desc",
         head_pipeline = { status = "success" },
         approved_by = { { user = { username = "bob" } } },
-        approvals_before_merge = 1, sha = "bbb",
+        approvals_before_merge = 1,
+        sha = "bbb",
       }
       local r = gitlab.normalize_mr(mr)
       assert.equal(42, r.id)
@@ -29,9 +33,14 @@ describe("providers.gitlab", function()
 
     it("passes through merge_status", function()
       local mr = {
-        iid = 1, title = "T", author = { username = "alice" },
-        source_branch = "a", target_branch = "main", state = "opened",
-        diff_refs = {}, approved_by = {},
+        iid = 1,
+        title = "T",
+        author = { username = "alice" },
+        source_branch = "a",
+        target_branch = "main",
+        state = "opened",
+        diff_refs = {},
+        approved_by = {},
         merge_status = "can_be_merged",
       }
       local r = gitlab.normalize_mr(mr)
@@ -40,9 +49,14 @@ describe("providers.gitlab", function()
 
     it("merge_status is nil when not set", function()
       local mr = {
-        iid = 1, title = "T", author = { username = "alice" },
-        source_branch = "a", target_branch = "main", state = "opened",
-        diff_refs = {}, approved_by = {},
+        iid = 1,
+        title = "T",
+        author = { username = "alice" },
+        source_branch = "a",
+        target_branch = "main",
+        state = "opened",
+        diff_refs = {},
+        approved_by = {},
       }
       local r = gitlab.normalize_mr(mr)
       assert.is_nil(r.merge_status)
@@ -53,13 +67,19 @@ describe("providers.gitlab", function()
     it("maps GitLab discussion to normalized discussion", function()
       local disc = {
         id = "disc-1",
-        notes = { {
-          id = 100, author = { username = "alice" },
-          body = "looks good", created_at = "2026-01-01T00:00:00Z",
-          system = false, resolvable = true, resolved = false,
-          resolved_by = { username = "bob" },
-          position = { new_path = "foo.lua", old_path = "foo.lua", new_line = 10, old_line = nil },
-        } },
+        notes = {
+          {
+            id = 100,
+            author = { username = "alice" },
+            body = "looks good",
+            created_at = "2026-01-01T00:00:00Z",
+            system = false,
+            resolvable = true,
+            resolved = false,
+            resolved_by = { username = "bob" },
+            position = { new_path = "foo.lua", old_path = "foo.lua", new_line = 10, old_line = nil },
+          },
+        },
       }
       local d = gitlab.normalize_discussion(disc)
       assert.equal("alice", d.notes[1].author)
@@ -70,15 +90,26 @@ describe("providers.gitlab", function()
     it("preserves position SHAs from raw.position", function()
       local disc = {
         id = "disc-2",
-        notes = { {
-          id = 101, author = { username = "alice" },
-          body = "comment", created_at = "2026-01-01T00:00:00Z",
-          system = false, resolvable = true, resolved = false,
-          position = {
-            new_path = "bar.lua", old_path = "bar.lua", new_line = 5, old_line = nil,
-            base_sha = "abc123", head_sha = "def456", start_sha = "ghi789",
+        notes = {
+          {
+            id = 101,
+            author = { username = "alice" },
+            body = "comment",
+            created_at = "2026-01-01T00:00:00Z",
+            system = false,
+            resolvable = true,
+            resolved = false,
+            position = {
+              new_path = "bar.lua",
+              old_path = "bar.lua",
+              new_line = 5,
+              old_line = nil,
+              base_sha = "abc123",
+              head_sha = "def456",
+              start_sha = "ghi789",
+            },
           },
-        } },
+        },
       }
       local d = gitlab.normalize_discussion(disc)
       local pos = d.notes[1].position
@@ -90,14 +121,27 @@ describe("providers.gitlab", function()
     it("preserves change_position when present", function()
       local disc = {
         id = "disc-3",
-        notes = { {
-          id = 102, author = { username = "alice" },
-          body = "outdated", created_at = "2026-01-01T00:00:00Z",
-          system = false, resolvable = true, resolved = false,
-          position = { new_path = "baz.lua", old_path = "baz.lua", new_line = 8, old_line = nil,
-            base_sha = "aaa", head_sha = "bbb", start_sha = "ccc" },
-          change_position = { new_path = "baz.lua", old_path = "baz_old.lua", new_line = 8, old_line = 7 },
-        } },
+        notes = {
+          {
+            id = 102,
+            author = { username = "alice" },
+            body = "outdated",
+            created_at = "2026-01-01T00:00:00Z",
+            system = false,
+            resolvable = true,
+            resolved = false,
+            position = {
+              new_path = "baz.lua",
+              old_path = "baz.lua",
+              new_line = 8,
+              old_line = nil,
+              base_sha = "aaa",
+              head_sha = "bbb",
+              start_sha = "ccc",
+            },
+            change_position = { new_path = "baz.lua", old_path = "baz_old.lua", new_line = 8, old_line = 7 },
+          },
+        },
       }
       local d = gitlab.normalize_discussion(disc)
       local cp = d.notes[1].change_position
@@ -111,13 +155,26 @@ describe("providers.gitlab", function()
     it("sets change_position to nil when absent", function()
       local disc = {
         id = "disc-4",
-        notes = { {
-          id = 103, author = { username = "alice" },
-          body = "current", created_at = "2026-01-01T00:00:00Z",
-          system = false, resolvable = true, resolved = false,
-          position = { new_path = "qux.lua", old_path = "qux.lua", new_line = 3, old_line = nil,
-            base_sha = "aaa", head_sha = "bbb", start_sha = "ccc" },
-        } },
+        notes = {
+          {
+            id = 103,
+            author = { username = "alice" },
+            body = "current",
+            created_at = "2026-01-01T00:00:00Z",
+            system = false,
+            resolvable = true,
+            resolved = false,
+            position = {
+              new_path = "qux.lua",
+              old_path = "qux.lua",
+              new_line = 3,
+              old_line = nil,
+              base_sha = "aaa",
+              head_sha = "bbb",
+              start_sha = "ccc",
+            },
+          },
+        },
       }
       local d = gitlab.normalize_discussion(disc)
       assert.is_nil(d.notes[1].change_position)
@@ -145,7 +202,9 @@ describe("providers.gitlab", function()
   describe("get_current_user", function()
     before_each(function()
       package.loaded["codereview.api.auth"] = {
-        get_token = function() return "glpat-test", "pat" end,
+        get_token = function()
+          return "glpat-test", "pat"
+        end,
       }
       gitlab._cached_user = nil
     end)
@@ -195,7 +254,9 @@ describe("providers.gitlab", function()
 
     it("posts body as MR note and calls approve when event is APPROVE", function()
       package.loaded["codereview.api.auth"] = {
-        get_token = function() return "glpat-test", "pat" end,
+        get_token = function()
+          return "glpat-test", "pat"
+        end,
       }
       local posted_paths = {}
       local posted_bodies = {}
@@ -221,7 +282,9 @@ describe("providers.gitlab", function()
   describe("create_review", function()
     before_each(function()
       package.loaded["codereview.api.auth"] = {
-        get_token = function() return "glpat-test", "pat" end,
+        get_token = function()
+          return "glpat-test", "pat"
+        end,
       }
     end)
     after_each(function()
@@ -274,7 +337,9 @@ describe("providers.gitlab", function()
   describe("edit_note", function()
     before_each(function()
       package.loaded["codereview.api.auth"] = {
-        get_token = function() return "glpat-test", "pat" end,
+        get_token = function()
+          return "glpat-test", "pat"
+        end,
       }
     end)
     after_each(function()
@@ -302,7 +367,9 @@ describe("providers.gitlab", function()
   describe("delete_note", function()
     before_each(function()
       package.loaded["codereview.api.auth"] = {
-        get_token = function() return "glpat-test", "pat" end,
+        get_token = function()
+          return "glpat-test", "pat"
+        end,
       }
     end)
     after_each(function()
@@ -329,7 +396,9 @@ end)
 describe("get_draft_notes", function()
   before_each(function()
     package.loaded["codereview.api.auth"] = {
-      get_token = function() return "glpat-test", "pat" end,
+      get_token = function()
+        return "glpat-test", "pat"
+      end,
     }
   end)
   after_each(function()
@@ -347,9 +416,13 @@ describe("get_draft_notes", function()
             note = "fix this",
             created_at = "2026-01-01T00:00:00Z",
             position = {
-              new_path = "foo.lua", old_path = "foo.lua",
-              new_line = 10, old_line = nil,
-              base_sha = "aaa", head_sha = "bbb", start_sha = "ccc",
+              new_path = "foo.lua",
+              old_path = "foo.lua",
+              new_line = 10,
+              old_line = nil,
+              base_sha = "aaa",
+              head_sha = "bbb",
+              start_sha = "ccc",
               position_type = "text",
             },
           },
@@ -374,15 +447,22 @@ describe("get_draft_notes", function()
       paginate_all = function()
         return {
           {
-            id = 102, note = "outdated draft",
+            id = 102,
+            note = "outdated draft",
             position = {
-              new_path = "old.lua", old_path = "old.lua",
-              new_line = 5, old_line = nil,
-              base_sha = "aaa", head_sha = "bbb", start_sha = "ccc",
+              new_path = "old.lua",
+              old_path = "old.lua",
+              new_line = 5,
+              old_line = nil,
+              base_sha = "aaa",
+              head_sha = "bbb",
+              start_sha = "ccc",
             },
             change_position = {
-              new_path = "new.lua", old_path = "old.lua",
-              new_line = 8, old_line = 5,
+              new_path = "new.lua",
+              old_path = "old.lua",
+              new_line = 8,
+              old_line = 5,
             },
           },
         }
@@ -399,7 +479,9 @@ describe("get_draft_notes", function()
 
   it("returns empty table when no drafts", function()
     local mock_client = {
-      paginate_all = function() return {} end,
+      paginate_all = function()
+        return {}
+      end,
     }
     local ctx = { base_url = "https://gitlab.com", project = "owner/repo" }
     local drafts = gitlab.get_draft_notes(mock_client, ctx, { id = 1 })
@@ -435,7 +517,9 @@ describe("get_file_content", function()
     local ctx = { base_url = "https://gitlab.com", project = "group/repo" }
     local auth = require("codereview.api.auth")
     local orig = auth.get_token
-    auth.get_token = function() return "fake-token", "private" end
+    auth.get_token = function()
+      return "fake-token", "private"
+    end
 
     local content, err = gitlab.get_file_content(mock_client, ctx, "abc123", "src/auth.lua")
 
@@ -446,12 +530,16 @@ describe("get_file_content", function()
 
   it("returns nil on API error", function()
     local mock_client = {
-      get = function() return nil, "HTTP 404" end,
+      get = function()
+        return nil, "HTTP 404"
+      end,
     }
     local ctx = { base_url = "https://gitlab.com", project = "group/repo" }
     local auth = require("codereview.api.auth")
     local orig = auth.get_token
-    auth.get_token = function() return "fake-token", "private" end
+    auth.get_token = function()
+      return "fake-token", "private"
+    end
 
     local content, err = gitlab.get_file_content(mock_client, ctx, "abc123", "missing.lua")
 
@@ -464,7 +552,9 @@ end)
 describe("delete_draft_note", function()
   before_each(function()
     package.loaded["codereview.api.auth"] = {
-      get_token = function() return "glpat-test", "pat" end,
+      get_token = function()
+        return "glpat-test", "pat"
+      end,
     }
   end)
   after_each(function()
@@ -488,7 +578,9 @@ end)
 describe("get_commits", function()
   before_each(function()
     package.loaded["codereview.api.auth"] = {
-      get_token = function() return "glpat-test", "pat" end,
+      get_token = function()
+        return "glpat-test", "pat"
+      end,
     }
   end)
 
@@ -498,11 +590,25 @@ describe("get_commits", function()
 
   it("fetches and normalizes MR commits", function()
     local raw_commits = {
-      { id = "sha1full", short_id = "sha1", title = "First commit", author_name = "alice", created_at = "2026-03-01T10:00:00Z" },
-      { id = "sha2full", short_id = "sha2", title = "Second commit", author_name = "bob", created_at = "2026-03-01T11:00:00Z" },
+      {
+        id = "sha1full",
+        short_id = "sha1",
+        title = "First commit",
+        author_name = "alice",
+        created_at = "2026-03-01T10:00:00Z",
+      },
+      {
+        id = "sha2full",
+        short_id = "sha2",
+        title = "Second commit",
+        author_name = "bob",
+        created_at = "2026-03-01T11:00:00Z",
+      },
     }
     local mock_client = {
-      paginate_all = function(_, _, _) return raw_commits end,
+      paginate_all = function(_, _, _)
+        return raw_commits
+      end,
     }
     local ctx = { base_url = "https://gitlab.example.com", project = "group/project" }
     local review = { id = 42 }
@@ -519,7 +625,9 @@ end)
 describe("get_last_reviewed_sha", function()
   before_each(function()
     package.loaded["codereview.api.auth"] = {
-      get_token = function() return "glpat-test", "pat" end,
+      get_token = function()
+        return "glpat-test", "pat"
+      end,
     }
   end)
 
@@ -531,16 +639,24 @@ describe("get_last_reviewed_sha", function()
     local mock_client = {
       get = function(_, path, _)
         if path:match("/approval_state$") then
-          return { data = { rules = { {
-            approved_by = { { username = "me", approved_at = "2026-03-01T10:00:00Z" } }
-          } } } }
+          return {
+            data = {
+              rules = {
+                {
+                  approved_by = { { username = "me", approved_at = "2026-03-01T10:00:00Z" } },
+                },
+              },
+            },
+          }
         end
         if path:match("/versions$") then
-          return { data = {
-            { id = 1, head_commit_sha = "sha_v1", created_at = "2026-02-28T12:00:00Z" },
-            { id = 2, head_commit_sha = "sha_v2", created_at = "2026-03-01T09:00:00Z" },
-            { id = 3, head_commit_sha = "sha_v3", created_at = "2026-03-01T11:00:00Z" },
-          } }
+          return {
+            data = {
+              { id = 1, head_commit_sha = "sha_v1", created_at = "2026-02-28T12:00:00Z" },
+              { id = 2, head_commit_sha = "sha_v2", created_at = "2026-03-01T09:00:00Z" },
+              { id = 3, head_commit_sha = "sha_v3", created_at = "2026-03-01T11:00:00Z" },
+            },
+          }
         end
       end,
     }
@@ -569,11 +685,17 @@ describe("pipeline methods", function()
 
   before_each(function()
     package.loaded["codereview.api.auth"] = {
-      get_token = function() return "glpat-test", "pat" end,
+      get_token = function()
+        return "glpat-test", "pat"
+      end,
     }
     mock_client = {
-      get = function() return { data = {}, status = 200 } end,
-      post = function() return { data = {}, status = 200 } end,
+      get = function()
+        return { data = {}, status = 200 }
+      end,
+      post = function()
+        return { data = {}, status = 200 }
+      end,
     }
   end)
 
@@ -589,9 +711,14 @@ describe("pipeline methods", function()
       assert.truthy(path:match("/merge_requests/42$"))
       return {
         data = {
-          iid = 42, title = "T", author = { username = "a" },
-          source_branch = "b", target_branch = "main", state = "opened",
-          diff_refs = {}, approved_by = {},
+          iid = 42,
+          title = "T",
+          author = { username = "a" },
+          source_branch = "b",
+          target_branch = "main",
+          state = "opened",
+          diff_refs = {},
+          approved_by = {},
           head_pipeline = { id = 99, status = "running", ref = "main", sha = "abc", web_url = "url", duration = 120 },
         },
         status = 200,
@@ -608,8 +735,24 @@ describe("pipeline methods", function()
       assert.truthy(path:match("/pipelines/99/jobs"))
       return {
         data = {
-          { id = 1, name = "build", stage = "build", status = "success", duration = 60, web_url = "url1", allow_failure = false },
-          { id = 2, name = "test", stage = "test", status = "running", duration = 30, web_url = "url2", allow_failure = false },
+          {
+            id = 1,
+            name = "build",
+            stage = "build",
+            status = "success",
+            duration = 60,
+            web_url = "url1",
+            allow_failure = false,
+          },
+          {
+            id = 2,
+            name = "test",
+            stage = "test",
+            status = "running",
+            duration = 30,
+            web_url = "url2",
+            allow_failure = false,
+          },
         },
         status = 200,
       }

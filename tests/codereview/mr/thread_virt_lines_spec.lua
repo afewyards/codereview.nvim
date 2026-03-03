@@ -97,10 +97,19 @@ describe("mr.thread_virt_lines", function()
     end)
 
     it("shows ○ dot for resolved thread", function()
-      local disc = make_disc({ resolved = true, notes = {
-        { id = 1, author = "alice", body = "done", created_at = "2026-01-01T00:00:00Z",
-          resolvable = true, resolved = true },
-      }})
+      local disc = make_disc({
+        resolved = true,
+        notes = {
+          {
+            id = 1,
+            author = "alice",
+            body = "done",
+            created_at = "2026-01-01T00:00:00Z",
+            resolvable = true,
+            resolved = true,
+          },
+        },
+      })
       local result = tvl.build(disc)
       local flat = flatten_virt(result.virt_lines)
       assert.truthy(flat:find("○", 1, true))
@@ -154,12 +163,18 @@ describe("mr.thread_virt_lines", function()
 
     it("renders reply with ┃  ↪ prefix", function()
       local disc = {
-        id = "d1", resolved = false,
+        id = "d1",
+        resolved = false,
         notes = {
-          { id = 1, author = "alice", body = "Question", created_at = "2026-01-01T00:00:00Z",
-            resolvable = true, resolved = false },
-          { id = 2, author = "bob", body = "Answer", created_at = "2026-01-01T01:00:00Z",
-            system = false },
+          {
+            id = 1,
+            author = "alice",
+            body = "Question",
+            created_at = "2026-01-01T00:00:00Z",
+            resolvable = true,
+            resolved = false,
+          },
+          { id = 2, author = "bob", body = "Answer", created_at = "2026-01-01T01:00:00Z", system = false },
         },
       }
       local result = tvl.build(disc)
@@ -171,17 +186,26 @@ describe("mr.thread_virt_lines", function()
 
     it("uses ┃ for reply body spacer", function()
       local disc = {
-        id = "d1", resolved = false,
+        id = "d1",
+        resolved = false,
         notes = {
-          { id = 1, author = "alice", body = "Q", created_at = "2026-01-01T00:00:00Z",
-            resolvable = true, resolved = false },
+          {
+            id = 1,
+            author = "alice",
+            body = "Q",
+            created_at = "2026-01-01T00:00:00Z",
+            resolvable = true,
+            resolved = false,
+          },
           { id = 2, author = "bob", body = "A", created_at = "2026-01-01T01:00:00Z" },
         },
       }
       local result = tvl.build(disc)
       local count = 0
       local flat = flatten_virt(result.virt_lines)
-      for _ in flat:gmatch("┃") do count = count + 1 end
+      for _ in flat:gmatch("┃") do
+        count = count + 1
+      end
       assert.truthy(count >= 2)
     end)
 
@@ -216,10 +240,17 @@ describe("mr.thread_virt_lines", function()
 
     it("inserts spacer lines when editing a reply", function()
       local disc = {
-        id = "d1", resolved = false,
+        id = "d1",
+        resolved = false,
         notes = {
-          { id = 1, author = "alice", body = "Q", created_at = "2026-01-01T00:00:00Z",
-            resolvable = true, resolved = false },
+          {
+            id = 1,
+            author = "alice",
+            body = "Q",
+            created_at = "2026-01-01T00:00:00Z",
+            resolvable = true,
+            resolved = false,
+          },
           { id = 2, author = "bob", body = "A", created_at = "2026-01-01T01:00:00Z" },
         },
       }
@@ -255,8 +286,13 @@ describe("mr.thread_virt_lines", function()
         id = "draft-1",
         is_draft = true,
         notes = {
-          { id = nil, author = "You (draft)", body = "Draft comment",
-            created_at = "2026-01-01T00:00:00Z", resolvable = false },
+          {
+            id = nil,
+            author = "You (draft)",
+            body = "Draft comment",
+            created_at = "2026-01-01T00:00:00Z",
+            resolvable = false,
+          },
         },
       }
       local result = tvl.build(disc, { sel_idx = 1, current_user = "someuser" })

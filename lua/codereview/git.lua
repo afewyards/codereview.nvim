@@ -28,7 +28,9 @@ end
 
 function M.get_repo_root()
   local result = vim.fn.systemlist({ "git", "rev-parse", "--show-toplevel" })
-  if vim.v.shell_error ~= 0 or #result == 0 then return nil end
+  if vim.v.shell_error ~= 0 or #result == 0 then
+    return nil
+  end
   return vim.trim(result[1])
 end
 

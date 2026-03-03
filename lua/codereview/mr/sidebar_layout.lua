@@ -28,19 +28,19 @@ local function normalise_highlights(highlights, offset, out)
     if hl.row then
       -- Named format: row is 1-indexed
       table.insert(out, {
-        row0      = offset + hl.row - 1,
-        line_hl   = hl.line_hl,
-        word_hl   = hl.word_hl,
+        row0 = offset + hl.row - 1,
+        line_hl = hl.line_hl,
+        word_hl = hl.word_hl,
         col_start = hl.col_start,
-        col_end   = hl.col_end,
+        col_end = hl.col_end,
       })
     else
       -- Positional format: hl[1] is 0-indexed row
       table.insert(out, {
-        row0      = offset + hl[1],
+        row0 = offset + hl[1],
         col_start = hl[2],
-        col_end   = hl[3],
-        hl_group  = hl[4],
+        col_end = hl[3],
+        hl_group = hl[4],
       })
     end
   end
@@ -66,7 +66,7 @@ end
 --- Record a component's line range (1-indexed, inclusive) in state.sidebar_component_ranges.
 local function record_range(state, name, offset, count)
   state.sidebar_component_ranges[name] = {
-    start  = offset + 1,
+    start = offset + 1,
     ["end"] = offset + count,
   }
 end
@@ -86,24 +86,26 @@ end
 --- @param buf   integer  buffer handle
 --- @param state table    diff viewer state
 function M.render(buf, state)
-  local header_comp        = require("codereview.mr.sidebar_components.header")
-  local status_comp        = require("codereview.mr.sidebar_components.status")
+  local header_comp = require("codereview.mr.sidebar_components.header")
+  local status_comp = require("codereview.mr.sidebar_components.status")
   local summary_button_comp = require("codereview.mr.sidebar_components.summary_button")
-  local file_tree_comp     = require("codereview.mr.sidebar_components.file_tree")
-  local footer_comp        = require("codereview.mr.sidebar_components.footer")
+  local file_tree_comp = require("codereview.mr.sidebar_components.file_tree")
+  local footer_comp = require("codereview.mr.sidebar_components.footer")
 
-  local all_lines      = {}
+  local all_lines = {}
   local all_highlights = {}
 
   state.sidebar_component_ranges = {}
-  state.sidebar_row_map          = {}
+  state.sidebar_row_map = {}
 
   -- ── 1. Header ──────────────────────────────────────────────────────────────
   -- API: render(review, width) → { lines, highlights, row_map }
   local header_res = header_comp.render(state, WIDTH)
   local header_offset = #all_lines
   record_range(state, "header", header_offset, #header_res.lines)
-  for _, l in ipairs(header_res.lines) do table.insert(all_lines, l) end
+  for _, l in ipairs(header_res.lines) do
+    table.insert(all_lines, l)
+  end
   normalise_highlights(header_res.highlights, header_offset, all_highlights)
   merge_row_map(state, header_res.row_map, header_offset)
 
@@ -112,10 +114,12 @@ function M.render(buf, state)
 
   -- ── 2. Status ──────────────────────────────────────────────────────────────
   -- API: render(state, width) → { lines, highlights, row_map }
-  local status_res    = status_comp.render(state, WIDTH)
+  local status_res = status_comp.render(state, WIDTH)
   local status_offset = #all_lines
   record_range(state, "status", status_offset, #status_res.lines)
-  for _, l in ipairs(status_res.lines) do table.insert(all_lines, l) end
+  for _, l in ipairs(status_res.lines) do
+    table.insert(all_lines, l)
+  end
   normalise_highlights(status_res.highlights, status_offset, all_highlights)
   -- Named row_map keys (e.g. status/drafts/threads) are not numeric — skip
 
@@ -127,20 +131,22 @@ function M.render(buf, state)
   -- ── 3. Summary button + 4. File tree ───────────────────────────────────────
   -- Both use the mutable pattern: render(state, lines, row_map) with no return.
   -- summary_button appends 2 lines (button + blank); file_tree appends file rows.
-  local mid_lines   = {}
+  local mid_lines = {}
   local mid_row_map = {}
 
   summary_button_comp.render(state, mid_lines, mid_row_map)
-  local sb_count = #mid_lines   -- lines owned by summary_button (2)
+  local sb_count = #mid_lines -- lines owned by summary_button (2)
 
   file_tree_comp.render(state, mid_lines, mid_row_map)
   local ft_count = #mid_lines - sb_count
 
   local mid_offset = #all_lines
-  record_range(state, "summary_button", mid_offset,           sb_count)
-  record_range(state, "file_tree",      mid_offset + sb_count, ft_count)
+  record_range(state, "summary_button", mid_offset, sb_count)
+  record_range(state, "file_tree", mid_offset + sb_count, ft_count)
 
-  for _, l in ipairs(mid_lines) do table.insert(all_lines, l) end
+  for _, l in ipairs(mid_lines) do
+    table.insert(all_lines, l)
+  end
   merge_row_map(state, mid_row_map, mid_offset)
 
   -- No blank separator before footer (per spec)
@@ -150,7 +156,9 @@ function M.render(buf, state)
   local footer_lines, footer_hls = footer_comp.build(state, WIDTH)
   local footer_offset = #all_lines
   record_range(state, "footer", footer_offset, #footer_lines)
-  for _, l in ipairs(footer_lines) do table.insert(all_lines, l) end
+  for _, l in ipairs(footer_lines) do
+    table.insert(all_lines, l)
+  end
   normalise_highlights(footer_hls, footer_offset, all_highlights)
 
   -- ── Write buffer ───────────────────────────────────────────────────────────

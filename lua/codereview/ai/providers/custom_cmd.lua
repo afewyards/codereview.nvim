@@ -51,7 +51,9 @@ function M.run(prompt, callback, opts)
       end
     end,
     on_exit = function(_, code)
-      if done then return end
+      if done then
+        return
+      end
       done = true
       vim.schedule(function()
         local stderr_str = table.concat(stderr_chunks, "\n")
@@ -61,8 +63,12 @@ function M.run(prompt, callback, opts)
         local output = table.concat(stdout_chunks, "\n")
         if code ~= 0 then
           local msg = "Custom command exited with code " .. code
-          if output ~= "" then msg = msg .. "\n" .. output end
-          if stderr_str ~= "" then msg = msg .. "\n" .. stderr_str end
+          if output ~= "" then
+            msg = msg .. "\n" .. output
+          end
+          if stderr_str ~= "" then
+            msg = msg .. "\n" .. stderr_str
+          end
           log.error("AI custom_cmd: " .. msg)
           callback(nil, msg)
         else

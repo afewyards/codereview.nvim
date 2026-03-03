@@ -41,7 +41,10 @@ describe("commit_filter", function()
       local original_files = state.files
       local original_discussions = state.discussions
       commit_filter.apply(state, {
-        from_sha = "commit1", to_sha = "commit2", label = "Second", changed_paths = { "a.lua" },
+        from_sha = "commit1",
+        to_sha = "commit2",
+        label = "Second",
+        changed_paths = { "a.lua" },
       })
       assert.same(original_files, state.original_files)
       assert.same(original_discussions, state.original_discussions)
@@ -50,7 +53,10 @@ describe("commit_filter", function()
     it("filters files to changed_paths", function()
       local state = make_state()
       commit_filter.apply(state, {
-        from_sha = "commit1", to_sha = "commit2", label = "Second", changed_paths = { "a.lua" },
+        from_sha = "commit1",
+        to_sha = "commit2",
+        label = "Second",
+        changed_paths = { "a.lua" },
       })
       assert.equals(1, #state.files)
       assert.equals("a.lua", state.files[1].new_path)
@@ -59,7 +65,10 @@ describe("commit_filter", function()
     it("filters discussions by head_sha", function()
       local state = make_state()
       commit_filter.apply(state, {
-        from_sha = "commit1", to_sha = "commit2", label = "Second", changed_paths = { "a.lua", "b.lua" },
+        from_sha = "commit1",
+        to_sha = "commit2",
+        label = "Second",
+        changed_paths = { "a.lua", "b.lua" },
       })
       assert.equals(1, #state.discussions)
       assert.equals("d1", state.discussions[1].id)
@@ -68,7 +77,10 @@ describe("commit_filter", function()
     it("resets current_file and clears caches", function()
       local state = make_state()
       commit_filter.apply(state, {
-        from_sha = "commit1", to_sha = "commit2", label = "Second", changed_paths = { "a.lua" },
+        from_sha = "commit1",
+        to_sha = "commit2",
+        label = "Second",
+        changed_paths = { "a.lua" },
       })
       assert.equals(1, state.current_file)
       assert.same({}, state.line_data_cache)
@@ -79,7 +91,10 @@ describe("commit_filter", function()
     it("sets commit_filter on state", function()
       local state = make_state()
       commit_filter.apply(state, {
-        from_sha = "commit1", to_sha = "commit2", label = "Second", changed_paths = { "a.lua" },
+        from_sha = "commit1",
+        to_sha = "commit2",
+        label = "Second",
+        changed_paths = { "a.lua" },
       })
       assert.equals("commit1", state.commit_filter.from_sha)
       assert.equals("commit2", state.commit_filter.to_sha)
@@ -93,7 +108,10 @@ describe("commit_filter", function()
       local original_files = state.files
       local original_discussions = state.discussions
       commit_filter.apply(state, {
-        from_sha = "commit1", to_sha = "commit2", label = "Second", changed_paths = { "a.lua" },
+        from_sha = "commit1",
+        to_sha = "commit2",
+        label = "Second",
+        changed_paths = { "a.lua" },
       })
       commit_filter.clear(state)
       assert.same(original_files, state.files)
@@ -103,7 +121,10 @@ describe("commit_filter", function()
     it("clears commit_filter and originals", function()
       local state = make_state()
       commit_filter.apply(state, {
-        from_sha = "commit1", to_sha = "commit2", label = "Second", changed_paths = { "a.lua" },
+        from_sha = "commit1",
+        to_sha = "commit2",
+        label = "Second",
+        changed_paths = { "a.lua" },
       })
       commit_filter.clear(state)
       assert.is_nil(state.commit_filter)
@@ -114,7 +135,10 @@ describe("commit_filter", function()
     it("resets current_file and clears caches", function()
       local state = make_state()
       commit_filter.apply(state, {
-        from_sha = "commit1", to_sha = "commit2", label = "Second", changed_paths = { "a.lua" },
+        from_sha = "commit1",
+        to_sha = "commit2",
+        label = "Second",
+        changed_paths = { "a.lua" },
       })
       commit_filter.clear(state)
       assert.equals(1, state.current_file)
