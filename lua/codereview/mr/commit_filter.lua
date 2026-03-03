@@ -143,9 +143,15 @@ function M.apply(state, filter)
   end
   state.files = filtered_files
 
+  -- Build version map for commit→version_head_sha matching
+  local version_map = M.build_version_map(state.commits or {}, state.versions or {})
+
+  -- Expose changed_paths_set on commit_filter for file-path fallback
+  state.commit_filter.changed_paths_set = path_set
+
   local filtered_discussions = {}
   for _, d in ipairs(state.original_discussions) do
-    if M.matches_discussion(d, state.commit_filter) then
+    if M.matches_discussion(d, state.commit_filter, version_map) then
       table.insert(filtered_discussions, d)
     end
   end

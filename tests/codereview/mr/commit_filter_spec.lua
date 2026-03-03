@@ -62,7 +62,7 @@ describe("commit_filter", function()
       assert.equals("a.lua", state.files[1].new_path)
     end)
 
-    it("filters discussions by head_sha", function()
+    it("filters discussions by SHA and file-path fallback", function()
       local state = make_state()
       commit_filter.apply(state, {
         from_sha = "commit1",
@@ -70,8 +70,38 @@ describe("commit_filter", function()
         label = "Second",
         changed_paths = { "a.lua", "b.lua" },
       })
-      assert.equals(1, #state.discussions)
-      assert.equals("d1", state.discussions[1].id)
+      -- d1 matches by head_sha, d2 matches by file-path fallback (new_path="b.lua")
+      assert.equals(2, #state.discussions)
+    end)
+
+    it("uses version map to match discussions when available", function()
+      local state = make_state()
+      -- d2 has head_sha="other_sha" which doesn't match commit2 directly.
+      -- But if version map says commit2 belongs to version with head "other_sha", it should match.
+      state.versions = {
+        { head_commit_sha = "other_sha", created_at = "2026-01-01" },
+      }
+      commit_filter.apply(state, {
+        from_sha = "commit1",
+        to_sha = "commit2",
+        label = "Second",
+        changed_paths = { "a.lua", "b.lua" },
+      })
+      -- Both d1 (direct SHA match) and d2 (version map match) should be present
+      assert.equals(2, #state.discussions)
+    end)
+
+    it("uses file-path fallback when no SHA or version match", function()
+      local state = make_state()
+      -- d2 has head_sha="other_sha", new_path="b.lua" — no SHA match, but path matches
+      commit_filter.apply(state, {
+        from_sha = "commit1",
+        to_sha = "commit2",
+        label = "Second",
+        changed_paths = { "a.lua", "b.lua" },
+      })
+      -- d1 matches by SHA, d2 matches by file-path fallback
+      assert.equals(2, #state.discussions)
     end)
 
     it("resets current_file and clears caches", function()
