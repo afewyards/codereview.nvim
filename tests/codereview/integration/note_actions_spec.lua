@@ -14,7 +14,7 @@ package.preload["codereview.api.client"] = function()
   return {}
 end
 
-local diff = require("codereview.mr.diff")
+local _ = require("codereview.mr.diff") -- luacheck: ignore 211
 
 describe("note selection + edit + delete", function()
   local disc

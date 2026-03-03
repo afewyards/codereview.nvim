@@ -729,8 +729,8 @@ function M.render_file_diff(
   vim.bo[buf].modifiable = false
 
   -- Set syntax from file extension for code highlighting
-  local path = file_diff.new_path or file_diff.old_path or ""
-  local ft = vim.filetype.match({ filename = path })
+  local ft_path = file_diff.new_path or file_diff.old_path or ""
+  local ft = vim.filetype.match({ filename = ft_path })
   if ft then
     vim.bo[buf].syntax = ft
   end
@@ -903,9 +903,8 @@ function M.render_all_files(
     local cache_key = fpath and (fpath .. ":" .. file_ctx) or nil
     local file_cached = diff_cache and cache_key and diff_cache[cache_key]
 
-    local hunks, display
+    local display
     if file_cached then
-      hunks = file_cached.hunks
       display = file_cached.display
     else
       local diff_text = file_diff.diff or ""
@@ -936,7 +935,7 @@ function M.render_all_files(
           diff_text = result
         end
       end
-      hunks = parser.parse_hunks(diff_text)
+      local hunks = parser.parse_hunks(diff_text)
       display = parser.build_display(hunks, file_ctx)
       if diff_cache and cache_key then
         diff_cache[cache_key] = { hunks = hunks, display = display }

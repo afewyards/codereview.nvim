@@ -225,7 +225,7 @@ end
 --- Find the MR head SHA at the time of the user's last approval.
 --- Returns the head_commit_sha of the latest version created before the user approved.
 function M.get_last_reviewed_sha(client, ctx, review, username)
-  local headers, err = get_headers()
+  local headers, _ = get_headers()
   if not headers then
     return nil
   end
@@ -284,7 +284,7 @@ end
 
 --- Fetch additions/deletions stats for each commit (mutates in place).
 function M.get_commit_stats(client, ctx, commits)
-  local headers, err = get_headers()
+  local headers, _ = get_headers()
   if not headers then
     return
   end

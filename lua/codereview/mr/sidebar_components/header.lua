@@ -66,13 +66,10 @@ function M.render(state_or_review, width)
 
   -- Line 3: compact status indicators
   local parts = {}
-  local ci_col = nil -- byte-start of CI icon in the assembled line (for highlight)
-
   -- CI indicator
   local ci_status = review.pipeline_status
   local ci_icon = CI_ICONS[ci_status]
   if ci_icon then
-    ci_col = 0
     table.insert(parts, ci_icon)
   end
 

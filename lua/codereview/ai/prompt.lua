@@ -145,9 +145,7 @@ function M.extract_changed_lines(diff_text)
       if prefix == "+" then
         changed[new_line] = true
         new_line = new_line + 1
-      elseif prefix == "-" then
-        -- deleted line: no new_line increment
-      elseif prefix == " " or line == "" then
+      elseif prefix ~= "-" and (prefix == " " or line == "") then
         new_line = new_line + 1
       end
     end

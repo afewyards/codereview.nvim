@@ -310,8 +310,8 @@ function M.get_discussions(client, ctx, review)
       return nil, gql_err
     end
 
-    local repo = type(data) == "table" and type(data.repository) == "table" and data.repository
-    local pr_data = repo and type(repo.pullRequest) == "table" and repo.pullRequest
+    local repo_data = type(data) == "table" and type(data.repository) == "table" and data.repository
+    local pr_data = repo_data and type(repo_data.pullRequest) == "table" and repo_data.pullRequest
     local connection = pr_data and type(pr_data.reviewThreads) == "table" and pr_data.reviewThreads
     if not connection then
       return {}, nil
@@ -369,7 +369,7 @@ end
 
 --- Fetch additions/deletions stats for each commit (mutates in place).
 function M.get_commit_stats(client, ctx, commits)
-  local headers, err = get_headers()
+  local headers, _ = get_headers()
   if not headers then
     return
   end
@@ -416,7 +416,7 @@ end
 
 --- Return the commit_id of the most recent review submitted by username.
 function M.get_last_reviewed_sha(client, ctx, review, username)
-  local headers, err = get_headers()
+  local headers, _ = get_headers()
   if not headers then
     return nil
   end

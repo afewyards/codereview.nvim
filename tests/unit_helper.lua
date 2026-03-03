@@ -5,7 +5,7 @@ local _env_overrides = {}
 local _NIL_SENTINEL = {}
 local _real_getenv = os.getenv
 
-os.getenv = function(key)
+os.getenv = function(key) -- luacheck: ignore 122
   local v = _env_overrides[key]
   if v == _NIL_SENTINEL then
     return nil

@@ -13,7 +13,7 @@ function M.detect()
     return cfg.picker
   end
 
-  local ok
+  local ok, _
   ok, _ = pcall(require, "telescope")
   if ok then
     return "telescope"

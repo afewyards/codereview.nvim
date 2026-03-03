@@ -1,5 +1,4 @@
 local curl = require("plenary.curl")
-local async = require("plenary.async")
 local async_util = require("plenary.async.util")
 local log = require("codereview.log")
 local M = {}

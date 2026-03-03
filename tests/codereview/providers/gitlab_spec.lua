@@ -357,7 +357,7 @@ describe("providers.gitlab", function()
       }
       local ctx = { base_url = "https://gitlab.com", project = "owner/repo" }
       local review = { id = 10 }
-      local result, err = gitlab.edit_note(mock_client, ctx, review, "disc1", 5, "updated")
+      local _, err = gitlab.edit_note(mock_client, ctx, review, "disc1", 5, "updated")
       assert.is_nil(err)
       assert.truthy(put_url:find("/discussions/disc1/notes/5"))
       assert.equals("updated", put_body.body)
@@ -386,7 +386,7 @@ describe("providers.gitlab", function()
       }
       local ctx = { base_url = "https://gitlab.com", project = "owner/repo" }
       local review = { id = 10 }
-      local result, err = gitlab.delete_note(mock_client, ctx, review, "disc1", 5)
+      local _, err = gitlab.delete_note(mock_client, ctx, review, "disc1", 5)
       assert.is_nil(err)
       assert.truthy(deleted_url:find("/discussions/disc1/notes/5"))
     end)

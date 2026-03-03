@@ -569,7 +569,7 @@ describe("providers.github", function()
       }
       local ctx = { base_url = "https://api.github.com", project = "owner/repo" }
       local review = { id = 42, sha = "abc123" }
-      local result, err =
+      local _, err =
         github.create_draft_comment(mock_client, ctx, review, { body = "Fix this", path = "foo.lua", line = 10 })
       assert.is_nil(err)
       -- Only ONE POST (to /reviews), with comments array in the body
@@ -603,7 +603,7 @@ describe("providers.github", function()
       }
       local ctx = { base_url = "https://api.github.com", project = "owner/repo" }
       local review = { id = 42, sha = "abc123" }
-      local result, err =
+      local _, err =
         github.create_draft_comment(mock_client, ctx, review, { body = "And this", path = "bar.lua", line = 20 })
       assert.is_nil(err)
       -- NO client.post calls (GraphQL goes through plenary.curl, not the client)
@@ -721,7 +721,7 @@ describe("providers.github", function()
       }
       local ctx = { base_url = "https://api.github.com", project = "owner/repo" }
       local review = { id = 1 }
-      local result, err = github.edit_note(mock_client, ctx, review, "disc_ignored", 42, "updated")
+      local _, err = github.edit_note(mock_client, ctx, review, "disc_ignored", 42, "updated")
       assert.is_nil(err)
       assert.truthy(patched_url:find("/pulls/comments/42"))
       assert.equals("updated", patched_body.body)
@@ -750,7 +750,7 @@ describe("providers.github", function()
       }
       local ctx = { base_url = "https://api.github.com", project = "owner/repo" }
       local review = { id = 1 }
-      local result, err = github.delete_note(mock_client, ctx, review, "disc_ignored", 42)
+      local _, err = github.delete_note(mock_client, ctx, review, "disc_ignored", 42)
       assert.is_nil(err)
       assert.truthy(deleted_url:find("/pulls/comments/42"))
     end)
@@ -1065,7 +1065,7 @@ describe("publish_review with pending review", function()
       end,
     }
     local ctx = { base_url = "https://api.github.com", project = "owner/repo" }
-    local result, err = github.publish_review(mock_client, ctx, { id = 42, sha = "abc" })
+    local _, err = github.publish_review(mock_client, ctx, { id = 42, sha = "abc" })
     assert.is_nil(err)
     assert.equal(1, #posted_paths)
     assert.truthy(posted_paths[1]:find("/reviews/200/events"))

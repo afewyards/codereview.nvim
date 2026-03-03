@@ -39,7 +39,7 @@ describe("mr.actions", function()
   describe("approve", function()
     it("calls provider.approve with client, ctx, and review", function()
       local review = { iid = 1, sha = "abc" }
-      local result, err = actions.approve(review)
+      local _, err = actions.approve(review)
       assert.is_nil(err)
       assert.spy(mock_provider.approve).was_called_with(mock_client, mock_ctx, review)
     end)

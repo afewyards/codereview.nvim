@@ -203,7 +203,6 @@ describe("mr.comment_float", function()
     end)
 
     it("skips reserve_space when spacer_offset is set", function()
-      local orig_ifloat = package.loaded["codereview.ui.inline_float"]
       local ifloat = require("codereview.ui.inline_float")
       local orig_reserve = ifloat.reserve_space
       ifloat.reserve_space = function(...)

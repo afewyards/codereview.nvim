@@ -319,7 +319,7 @@ describe("file content in per-file review", function()
 
   it("includes full file content in per-file prompt for multi-file review", function()
     local content_fetch_calls = {}
-    local mock_provider = {
+    local local_mock_provider = {
       get_file_content = function(client, ctx, ref, path)
         table.insert(content_fetch_calls, path)
         return "-- full content of " .. path
@@ -339,7 +339,7 @@ describe("file content in per-file review", function()
       line_data_cache = {},
       row_disc_cache = {},
       row_ai_cache = {},
-      provider = mock_provider,
+      provider = local_mock_provider,
       ctx = { base_url = "https://api.github.com", project = "owner/repo" },
     }
     review_mod.start(review, diff_state, { main_buf = 0, sidebar_buf = 0, main_win = 0 })
@@ -355,7 +355,7 @@ describe("file content in per-file review", function()
 
   it("skips content fetch for deleted files", function()
     local content_fetch_calls = {}
-    local mock_provider = {
+    local local_mock_provider = {
       get_file_content = function(client, ctx, ref, path)
         table.insert(content_fetch_calls, path)
         return "content"
@@ -375,7 +375,7 @@ describe("file content in per-file review", function()
       line_data_cache = {},
       row_disc_cache = {},
       row_ai_cache = {},
-      provider = mock_provider,
+      provider = local_mock_provider,
       ctx = { base_url = "https://api.github.com", project = "owner/repo" },
     }
     review_mod.start(review, diff_state, { main_buf = 0, sidebar_buf = 0, main_win = 0 })
@@ -387,7 +387,7 @@ describe("file content in per-file review", function()
 
   it("skips content when file exceeds max_file_size", function()
     local content_fetch_calls = {}
-    local mock_provider = {
+    local local_mock_provider = {
       get_file_content = function(client, ctx, ref, path)
         table.insert(content_fetch_calls, path)
         -- Return content with many lines (exceeds default 500)
@@ -412,7 +412,7 @@ describe("file content in per-file review", function()
       line_data_cache = {},
       row_disc_cache = {},
       row_ai_cache = {},
-      provider = mock_provider,
+      provider = local_mock_provider,
       ctx = { base_url = "https://api.github.com", project = "owner/repo" },
     }
     review_mod.start(review, diff_state, { main_buf = 0, sidebar_buf = 0, main_win = 0 })

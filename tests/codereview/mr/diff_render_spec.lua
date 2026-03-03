@@ -124,7 +124,7 @@ describe("mr.diff_render", function()
       local files = {
         { new_path = "src/foo.lua", old_path = "src/foo.lua", diff = "@@ -1,1 +1,1 @@\n-a\n+b\n" },
       }
-      local result = diff_render.render_all_files(buf, files, { diff_refs = nil }, {}, 8)
+      diff_render.render_all_files(buf, files, { diff_refs = nil }, {}, 8)
 
       local first_line = vim.api.nvim_buf_get_lines(buf, 0, 1, false)[1]
       assert.truthy(first_line:find("src/foo.lua"))
@@ -161,7 +161,7 @@ describe("mr.diff_render", function()
       local files = {
         { new_path = "new.lua", old_path = "old.lua", renamed_file = true, diff = "@@ -1,1 +1,1 @@\n ctx\n" },
       }
-      local result = diff_render.render_all_files(buf, files, { diff_refs = nil }, {}, 8)
+      diff_render.render_all_files(buf, files, { diff_refs = nil }, {}, 8)
       local first_line = vim.api.nvim_buf_get_lines(buf, 0, 1, false)[1]
       assert.truthy(first_line:find("old.lua"))
       assert.truthy(first_line:find("new.lua"))
@@ -171,7 +171,7 @@ describe("mr.diff_render", function()
     it("shows no-changes placeholder when diff is empty", function()
       local buf = vim.api.nvim_create_buf(false, true)
       local files = { { new_path = "c.lua", old_path = "c.lua", diff = "" } }
-      local result = diff_render.render_all_files(buf, files, { diff_refs = nil }, {}, 8)
+      diff_render.render_all_files(buf, files, { diff_refs = nil }, {}, 8)
       local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
       local found = false
       for _, l in ipairs(lines) do
@@ -189,7 +189,7 @@ describe("mr.diff_render", function()
         { new_path = "a.lua", old_path = "a.lua", diff = "@@ -1,1 +1,1 @@\n-a\n+b\n" },
         { new_path = "b.lua", old_path = "b.lua", diff = "@@ -1,1 +1,1 @@\n-x\n+y\n" },
       }
-      local result = diff_render.render_all_files(buf, files, { diff_refs = nil }, {}, 8)
+      diff_render.render_all_files(buf, files, { diff_refs = nil }, {}, 8)
       local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
       assert.not_equals("", lines[#lines])
       vim.api.nvim_buf_delete(buf, { force = true })

@@ -126,31 +126,6 @@ function M.build_header_lines(review, width)
   }
 end
 
-local function wrap_text(text, width)
-  local result = {}
-  for _, paragraph in ipairs(vim.split(text or "", "\n")) do
-    if paragraph == "" then
-      table.insert(result, "")
-    elseif #paragraph <= width then
-      table.insert(result, paragraph)
-    else
-      local line = ""
-      for word in paragraph:gmatch("%S+") do
-        if line ~= "" and #line + #word + 1 > width then
-          table.insert(result, line)
-          line = word
-        else
-          line = line == "" and word or (line .. " " .. word)
-        end
-      end
-      if line ~= "" then
-        table.insert(result, line)
-      end
-    end
-  end
-  return result
-end
-
 local format_time_short = tvl.format_time_relative
 
 local ACTIVITY_ICONS = {

@@ -40,8 +40,8 @@ else
             local obj_str = inner:sub(obj_start, i)
             local obj = {}
             -- Parse key-value pairs from flat object
-            local function json_unescape(s)
-              return (s:gsub("\\n", "\n"):gsub("\\t", "\t"):gsub("\\\\", "\\")):gsub('\\"', '"')
+            local function json_unescape(str)
+              return (str:gsub("\\n", "\n"):gsub("\\t", "\t"):gsub("\\\\", "\\")):gsub('\\"', '"')
             end
             for key, val in obj_str:gmatch('"([^"]+)"%s*:%s*"([^"]*)"') do
               obj[key] = json_unescape(val)

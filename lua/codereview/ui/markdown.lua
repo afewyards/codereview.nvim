@@ -858,7 +858,7 @@ function M.parse_blocks(text, base_hl, opts)
 
     -- Unordered list: ^(%s*)([-*+]) (.+)
     if state == "normal" then
-      local list_indent, list_marker, list_content = line:match("^(%s*)([-*+]) (.+)")
+      local list_indent, _, list_content = line:match("^(%s*)([-*+]) (.+)")
       if list_content then
         local indent_level = math.floor(#list_indent / 2)
         local bullets = { "•", "◦", "▪" }

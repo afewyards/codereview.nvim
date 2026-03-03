@@ -114,13 +114,13 @@ function M.open()
   -- Create floating window configuration
   local width = 60
   local height = 20
-  local lines = tonumber(vim.o.lines) or 24
+  local screen_lines = tonumber(vim.o.lines) or 24
   local columns = tonumber(vim.o.columns) or 80
   local win_cfg = {
     relative = "editor",
     width = width,
     height = height,
-    row = math.floor((lines - height) / 2),
+    row = math.floor((screen_lines - height) / 2),
     col = math.floor((columns - width) / 2),
     style = "minimal",
     border = "rounded",

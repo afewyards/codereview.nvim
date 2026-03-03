@@ -8,7 +8,6 @@ local keymaps = require("codereview.pipeline.keymaps")
 local log_view = require("codereview.pipeline.log_view")
 
 local current_handle = nil
-local current_pstate = nil
 
 --- Open the pipeline view for a review.
 --- @param diff_state table  active diff state (from diff.get_state)
@@ -37,8 +36,6 @@ function M.open(diff_state)
     return
   end
 
-  current_pstate = pstate
-
   -- Build content
   local content = render.build_lines(pstate.pipeline, pstate.stages, pstate.collapsed)
 
@@ -52,7 +49,7 @@ function M.open(diff_state)
   -- Create float
   local width = math.min(80, math.floor(vim.o.columns * 0.6))
   local height = math.min(#content.lines + 2, math.floor(vim.o.lines * 0.7))
-  local row = math.floor((vim.o.lines - height) / 2)
+  local win_row = math.floor((vim.o.lines - height) / 2)
   local col = math.floor((vim.o.columns - width) / 2)
 
   local title = string.format(" Pipeline #%s ", tostring(pstate.pipeline.id))
@@ -61,7 +58,7 @@ function M.open(diff_state)
     relative = "editor",
     width = width,
     height = height,
-    row = row,
+    row = win_row,
     col = col,
     style = "minimal",
     border = "rounded",
@@ -83,7 +80,6 @@ function M.open(diff_state)
     log_view.close()
     pcall(vim.api.nvim_win_close, win, true)
     current_handle = nil
-    current_pstate = nil
   end
 
   -- Redraw helper

@@ -18,9 +18,7 @@ function M.init_file(path, line_data, file_idx)
   local last_hunk_idx = nil
 
   for i, data in ipairs(line_data) do
-    if file_idx and data.file_idx and data.file_idx ~= file_idx then
-      -- scroll mode: skip lines that belong to a different file
-    elseif data.item and data.item.hunk_idx then
+    if not (file_idx and data.file_idx and data.file_idx ~= file_idx) and data.item and data.item.hunk_idx then
       if data.item.hunk_idx ~= last_hunk_idx then
         last_hunk_idx = data.item.hunk_idx
         hunks_total = hunks_total + 1
