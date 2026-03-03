@@ -33,6 +33,7 @@ jobs:
         uses: baptiste0928/cargo-install@v3
         with:
           crate: stylua
+          version: "^2.3"
 
       - name: Check formatting
         run: stylua --check lua/ plugin/ tests/
