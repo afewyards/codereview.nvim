@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Only check staged Lua files
+STAGED_LUA=$(git diff --cached --name-only --diff-filter=ACM -- '*.lua' || true)
+
+if [ -z "$STAGED_LUA" ]; then
+  exit 0
+fi
+
+echo "Running StyLua check..."
+echo "$STAGED_LUA" | xargs stylua --check
+
+echo "Running Luacheck..."
+echo "$STAGED_LUA" | xargs luacheck
