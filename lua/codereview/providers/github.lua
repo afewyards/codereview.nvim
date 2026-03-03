@@ -929,6 +929,14 @@ local function extract_run_id(details_url)
   return details_url:match("/actions/runs/(%d+)")
 end
 
+--- Extract Actions job ID from a check-run's details_url.
+local function extract_job_id(details_url)
+  if not details_url then
+    return nil
+  end
+  return details_url:match("/job/(%d+)")
+end
+
 --- Fetch pipeline (check-suite) status for the PR's head SHA.
 function M.get_pipeline(client, ctx, review)
   local headers, err = get_headers()
@@ -1001,31 +1009,51 @@ function M.get_pipeline_jobs(client, ctx, review, suite_id) -- luacheck: ignore 
   return jobs
 end
 
---- Fetch job log. GitHub requires downloading workflow run logs as a ZIP.
---- Falls back to "not available" when run ID cannot be determined.
+--- Fetch job log via the per-job plain-text endpoint.
+--- Falls back to the run-level ZIP download when the job ID cannot be determined.
 function M.get_job_trace(client, ctx, review, job_id)
   local headers, err = get_headers()
   if not headers then
     return nil, err
   end
   local owner, repo = parse_owner_repo(ctx)
-  -- Fetch the check run to find the workflow run ID
+  -- Fetch the check run to find the Actions job ID
   local cr_path = string.format("/repos/%s/%s/check-runs/%d", owner, repo, job_id)
   local cr_result, cr_err = client.get(ctx.base_url, cr_path, { headers = headers })
   if not cr_result then
     return nil, cr_err
   end
-  local run_id = extract_run_id(cr_result.data and cr_result.data.details_url)
-  if not run_id then
-    return nil, "Cannot determine workflow run for log download"
+  local details_url = cr_result.data and cr_result.data.details_url
+  local actions_job_id = extract_job_id(details_url)
+  if not actions_job_id then
+    return nil, "Cannot determine Actions job ID from check-run"
   end
-  -- Download logs
-  local log_path = string.format("/repos/%s/%s/actions/runs/%s/logs", owner, repo, run_id)
-  local log_result, log_err = client.get(ctx.base_url, log_path, { headers = headers })
-  if not log_result then
-    return nil, log_err
+  -- Per-job endpoint returns a 302 → plain text (no ZIP).
+  -- Shell out to curl with -L to follow the redirect.
+  local log_url = string.format("%s/repos/%s/%s/actions/jobs/%s/logs", ctx.base_url, owner, repo, actions_job_id)
+  local text = vim.fn.system({
+    "curl",
+    "-sL",
+    "-H",
+    "Authorization: " .. headers["Authorization"],
+    "-H",
+    "Accept: application/vnd.github+json",
+    log_url,
+  })
+  if vim.v.shell_error ~= 0 then
+    return nil, "Failed to download job log"
   end
-  return type(log_result.data) == "string" and log_result.data or "Log download returned non-text data"
+  -- Condense verbose GitHub timestamps: "2024-01-15T10:30:45.1234567Z " → "10:30:45 "
+  text = text:gsub("%d%d%d%d%-%d%d%-%d%dT(%d%d:%d%d:%d%d)%.%d+Z ", "%1 ")
+  -- Convert GitHub workflow annotations to ANSI colors
+  text = text:gsub("##%[error%](.-)\n", "\27[31m%1\27[0m\n")
+  text = text:gsub("##%[warning%](.-)\n", "\27[33m%1\27[0m\n")
+  text = text:gsub("##%[group%](.-)\n", "\27[1m%1\27[0m\n")
+  text = text:gsub("##%[endgroup%]\n?", "")
+  text = text:gsub("##%[debug%](.-)\n", "\27[36m%1\27[0m\n")
+  text = text:gsub("##%[command%](.-)\n", "\27[35m$ %1\27[0m\n")
+  text = text:gsub("##%[notice%](.-)\n", "\27[34m%1\27[0m\n")
+  return text
 end
 
 --- Retry a job by re-running its workflow.
