@@ -468,7 +468,7 @@ function M._apply_resumed_drafts(state, server_drafts)
 end
 
 function M.open(entry)
-  local ok, provider, ctx, review, discussions, files, commits = pcall(function()
+  local ok, provider, ctx, review, discussions, files, commits, versions = pcall(function()
     local prov, pctx, perr = providers.detect()
     if not prov then
       error(perr or "Could not detect platform")
@@ -500,7 +500,13 @@ function M.open(entry)
       end
     end
 
-    return prov, pctx, rev, disc, f, c
+    local v = {}
+    if prov.get_versions then
+      local fetched_v, _ = prov.get_versions(client, pctx, rev)
+      v = fetched_v or {}
+    end
+
+    return prov, pctx, rev, disc, f, c, v
   end)
 
   if not ok then
@@ -524,6 +530,7 @@ function M.open(entry)
     layout = layout,
     discussions = discussions,
     commits = commits,
+    versions = versions,
   })
 
   -- Fetch current user for note authorship checks (edit/delete guards)
