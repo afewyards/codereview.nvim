@@ -1009,8 +1009,46 @@ function M.get_pipeline_jobs(client, ctx, review, suite_id) -- luacheck: ignore 
   return jobs
 end
 
+--- Inject ##[group]/##[endgroup] markers using step metadata from the Actions API.
+--- Steps are ordered; we advance to the next step when its HH:MM:SS first appears.
+local function inject_step_sections(text, steps)
+  if not steps or #steps == 0 then
+    return text
+  end
+  local step_starts = {}
+  for _, step in ipairs(steps) do
+    if step.started_at and step.name then
+      local hms = step.started_at:match("T(%d%d:%d%d:%d%d)")
+      if hms then
+        table.insert(step_starts, { hms = hms, name = step.name })
+      end
+    end
+  end
+  if #step_starts == 0 then
+    return text
+  end
+  local result = {}
+  local si = 1
+  local in_section = false
+  for line in (text .. "\n"):gmatch("(.-)\n") do
+    local line_hms = line:match("^%d%d%d%d%-%d%d%-%d%dT(%d%d:%d%d:%d%d)")
+    if si <= #step_starts and line_hms and line_hms >= step_starts[si].hms then
+      if in_section then
+        table.insert(result, "##[endgroup]")
+      end
+      table.insert(result, "##[group]" .. step_starts[si].name)
+      in_section = true
+      si = si + 1
+    end
+    table.insert(result, line)
+  end
+  if in_section then
+    table.insert(result, "##[endgroup]")
+  end
+  return table.concat(result, "\n")
+end
+
 --- Fetch job log via the per-job plain-text endpoint.
---- Falls back to the run-level ZIP download when the job ID cannot be determined.
 function M.get_job_trace(client, ctx, review, job_id)
   local headers, err = get_headers()
   if not headers then
@@ -1028,6 +1066,10 @@ function M.get_job_trace(client, ctx, review, job_id)
   if not actions_job_id then
     return nil, "Cannot determine Actions job ID from check-run"
   end
+  -- Fetch job metadata for step timestamps
+  local job_path = string.format("/repos/%s/%s/actions/jobs/%s", owner, repo, actions_job_id)
+  local job_result = client.get(ctx.base_url, job_path, { headers = headers })
+  local steps = job_result and job_result.data and job_result.data.steps
   -- Per-job endpoint returns a 302 → plain text (no ZIP).
   -- Shell out to curl with -L to follow the redirect.
   local log_url = string.format("%s/repos/%s/%s/actions/jobs/%s/logs", ctx.base_url, owner, repo, actions_job_id)
@@ -1043,13 +1085,14 @@ function M.get_job_trace(client, ctx, review, job_id)
   if vim.v.shell_error ~= 0 then
     return nil, "Failed to download job log"
   end
+  -- Inject step section markers from job metadata before any text transforms
+  text = inject_step_sections(text, steps)
   -- Condense verbose GitHub timestamps: "2024-01-15T10:30:45.1234567Z " → "10:30:45 "
   text = text:gsub("%d%d%d%d%-%d%d%-%d%dT(%d%d:%d%d:%d%d)%.%d+Z ", "%1 ")
   -- Convert GitHub workflow annotations to ANSI colors
   text = text:gsub("##%[error%](.-)\n", "\27[31m%1\27[0m\n")
   text = text:gsub("##%[warning%](.-)\n", "\27[33m%1\27[0m\n")
-  text = text:gsub("##%[group%](.-)\n", "\27[1m%1\27[0m\n")
-  text = text:gsub("##%[endgroup%]\n?", "")
+  -- NOTE: ##[group]/##[endgroup] are preserved for log_sections.lua parser
   text = text:gsub("##%[debug%](.-)\n", "\27[36m%1\27[0m\n")
   text = text:gsub("##%[command%](.-)\n", "\27[35m$ %1\27[0m\n")
   text = text:gsub("##%[notice%](.-)\n", "\27[34m%1\27[0m\n")
