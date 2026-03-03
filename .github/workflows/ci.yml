@@ -7,6 +7,36 @@ on:
     branches: [main]
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: leafo/gh-actions-lua@v12
+        with:
+          luaVersion: "5.4"
+
+      - uses: leafo/gh-actions-luarocks@v4
+
+      - name: Install Luacheck
+        run: luarocks install luacheck
+
+      - name: Run Luacheck
+        run: luacheck lua/ plugin/ tests/
+
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install StyLua
+        uses: baptiste0928/cargo-install@v3
+        with:
+          crate: stylua
+
+      - name: Check formatting
+        run: stylua --check lua/ plugin/ tests/
+
   test:
     runs-on: ubuntu-latest
     steps:
