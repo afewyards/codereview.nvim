@@ -282,6 +282,28 @@ function M.get_commits(client, ctx, review)
   return commits
 end
 
+--- Get MR diff versions (used for mapping commits to version head SHAs).
+--- @return table[]|nil versions Array of { head_commit_sha, created_at }
+--- @return string|nil err
+function M.get_versions(client, ctx, review)
+  local headers, err = get_headers()
+  if not headers then
+    return nil, err
+  end
+  local res = client.get(ctx.base_url, mr_base(ctx, review.id) .. "/versions", { headers = headers })
+  if not res or not res.data then
+    return nil, "Failed to fetch MR versions"
+  end
+  local versions = {}
+  for _, v in ipairs(res.data) do
+    table.insert(versions, {
+      head_commit_sha = v.head_commit_sha,
+      created_at = v.created_at,
+    })
+  end
+  return versions
+end
+
 --- Fetch additions/deletions stats for each commit (mutates in place).
 function M.get_commit_stats(client, ctx, commits)
   local headers, _ = get_headers()

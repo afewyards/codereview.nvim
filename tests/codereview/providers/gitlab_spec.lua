@@ -680,6 +680,52 @@ describe("get_last_reviewed_sha", function()
   end)
 end)
 
+describe("get_versions", function()
+  before_each(function()
+    package.loaded["codereview.api.auth"] = {
+      get_token = function()
+        return "glpat-test", "pat"
+      end,
+    }
+  end)
+
+  after_each(function()
+    package.loaded["codereview.api.auth"] = nil
+  end)
+
+  it("returns array of version objects", function()
+    local mock_client = {
+      get = function(_, _, _)
+        return {
+          data = {
+            { head_commit_sha = "abc", created_at = "2026-01-02" },
+            { head_commit_sha = "def", created_at = "2026-01-01" },
+          },
+        }
+      end,
+    }
+    local ctx = { base_url = "https://gitlab.example.com", project = "group/project" }
+    local review = { id = 42 }
+    local versions, err = gitlab.get_versions(mock_client, ctx, review)
+    assert.is_nil(err)
+    assert.equals(2, #versions)
+    assert.equals("abc", versions[1].head_commit_sha)
+    assert.equals("def", versions[2].head_commit_sha)
+  end)
+
+  it("returns error when API fails", function()
+    local mock_client = {
+      get = function(_, _, _)
+        return nil
+      end,
+    }
+    local ctx = { base_url = "https://gitlab.example.com", project = "group/project" }
+    local versions, err = gitlab.get_versions(mock_client, ctx, { id = 42 })
+    assert.is_nil(versions)
+    assert.truthy(err)
+  end)
+end)
+
 describe("pipeline methods", function()
   local mock_client
 
