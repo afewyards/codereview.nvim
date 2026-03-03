@@ -156,18 +156,41 @@ describe("commit_filter", function()
   end)
 
   describe("matches_discussion", function()
-    it("matches when note head_sha equals to_sha", function()
+    it("matches via version map when head_sha matches version head", function()
+      local disc = { notes = { { position = { head_sha = "version_head_C", new_path = "a.lua" } } } }
+      local filter = { from_sha = "sha1", to_sha = "B" }
+      local version_map = { B = { "version_head_C" } }
+      assert.is_true(commit_filter.matches_discussion(disc, filter, version_map))
+    end)
+
+    it("matches via direct SHA (legacy behavior)", function()
       local disc = { notes = { { position = { head_sha = "sha2" } } } }
       assert.is_true(commit_filter.matches_discussion(disc, { from_sha = "sha1", to_sha = "sha2" }))
     end)
-    it("matches when note commit_sha equals to_sha (GitHub)", function()
+
+    it("matches via commit_sha for GitHub", function()
       local disc = { notes = { { position = { commit_sha = "sha2" } } } }
       assert.is_true(commit_filter.matches_discussion(disc, { from_sha = "sha1", to_sha = "sha2" }))
     end)
-    it("rejects when no position match", function()
-      local disc = { notes = { { position = { head_sha = "other" } } } }
-      assert.is_false(commit_filter.matches_discussion(disc, { from_sha = "sha1", to_sha = "sha2" }))
+
+    it("falls back to file-path match when no SHA/version match", function()
+      local disc = { notes = { { position = { head_sha = "unrelated", new_path = "a.lua" } } } }
+      local filter = { from_sha = "sha1", to_sha = "sha2", changed_paths_set = { ["a.lua"] = true } }
+      assert.is_true(commit_filter.matches_discussion(disc, filter))
     end)
+
+    it("file-path fallback checks old_path too", function()
+      local disc = { notes = { { position = { head_sha = "unrelated", old_path = "renamed.lua" } } } }
+      local filter = { from_sha = "sha1", to_sha = "sha2", changed_paths_set = { ["renamed.lua"] = true } }
+      assert.is_true(commit_filter.matches_discussion(disc, filter))
+    end)
+
+    it("rejects when no SHA, version, or path match", function()
+      local disc = { notes = { { position = { head_sha = "other", new_path = "z.lua" } } } }
+      local filter = { from_sha = "sha1", to_sha = "sha2", changed_paths_set = { ["a.lua"] = true } }
+      assert.is_false(commit_filter.matches_discussion(disc, filter))
+    end)
+
     it("rejects general comments (no position)", function()
       local disc = { notes = { { position = nil } } }
       assert.is_false(commit_filter.matches_discussion(disc, { from_sha = "sha1", to_sha = "sha2" }))

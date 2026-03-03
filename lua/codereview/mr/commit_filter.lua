@@ -63,17 +63,39 @@ function M.build_version_map(commits, versions)
   return map
 end
 
---- Check if a discussion note matches the given commit filter (by to_sha).
---- Supports both GitLab (head_sha) and GitHub (commit_sha) position fields.
+--- Check if a discussion matches the given commit filter.
+--- Matching order: 1) direct SHA, 2) version map, 3) file-path fallback.
 --- @param disc table
---- @param filter table { from_sha, to_sha }
+--- @param filter table { from_sha, to_sha, changed_paths_set? }
+--- @param version_map table<string, string[]>? commit_sha -> version head SHAs
 --- @return boolean
-function M.matches_discussion(disc, filter)
+function M.matches_discussion(disc, filter, version_map)
+  local version_heads = version_map and version_map[filter.to_sha]
   for _, note in ipairs(disc.notes or {}) do
     local pos = note.position
     if pos then
+      -- 1) Direct SHA match (works when comment was made at this exact commit HEAD)
       if pos.head_sha == filter.to_sha or pos.commit_sha == filter.to_sha then
         return true
+      end
+      -- 2) Version map match (GitLab: head_sha matches a version that owns this commit)
+      if version_heads then
+        for _, vh in ipairs(version_heads) do
+          if pos.head_sha == vh then
+            return true
+          end
+        end
+      end
+    end
+  end
+  -- 3) File-path fallback (discussion is on a file changed by this commit)
+  if filter.changed_paths_set then
+    for _, note in ipairs(disc.notes or {}) do
+      local pos = note.position
+      if pos then
+        if filter.changed_paths_set[pos.new_path] or filter.changed_paths_set[pos.old_path] then
+          return true
+        end
       end
     end
   end
