@@ -174,6 +174,47 @@ describe("commit_filter", function()
     end)
   end)
 
+  describe("build_version_map", function()
+    it("maps commits to version head SHAs", function()
+      local commits = {
+        { sha = "E" },
+        { sha = "D" },
+        { sha = "C" },
+        { sha = "B" },
+        { sha = "A" },
+      }
+      local versions = {
+        { head_commit_sha = "E", created_at = "2026-01-02" },
+        { head_commit_sha = "C", created_at = "2026-01-01" },
+      }
+      local map = commit_filter.build_version_map(commits, versions)
+      assert.same({ "C" }, map["A"])
+      assert.same({ "C" }, map["B"])
+      assert.same({ "C" }, map["C"])
+      assert.same({ "E" }, map["D"])
+      assert.same({ "E" }, map["E"])
+    end)
+
+    it("returns empty table when no versions", function()
+      local map = commit_filter.build_version_map({ { sha = "A" } }, {})
+      assert.same({}, map)
+    end)
+
+    it("returns empty table when no commits", function()
+      local map = commit_filter.build_version_map({}, { { head_commit_sha = "X" } })
+      assert.same({}, map)
+    end)
+
+    it("handles commit not in any version range", function()
+      local commits = { { sha = "B" }, { sha = "A" } }
+      local versions = { { head_commit_sha = "A", created_at = "2026-01-01" } }
+      local map = commit_filter.build_version_map(commits, versions)
+      assert.same({ "A" }, map["A"])
+      -- B is after the last known version head; assign to no version
+      assert.is_nil(map["B"])
+    end)
+  end)
+
   describe("get_changed_paths", function()
     local orig_system
     before_each(function()
