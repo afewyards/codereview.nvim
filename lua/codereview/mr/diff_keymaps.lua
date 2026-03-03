@@ -168,8 +168,23 @@ function M.setup_keymaps(state, layout, active_states)
     end
   end
 
+  -- Build SHA overrides from commit filter for commit-scoped comments.
+  local function commit_filter_shas()
+    if not state.commit_filter then
+      return {}
+    end
+    return {
+      base_sha = state.commit_filter.from_sha,
+      head_sha = state.commit_filter.to_sha,
+      start_sha = state.commit_filter.from_sha,
+      -- GitHub uses commit_sha instead of the base/head/start triple
+      commit_sha = state.commit_filter.to_sha,
+    }
+  end
+
   local function add_optimistic_comment(old_path, new_path, old_line, new_line, start_line)
     return function(text)
+      local shas = commit_filter_shas()
       local disc = {
         notes = {
           {
@@ -182,6 +197,10 @@ function M.setup_keymaps(state, layout, active_states)
               old_line = old_line,
               new_line = new_line,
               start_line = start_line,
+              base_sha = shas.base_sha,
+              head_sha = shas.head_sha,
+              start_sha = shas.start_sha,
+              commit_sha = shas.commit_sha,
             },
           },
         },
@@ -502,10 +521,19 @@ function M.setup_keymaps(state, layout, active_states)
         if session.get().active then
           local new_path = file.new_path
           local new_line = data.item.new_line
+          local shas = commit_filter_shas()
           comment.create_comment(state.review, {
             title = "Draft Comment",
             api_fn = function(provider, client, ctx, mr, text)
-              return provider.create_draft_comment(client, ctx, mr, { body = text, path = new_path, line = new_line })
+              return provider.create_draft_comment(client, ctx, mr, {
+                body = text,
+                path = new_path,
+                line = new_line,
+                base_sha = shas.base_sha,
+                head_sha = shas.head_sha,
+                start_sha = shas.start_sha,
+                commit_sha = shas.commit_sha,
+              })
             end,
             on_success = add_local_draft(file.new_path, data.item.new_line),
             success_msg = "Draft comment created",
@@ -517,6 +545,7 @@ function M.setup_keymaps(state, layout, active_states)
           local new_path = file.new_path
           local old_line = data.item.old_line
           local new_line = data.item.new_line
+          local shas = commit_filter_shas()
           comment.create_comment(state.review, {
             title = "Inline Comment",
             api_fn = function(provider, client, ctx, mr, text)
@@ -525,6 +554,10 @@ function M.setup_keymaps(state, layout, active_states)
                 new_path = new_path,
                 old_line = old_line,
                 new_line = new_line,
+                base_sha = shas.base_sha,
+                head_sha = shas.head_sha,
+                start_sha = shas.start_sha,
+                commit_sha = shas.commit_sha,
               })
             end,
             optimistic = {
@@ -561,10 +594,19 @@ function M.setup_keymaps(state, layout, active_states)
           local comment = require("codereview.mr.comment")
           local new_path = file.new_path
           local new_line = data.item.new_line
+          local shas = commit_filter_shas()
           comment.create_comment(state.review, {
             title = "Draft Comment",
             api_fn = function(provider, client, ctx, mr, text)
-              return provider.create_draft_comment(client, ctx, mr, { body = text, path = new_path, line = new_line })
+              return provider.create_draft_comment(client, ctx, mr, {
+                body = text,
+                path = new_path,
+                line = new_line,
+                base_sha = shas.base_sha,
+                head_sha = shas.head_sha,
+                start_sha = shas.start_sha,
+                commit_sha = shas.commit_sha,
+              })
             end,
             on_success = add_local_draft(file.new_path, data.item.new_line),
             success_msg = "Draft comment created",
@@ -621,10 +663,19 @@ function M.setup_keymaps(state, layout, active_states)
         if session.get().active then
           local new_path = file.new_path
           local end_line = end_data.item.new_line
+          local shas = commit_filter_shas()
           comment.create_comment(state.review, {
             title = "Draft Comment",
             api_fn = function(provider, client, ctx, mr, text)
-              return provider.create_draft_comment(client, ctx, mr, { body = text, path = new_path, line = end_line })
+              return provider.create_draft_comment(client, ctx, mr, {
+                body = text,
+                path = new_path,
+                line = end_line,
+                base_sha = shas.base_sha,
+                head_sha = shas.head_sha,
+                start_sha = shas.start_sha,
+                commit_sha = shas.commit_sha,
+              })
             end,
             on_success = add_local_draft(file.new_path, end_data.item.new_line, start_data.item.new_line),
             success_msg = "Draft comment created",
@@ -636,10 +687,11 @@ function M.setup_keymaps(state, layout, active_states)
           local new_path = file.new_path
           local start_pos = { old_line = start_data.item.old_line, new_line = start_data.item.new_line }
           local end_pos = { old_line = end_data.item.old_line, new_line = end_data.item.new_line }
+          local shas = commit_filter_shas()
           comment.create_comment(state.review, {
             title = "Range Comment",
             api_fn = function(provider, client, ctx, mr, text)
-              return provider.post_range_comment(client, ctx, mr, text, old_path, new_path, start_pos, end_pos)
+              return provider.post_range_comment(client, ctx, mr, text, old_path, new_path, start_pos, end_pos, shas)
             end,
             optimistic = {
               add = add_optimistic_comment(
@@ -684,10 +736,19 @@ function M.setup_keymaps(state, layout, active_states)
           local comment = require("codereview.mr.comment")
           local new_path = file.new_path
           local end_line = end_data.item.new_line
+          local shas = commit_filter_shas()
           comment.create_comment(state.review, {
             title = "Draft Comment",
             api_fn = function(provider, client, ctx, mr, text)
-              return provider.create_draft_comment(client, ctx, mr, { body = text, path = new_path, line = end_line })
+              return provider.create_draft_comment(client, ctx, mr, {
+                body = text,
+                path = new_path,
+                line = end_line,
+                base_sha = shas.base_sha,
+                head_sha = shas.head_sha,
+                start_sha = shas.start_sha,
+                commit_sha = shas.commit_sha,
+              })
             end,
             on_success = add_local_draft(file.new_path, end_data.item.new_line, start_data.item.new_line),
             success_msg = "Draft comment created",

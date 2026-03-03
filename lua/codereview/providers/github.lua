@@ -466,16 +466,18 @@ function M.post_comment(client, ctx, review, body, position)
 end
 
 --- Post a multi-line range comment (GitHub supports start_line/start_side).
-function M.post_range_comment(client, ctx, review, body, old_path, new_path, start_pos, end_pos)
+--- @param opts table|nil Optional overrides { commit_sha }
+function M.post_range_comment(client, ctx, review, body, old_path, new_path, start_pos, end_pos, opts)
   local headers, err = get_headers()
   if not headers then
     return nil, err
   end
+  opts = opts or {}
   local owner, repo = parse_owner_repo(ctx)
   local path_url = string.format("/repos/%s/%s/pulls/%d/comments", owner, repo, review.id)
   local payload = {
     body = body,
-    commit_id = review.sha,
+    commit_id = opts.commit_sha or review.sha,
     path = new_path or old_path,
     start_line = start_pos.new_line or start_pos.old_line,
     line = end_pos.new_line or end_pos.old_line,
@@ -718,7 +720,7 @@ function M.create_draft_comment(client, ctx, review, params)
     local reviews_path = string.format("/repos/%s/%s/pulls/%d/reviews", owner, repo, review.id)
     local resp, rev_err = client.post(ctx.base_url, reviews_path, {
       body = {
-        commit_id = review.sha,
+        commit_id = params.commit_sha or review.sha,
         comments = {
           {
             body = params.body,

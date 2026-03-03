@@ -332,9 +332,9 @@ function M.post_comment(client, ctx, review, body, position)
   if position then
     payload.position = {
       position_type = "text",
-      base_sha = review.base_sha,
-      head_sha = review.head_sha,
-      start_sha = review.start_sha,
+      base_sha = position.base_sha or review.base_sha,
+      head_sha = position.head_sha or review.head_sha,
+      start_sha = position.start_sha or review.start_sha,
       old_path = position.old_path,
       new_path = position.new_path,
       old_line = position.old_line,
@@ -346,29 +346,31 @@ function M.post_comment(client, ctx, review, body, position)
 end
 
 --- Post a range comment (GitLab line_range format).
-function M.post_range_comment(client, ctx, review, body, old_path, new_path, start_pos, end_pos)
+--- @param opts table|nil Optional SHA overrides { base_sha, head_sha, start_sha }
+function M.post_range_comment(client, ctx, review, body, old_path, new_path, start_pos, end_pos, opts)
   local headers, err = get_headers()
   if not headers then
     return nil, err
   end
+  opts = opts or {}
   local payload = {
     body = body,
     position = {
       position_type = "text",
-      base_sha = review.base_sha,
-      head_sha = review.head_sha,
-      start_sha = review.start_sha,
+      base_sha = opts.base_sha or review.base_sha,
+      head_sha = opts.head_sha or review.head_sha,
+      start_sha = opts.start_sha or review.start_sha,
       old_path = old_path,
       new_path = new_path,
+      old_line = end_pos.old_line,
+      new_line = end_pos.new_line,
       line_range = {
         start = {
-          line_code = nil,
           type = start_pos.type or "new",
           old_line = start_pos.old_line,
           new_line = start_pos.new_line,
         },
         ["end"] = {
-          line_code = nil,
           type = end_pos.type or "new",
           old_line = end_pos.old_line,
           new_line = end_pos.new_line,
@@ -570,7 +572,7 @@ function M.delete_draft_note(client, ctx, review, draft_id)
 end
 
 --- Create a draft note on an MR (not visible until published).
---- @param params table { body, path, line }
+--- @param params table { body, path, line, base_sha?, head_sha?, start_sha? }
 function M.create_draft_comment(client, ctx, review, params)
   local headers, err = get_headers()
   if not headers then
@@ -580,9 +582,9 @@ function M.create_draft_comment(client, ctx, review, params)
     note = params.body,
     position = {
       position_type = "text",
-      base_sha = review.base_sha,
-      head_sha = review.head_sha,
-      start_sha = review.start_sha,
+      base_sha = params.base_sha or review.base_sha,
+      head_sha = params.head_sha or review.head_sha,
+      start_sha = params.start_sha or review.start_sha,
       new_path = params.path,
       old_path = params.path,
       new_line = params.line,
