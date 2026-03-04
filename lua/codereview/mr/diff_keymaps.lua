@@ -64,7 +64,8 @@ function M.setup_keymaps(state, layout, active_states)
         state.row_selection,
         state.current_user,
         state.editing_note,
-        state.git_diff_cache
+        state.git_diff_cache,
+        state.commit_filter
       )
       diff_state.apply_scroll_result(state, result)
     else
@@ -272,7 +273,8 @@ function M.setup_keymaps(state, layout, active_states)
         state.row_selection,
         state.current_user,
         nil,
-        state.git_diff_cache
+        state.git_diff_cache,
+        state.commit_filter
       )
       diff_state.apply_scroll_result(state, result)
     else
@@ -900,7 +902,8 @@ function M.setup_keymaps(state, layout, active_states)
           state.row_selection,
           state.current_user,
           nil,
-          state.git_diff_cache
+          state.git_diff_cache,
+          state.commit_filter
         )
         diff_state.apply_scroll_result(state, result)
         local row = diff_nav.find_row_for_anchor(state.scroll_line_data, anchor)
@@ -1506,7 +1509,9 @@ function M.setup_keymaps(state, layout, active_states)
             state.ai_suggestions,
             state.row_selection,
             state.current_user,
-            state.git_diff_cache
+            nil,
+            state.git_diff_cache,
+            state.commit_filter
           )
           state.file_sections = result.file_sections
           state.scroll_line_data = result.line_data
@@ -2054,7 +2059,8 @@ function M.setup_keymaps(state, layout, active_states)
           state.row_selection,
           state.current_user,
           nil,
-          state.git_diff_cache
+          state.git_diff_cache,
+          state.commit_filter
         )
         diff_state.apply_scroll_result(state, result)
         diff_sidebar.render_sidebar(layout.sidebar_buf, state)

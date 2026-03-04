@@ -839,29 +839,34 @@ function M.render_all_files(
   row_selection,
   current_user,
   editing_note,
-  diff_cache
+  diff_cache,
+  commit_filter
 )
   local parser = require("codereview.mr.diff_parser")
   context = context or config.get().diff.context
   file_contexts = file_contexts or {}
+
+  local base_sha = commit_filter and commit_filter.from_sha or review.base_sha
+  local head_sha = commit_filter and commit_filter.to_sha or review.head_sha
+  local filter_suffix = commit_filter and (":" .. commit_filter.from_sha .. ".." .. commit_filter.to_sha) or ""
 
   local all_lines = {}
   local all_line_data = {}
   local file_sections = {}
 
   -- Batch git diff: collect uncached paths sharing the global context and fetch in one call
-  if review.base_sha and review.head_sha and diff_cache then
+  if base_sha and head_sha and diff_cache then
     local uncached_paths = {}
     for file_idx, file_diff in ipairs(files) do
       local fpath = file_diff.new_path or file_diff.old_path
       local file_ctx = file_contexts[file_idx] or context
-      local cache_key = fpath and (fpath .. ":" .. file_ctx) or nil
+      local cache_key = fpath and (fpath .. ":" .. file_ctx .. filter_suffix) or nil
       if fpath and file_ctx == context and not (cache_key and diff_cache[cache_key]) then
         table.insert(uncached_paths, fpath)
       end
     end
     if #uncached_paths > 0 then
-      local cmd = { "git", "diff", "-U" .. context, review.base_sha, review.head_sha, "--" }
+      local cmd = { "git", "diff", "-U" .. context, base_sha, head_sha, "--" }
       for _, p in ipairs(uncached_paths) do
         table.insert(cmd, p)
       end
@@ -869,7 +874,7 @@ function M.render_all_files(
       if vim.v.shell_error == 0 and result ~= "" then
         local batch = parser.parse_batch_diff(result)
         for path, diff_text in pairs(batch) do
-          local cache_key = path .. ":" .. context
+          local cache_key = path .. ":" .. context .. filter_suffix
           if not diff_cache[cache_key] then
             local hunks = parser.parse_hunks(diff_text)
             local display = parser.build_display(hunks, context)
@@ -900,7 +905,7 @@ function M.render_all_files(
     -- Parse and build display for this file (per-file context overrides global)
     local file_ctx = file_contexts[file_idx] or context
     local fpath = file_diff.new_path or file_diff.old_path
-    local cache_key = fpath and (fpath .. ":" .. file_ctx) or nil
+    local cache_key = fpath and (fpath .. ":" .. file_ctx .. filter_suffix) or nil
     local file_cached = diff_cache and cache_key and diff_cache[cache_key]
 
     local display
@@ -908,25 +913,25 @@ function M.render_all_files(
       display = file_cached.display
     else
       local diff_text = file_diff.diff or ""
-      if review.base_sha and review.head_sha and fpath then
+      if base_sha and head_sha and fpath then
         local result = vim.fn.system({
           "git",
           "diff",
           "-U" .. file_ctx,
-          review.base_sha,
-          review.head_sha,
+          base_sha,
+          head_sha,
           "--",
           fpath,
         })
         -- Only fetch missing objects when user explicitly changed context
         if vim.v.shell_error ~= 0 and file_ctx ~= context then
-          M.ensure_git_objects(review.base_sha, review.head_sha)
+          M.ensure_git_objects(base_sha, head_sha)
           result = vim.fn.system({
             "git",
             "diff",
             "-U" .. file_ctx,
-            review.base_sha,
-            review.head_sha,
+            base_sha,
+            head_sha,
             "--",
             fpath,
           })

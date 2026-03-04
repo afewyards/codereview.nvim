@@ -117,7 +117,8 @@ function M.open(review, discussions)
         state.row_selection,
         state.current_user,
         nil,
-        state.git_diff_cache
+        state.git_diff_cache,
+        state.commit_filter
       )
       diff_state.apply_scroll_result(state, render_result)
     else
@@ -169,7 +170,8 @@ function M.open(review, discussions)
           state.row_selection,
           state.current_user,
           nil,
-          state.git_diff_cache
+          state.git_diff_cache,
+          state.commit_filter
         )
         diff_state.apply_scroll_result(state, render_result)
       else

@@ -48,7 +48,10 @@ local function render_file_suggestions(diff_state, layout, suggestions)
         diff_state.file_contexts,
         diff_state.ai_suggestions,
         diff_state.row_selection,
-        diff_state.current_user
+        diff_state.current_user,
+        nil,
+        diff_state.git_diff_cache,
+        diff_state.commit_filter
       )
       diff_state_mod.apply_scroll_result(diff_state, result)
     else

@@ -149,7 +149,8 @@ function M.select(state, layout, entry)
         state.row_selection,
         state.current_user,
         state.editing_note,
-        state.git_diff_cache
+        state.git_diff_cache,
+        state.commit_filter
       )
       diff_state.apply_scroll_result(state, result)
     else

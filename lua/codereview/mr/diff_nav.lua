@@ -96,7 +96,8 @@ function M.jump_to_file(layout, state, file_idx)
         state.row_selection,
         state.current_user,
         nil,
-        state.git_diff_cache
+        state.git_diff_cache,
+        state.commit_filter
       )
       diff_state.apply_scroll_result(state, result)
       diff_sidebar.render_sidebar(layout.sidebar_buf, state)
@@ -390,7 +391,8 @@ function M.adjust_context(layout, state, delta)
       state.row_selection,
       state.current_user,
       nil,
-      state.git_diff_cache
+      state.git_diff_cache,
+      state.commit_filter
     )
     diff_state.apply_scroll_result(state, result)
     local row = M.find_row_for_anchor(state.scroll_line_data, anchor)
@@ -499,7 +501,8 @@ function M.toggle_scroll_mode(layout, state)
       state.row_selection,
       state.current_user,
       nil,
-      state.git_diff_cache
+      state.git_diff_cache,
+      state.commit_filter
     )
     diff_state.apply_scroll_result(state, result)
     local row = M.find_row_for_anchor(state.scroll_line_data, anchor)
