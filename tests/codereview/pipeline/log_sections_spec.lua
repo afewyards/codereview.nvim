@@ -89,5 +89,41 @@ describe("pipeline.log_sections", function()
       assert.equal("Running", result.sections[1].title)
       assert.equal(1, #result.sections[1].lines)
     end)
+
+    it("parses GitLab sections with integer-only timestamps", function()
+      local trace = table.concat({
+        "\27[0Ksection_start:1741234567:build_script\r\27[0KRunning build",
+        "make all",
+        "\27[0Ksection_end:1741234568:build_script\r\27[0K",
+      }, "\n")
+      local result = log_sections.parse(trace)
+      assert.equal(0, #result.prefix)
+      assert.equal(1, #result.sections)
+      assert.equal("Running build", result.sections[1].title)
+      assert.equal(1, #result.sections[1].lines)
+    end)
+
+    it("parses GitLab sections without carriage return", function()
+      local trace = table.concat({
+        "\27[0Ksection_start:1741234567.0:setup\27[0KSetup environment",
+        "installing deps",
+        "\27[0Ksection_end:1741234568.0:setup\27[0K",
+      }, "\n")
+      local result = log_sections.parse(trace)
+      assert.equal(0, #result.prefix)
+      assert.equal(1, #result.sections)
+      assert.equal("Setup environment", result.sections[1].title)
+    end)
+
+    it("parses GitLab sections with dots and hyphens in name", function()
+      local trace = table.concat({
+        "\27[0Ksection_start:1741234567:step_build.artifacts-v2\r\27[0KBuild artifacts",
+        "building...",
+        "\27[0Ksection_end:1741234568:step_build.artifacts-v2\r\27[0K",
+      }, "\n")
+      local result = log_sections.parse(trace)
+      assert.equal(1, #result.sections)
+      assert.equal("Build artifacts", result.sections[1].title)
+    end)
   end)
 end)

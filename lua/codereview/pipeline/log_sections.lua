@@ -65,7 +65,7 @@ function M.parse(trace)
     end
 
     -- GitLab: section_start
-    local gl_title = line:match("^\27%[0Ksection_start:%d+%.%d+:[%w_]+\r\27%[0K(.+)$")
+    local gl_title = line:match("^\27%[0Ksection_start:%d+[%.%d]*:[%w_%-%.]+\r?\27%[0K(.*)$")
     if gl_title then
       if current then
         table.insert(sections, current)
@@ -75,7 +75,7 @@ function M.parse(trace)
     end
 
     -- GitLab: section_end
-    if line:match("^\27%[0Ksection_end:%d+%.%d+:[%w_]+") then
+    if line:match("^\27%[0Ksection_end:%d+[%.%d]*:[%w_%-%.]+") then
       if current then
         table.insert(sections, current)
         current = nil
