@@ -8,8 +8,17 @@ function M.pick_mr(entries, on_select)
   local action_state = require("telescope.actions.state")
   local previewers = require("telescope.previewers")
 
+  local max_len = 0
+  for _, entry in ipairs(entries) do
+    max_len = math.max(max_len, vim.api.nvim_strwidth(entry.display))
+  end
+  local max_cols = math.floor(vim.o.columns * 0.9)
+  local width = math.min(max_len + 13, max_cols)
+
   pickers
     .new({}, {
+      layout_strategy = "vertical",
+      layout_config = { width = width },
       prompt_title = "Code Reviews",
       finder = finders.new_table({
         results = entries,
@@ -24,11 +33,23 @@ function M.pick_mr(entries, on_select)
       previewer = previewers.new_buffer_previewer({
         title = "Description",
         define_preview = function(self, entry)
-          local desc = entry.value.review and entry.value.review.description or ""
+          local e = entry.value
+          local title = e.title or ""
+          local desc = e.review and e.review.description or ""
           if desc == "" then
             desc = "(no description)"
           end
-          local lines = vim.split(desc, "\n", { plain = true })
+          local text = "# "
+            .. title
+            .. "\n\n"
+            .. "**Branch:** "
+            .. (e.source_branch or "")
+            .. "  \n"
+            .. "**Updated:** "
+            .. (e.time_str or "")
+            .. "\n\n"
+            .. desc
+          local lines = vim.split(text, "\n", { plain = true })
           vim.api.nvim_buf_set_lines(self.state.bufnr, 0, -1, false, lines)
           vim.bo[self.state.bufnr].syntax = "markdown"
         end,

@@ -24,20 +24,14 @@ function M.format_mr_entry(review, unread_ids)
   local icon = M.pipeline_icon(review.pipeline_status)
   local tvl = require("codereview.mr.thread_virt_lines")
   local time_str = tvl.format_time_relative(review.updated_at)
-  local unread = unread_ids and unread_ids[review.id] and "*" or " "
-  local display = string.format(
-    "%s%s #%-4d %-50s @%-15s %-10s %s",
-    unread,
-    icon,
-    review.id,
-    review.title:sub(1, 50),
-    review.author,
-    time_str,
-    review.source_branch
-  )
+  local unread = unread_ids and unread_ids[review.id]
+  local title = #review.title > 80 and review.title:sub(1, 77) .. "..." or review.title
 
   return {
-    display = display,
+    pipeline_icon = icon,
+    time_str = time_str,
+    unread = unread,
+    title_display = title,
     id = review.id,
     title = review.title,
     author = review.author,
@@ -46,6 +40,26 @@ function M.format_mr_entry(review, unread_ids)
     web_url = review.web_url,
     review = review,
   }
+end
+
+function M.format_entries(entries)
+  local max_title, max_author, max_id = 0, 0, 0
+  for _, e in ipairs(entries) do
+    max_title = math.max(max_title, #e.title_display)
+    max_author = math.max(max_author, #e.author)
+    max_id = math.max(max_id, #tostring(e.id))
+  end
+  for _, e in ipairs(entries) do
+    e.display = string.format(
+      "%s%s #%-" .. max_id .. "d %-" .. max_title .. "s  @%-" .. max_author .. "s  %s",
+      e.unread and "*" or " ",
+      e.pipeline_icon,
+      e.id,
+      e.title_display,
+      e.author,
+      e.time_str
+    )
+  end
 end
 
 function M.fetch(opts, callback)
@@ -78,6 +92,7 @@ function M.fetch(opts, callback)
       for _, review in ipairs(reviews) do
         table.insert(entries, M.format_mr_entry(review, unread_ids))
       end
+      M.format_entries(entries)
       callback(entries)
     end)
   end)

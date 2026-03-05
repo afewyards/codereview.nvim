@@ -13,6 +13,7 @@ describe("mr.list", function()
         approvals_required = 2,
       }
       local entry = list.format_mr_entry(review)
+      list.format_entries({ entry })
       assert.truthy(entry.display:find("#42"))
       assert.truthy(entry.display:find("Fix auth"))
       assert.truthy(entry.display:find("maria"))
@@ -28,6 +29,7 @@ describe("mr.list", function()
         pipeline_status = nil,
       }
       local entry = list.format_mr_entry(review)
+      list.format_entries({ entry })
       assert.truthy(entry.display:find("#10"))
     end)
   end)
