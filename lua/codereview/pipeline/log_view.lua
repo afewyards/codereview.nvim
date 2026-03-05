@@ -24,8 +24,7 @@ function M.build_display(parsed, max_lines)
     local p = ansi.parse(line)
     table.insert(lines, p.lines[1] or line)
     for _, hl in ipairs(p.highlights) do
-      hl.line = #lines
-      table.insert(highlights, hl)
+      table.insert(highlights, vim.tbl_extend("force", hl, { line = #lines }))
     end
     total = total + 1
     if max_lines and total >= max_lines then
@@ -67,10 +66,14 @@ function M.build_display(parsed, max_lines)
         local text = "  " .. (p.lines[1] or content_line)
         table.insert(lines, text)
         for _, hl in ipairs(p.highlights) do
-          hl.line = #lines
-          hl.col_start = hl.col_start + 2
-          hl.col_end = hl.col_end + 2
-          table.insert(highlights, hl)
+          table.insert(
+            highlights,
+            vim.tbl_extend("force", hl, {
+              line = #lines,
+              col_start = hl.col_start + 2,
+              col_end = hl.col_end + 2,
+            })
+          )
         end
         total = total + 1
       end
@@ -180,8 +183,13 @@ function M.open(job, trace, max_lines)
 
     -- Restore cursor to same section
     if old_si then
-      for r, si in pairs(new_display.section_map) do
-        if si == old_si then
+      local restore_rows = {}
+      for r in pairs(new_display.section_map) do
+        table.insert(restore_rows, r)
+      end
+      table.sort(restore_rows)
+      for _, r in ipairs(restore_rows) do
+        if new_display.section_map[r] == old_si then
           pcall(vim.api.nvim_win_set_cursor, win, { r, 0 })
           return
         end
@@ -228,7 +236,13 @@ function M.open(job, trace, max_lines)
 
   -- Scroll to first error section, or bottom
   local target_row = #lines
-  for row_num, si in pairs(display.section_map) do
+  local sorted_rows = {}
+  for row_num in pairs(display.section_map) do
+    table.insert(sorted_rows, row_num)
+  end
+  table.sort(sorted_rows)
+  for _, row_num in ipairs(sorted_rows) do
+    local si = display.section_map[row_num]
     if parsed.sections[si] and parsed.sections[si].has_errors and not parsed.sections[si].collapsed then
       target_row = row_num
       break

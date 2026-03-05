@@ -75,7 +75,7 @@ describe("pipeline.log_sections", function()
 
     it("handles empty trace", function()
       local result = log_sections.parse("")
-      assert.equal(1, #result.prefix)
+      assert.equal(0, #result.prefix)
       assert.equal(0, #result.sections)
     end)
 

@@ -14,9 +14,9 @@ local M = {}
 
 -- Red ANSI patterns that indicate errors
 local ERROR_PATTERNS = {
-  "\27%[31m",      -- basic red
-  "\27%[0;31m",    -- reset + red
-  "\27%[1;31m",    -- bold red
+  "\27%[31m", -- basic red
+  "\27%[0;31m", -- reset + red
+  "\27%[1;31m", -- bold red
 }
 
 local function has_red_ansi(line)
@@ -32,6 +32,9 @@ end
 --- @param trace string
 --- @return ParseResult
 function M.parse(trace)
+  if trace == "" then
+    return { prefix = {}, sections = {} }
+  end
   local lines = {}
   for line in (trace .. "\n"):gmatch("(.-)\n") do
     table.insert(lines, line)
@@ -72,7 +75,7 @@ function M.parse(trace)
     end
 
     -- GitLab: section_end
-    if line:match("^\27%[0Ksection_end:") then
+    if line:match("^\27%[0Ksection_end:%d+%.%d+:[%w_]+") then
       if current then
         table.insert(sections, current)
         current = nil
