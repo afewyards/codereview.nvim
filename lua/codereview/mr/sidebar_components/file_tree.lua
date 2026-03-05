@@ -6,24 +6,40 @@ local M = {}
 
 local diff_render = require("codereview.mr.diff_render")
 local discussion_matches_file = diff_render.discussion_matches_file
+local discussion_line = diff_render.discussion_line
+local build_line_to_row = diff_render.build_line_to_row
 
 -- ─── Count helpers ─────────────────────────────────────────────────────────
 
-local function count_file_comments(file, discussions)
+local function count_file_comments(file, discussions, line_to_row)
   local n = 0
   for _, disc in ipairs(discussions or {}) do
     if discussion_matches_file(disc, file) then
-      n = n + 1
+      if line_to_row then
+        local target_line = discussion_line(disc)
+        if target_line and line_to_row[target_line] then
+          n = n + 1
+        end
+      else
+        n = n + 1
+      end
     end
   end
   return n
 end
 
-local function count_file_unresolved(file, discussions)
+local function count_file_unresolved(file, discussions, line_to_row)
   local n = 0
   for _, disc in ipairs(discussions or {}) do
     if discussion_matches_file(disc, file) and not disc.local_draft and not disc.resolved then
-      n = n + 1
+      if line_to_row then
+        local target_line = discussion_line(disc)
+        if target_line and line_to_row[target_line] then
+          n = n + 1
+        end
+      else
+        n = n + 1
+      end
     end
   end
   return n
@@ -64,9 +80,16 @@ local function render_file_entry(state, files, entry, lines, row_map, max_name_b
   local file = files[entry.idx]
   local path = entry.path
 
-  local ccount = count_file_comments(file, state.discussions)
+  -- Build line_to_row from cache when available (filters phantom comments)
+  local line_to_row
+  local cached_ld = state.line_data_cache and state.line_data_cache[entry.idx]
+  if cached_ld then
+    line_to_row = build_line_to_row(cached_ld)
+  end
+
+  local ccount = count_file_comments(file, state.discussions, line_to_row)
   local cstr = ccount > 0 and (" " .. ccount) or ""
-  local ucount = count_file_unresolved(file, state.discussions)
+  local ucount = count_file_unresolved(file, state.discussions, line_to_row)
   local ustr = ucount > 0 and (" ⚠" .. ucount) or ""
   local aicount = count_file_ai(file, state.ai_suggestions)
   local aistr = aicount > 0 and (" ✨" .. aicount) or ""

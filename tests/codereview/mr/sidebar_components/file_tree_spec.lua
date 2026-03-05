@@ -85,6 +85,73 @@ describe("sidebar_components.file_tree", function()
     assert.truthy(unvisited_line:find("○"), "unvisited file should show ○ icon")
   end)
 
+  it("excludes comments on lines not in the diff when line_data is cached", function()
+    local state = {
+      view_mode = "diff",
+      current_file = 1,
+      collapsed_dirs = {},
+      file_review_status = {},
+      discussions = {
+        -- line 5 is in the diff
+        { notes = { { position = { new_path = "a.lua", new_line = 5 } } }, resolved = false, local_draft = false },
+        -- line 99 is NOT in the diff
+        { notes = { { position = { new_path = "a.lua", new_line = 99 } } }, resolved = false, local_draft = false },
+      },
+      ai_suggestions = {},
+      files = {
+        { new_path = "a.lua", old_path = "a.lua" },
+      },
+      -- Simulate cached line_data: only line 5 exists in the rendered diff
+      line_data_cache = {
+        [1] = {
+          { item = { new_line = 5 } },
+        },
+      },
+    }
+    local lines, row_map = {}, {}
+    file_tree.render(state, lines, row_map)
+
+    -- Should show count=1 (only the placeable comment), not 2
+    local file_line
+    for row, entry in pairs(row_map) do
+      if entry.type == "file" and entry.path == "a.lua" then
+        file_line = lines[row]
+      end
+    end
+    assert.truthy(file_line, "Expected a.lua entry")
+    assert.truthy(file_line:find(" 1"), "Should count only 1 placeable comment")
+    assert.falsy(file_line:find(" 2"), "Should NOT count unplaceable comment")
+  end)
+
+  it("falls back to path-only counting when no line_data cached", function()
+    local state = {
+      view_mode = "diff",
+      current_file = 1,
+      collapsed_dirs = {},
+      file_review_status = {},
+      discussions = {
+        { notes = { { position = { new_path = "a.lua", new_line = 5 } } }, resolved = false, local_draft = false },
+        { notes = { { position = { new_path = "a.lua", new_line = 99 } } }, resolved = false, local_draft = false },
+      },
+      ai_suggestions = {},
+      files = {
+        { new_path = "a.lua", old_path = "a.lua" },
+      },
+      -- No line_data_cache — fallback to path-only
+    }
+    local lines, row_map = {}, {}
+    file_tree.render(state, lines, row_map)
+
+    local file_line
+    for row, entry in pairs(row_map) do
+      if entry.type == "file" and entry.path == "a.lua" then
+        file_line = lines[row]
+      end
+    end
+    assert.truthy(file_line, "Expected a.lua entry")
+    assert.truthy(file_line:find(" 2"), "Should count both comments when no cache")
+  end)
+
   it("shows ▸ for current file instead of review status icon", function()
     local state = {
       view_mode = "diff",
