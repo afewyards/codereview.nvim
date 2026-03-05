@@ -5,31 +5,53 @@ M.name = "demo"
 -- 3 mock PRs
 local reviews = {
   {
-    id = 42, title = "Refactor auth middleware", author = "alice",
-    source_branch = "refactor/auth-middleware", target_branch = "main",
-    state = "opened", web_url = "https://github.com/demo/showcase/pull/42",
+    id = 42,
+    title = "Refactor auth middleware",
+    author = "alice",
+    source_branch = "refactor/auth-middleware",
+    target_branch = "main",
+    state = "opened",
+    web_url = "https://github.com/demo/showcase/pull/42",
     description = "Extract token validation into a utility module.\n\nThis PR:\n- Moves JWT logic out of the middleware\n- Adds proper error types\n- Adds unit tests",
     pipeline_status = "failed",
-    base_sha = "abc1234", head_sha = "def5678", sha = "def5678",
-    approved_by = {}, approvals_required = 1, merge_status = "can_be_merged",
+    base_sha = "abc1234",
+    head_sha = "def5678",
+    sha = "def5678",
+    approved_by = {},
+    approvals_required = 1,
+    merge_status = "can_be_merged",
   },
   {
-    id = 38, title = "Add dark mode support", author = "bob",
-    source_branch = "feat/dark-mode", target_branch = "main",
-    state = "opened", web_url = "https://github.com/demo/showcase/pull/38",
+    id = 38,
+    title = "Add dark mode support",
+    author = "bob",
+    source_branch = "feat/dark-mode",
+    target_branch = "main",
+    state = "opened",
+    web_url = "https://github.com/demo/showcase/pull/38",
     description = "Adds system-preference-aware dark mode toggle.",
     pipeline_status = "running",
-    base_sha = "111aaaa", head_sha = "222bbbb", sha = "222bbbb",
-    approved_by = {}, approvals_required = 1,
+    base_sha = "111aaaa",
+    head_sha = "222bbbb",
+    sha = "222bbbb",
+    approved_by = {},
+    approvals_required = 1,
   },
   {
-    id = 35, title = "Fix pagination off-by-one", author = "charlie",
-    source_branch = "fix/pagination", target_branch = "main",
-    state = "opened", web_url = "https://github.com/demo/showcase/pull/35",
+    id = 35,
+    title = "Fix pagination off-by-one",
+    author = "charlie",
+    source_branch = "fix/pagination",
+    target_branch = "main",
+    state = "opened",
+    web_url = "https://github.com/demo/showcase/pull/35",
     description = "Fixes the off-by-one error on the last page.",
     pipeline_status = "success",
-    base_sha = "333cccc", head_sha = "444dddd", sha = "444dddd",
-    approved_by = { "alice" }, approvals_required = 1,
+    base_sha = "333cccc",
+    head_sha = "444dddd",
+    sha = "444dddd",
+    approved_by = { "alice" },
+    approvals_required = 1,
   },
 }
 
@@ -38,7 +60,9 @@ local diffs_42 = {
   {
     new_path = "src/middleware/auth.ts",
     old_path = "src/middleware/auth.ts",
-    new_file = false, renamed_file = false, deleted_file = false,
+    new_file = false,
+    renamed_file = false,
+    deleted_file = false,
     diff = table.concat({
       "@@ -1,18 +1,15 @@",
       "-import { Request, Response, NextFunction } from 'express';",
@@ -75,7 +99,9 @@ local diffs_42 = {
   {
     new_path = "src/utils/token.ts",
     old_path = "src/utils/token.ts",
-    new_file = true, renamed_file = false, deleted_file = false,
+    new_file = true,
+    renamed_file = false,
+    deleted_file = false,
     diff = table.concat({
       "@@ -0,0 +1,27 @@",
       "+import jwt from 'jsonwebtoken';",
@@ -111,7 +137,9 @@ local diffs_42 = {
   {
     new_path = "src/routes/login.ts",
     old_path = "src/routes/login.ts",
-    new_file = false, renamed_file = false, deleted_file = false,
+    new_file = false,
+    renamed_file = false,
+    deleted_file = false,
     diff = table.concat({
       "@@ -1,5 +1,5 @@",
       " import { Router } from 'express';",
@@ -134,7 +162,9 @@ local diffs_42 = {
   {
     new_path = "tests/middleware/auth.test.ts",
     old_path = "tests/middleware/auth.test.ts",
-    new_file = true, renamed_file = false, deleted_file = false,
+    new_file = true,
+    renamed_file = false,
+    deleted_file = false,
     diff = table.concat({
       "@@ -0,0 +1,28 @@",
       "+import { describe, it, expect, vi } from 'vitest';",
@@ -176,15 +206,31 @@ local discussions_42 = {
     resolved = true,
     notes = {
       {
-        id = 101, author = "bob", body = "Should we keep the fallback `'dev-secret'` for local development?",
-        created_at = "2026-02-27T09:15:00Z", system = false, resolvable = true,
-        resolved = true, resolved_by = "alice",
-        position = { new_path = "src/middleware/auth.ts", old_path = "src/middleware/auth.ts", new_line = 4, old_line = nil },
+        id = 101,
+        author = "bob",
+        body = "Should we keep the fallback `'dev-secret'` for local development?",
+        created_at = "2026-02-27T09:15:00Z",
+        system = false,
+        resolvable = true,
+        resolved = true,
+        resolved_by = "alice",
+        position = {
+          new_path = "src/middleware/auth.ts",
+          old_path = "src/middleware/auth.ts",
+          new_line = 4,
+          old_line = nil,
+        },
       },
       {
-        id = 102, author = "alice", body = "No — the new `token.ts` throws at startup if `JWT_SECRET` isn't set, which is safer. Resolving.",
-        created_at = "2026-02-27T09:22:00Z", system = false, resolvable = false,
-        resolved = false, resolved_by = nil, position = nil,
+        id = 102,
+        author = "alice",
+        body = "No — the new `token.ts` throws at startup if `JWT_SECRET` isn't set, which is safer. Resolving.",
+        created_at = "2026-02-27T09:22:00Z",
+        system = false,
+        resolvable = false,
+        resolved = false,
+        resolved_by = nil,
+        position = nil,
       },
     },
   },
@@ -193,10 +239,14 @@ local discussions_42 = {
     resolved = false,
     notes = {
       {
-        id = 201, author = "charlie",
+        id = 201,
+        author = "charlie",
         body = "Nice extraction! One thought — `extractTokenFromHeader` could support multiple schemes in the future (e.g., `Basic` for service-to-service).",
-        created_at = "2026-02-27T14:05:00Z", system = false, resolvable = true,
-        resolved = false, resolved_by = nil,
+        created_at = "2026-02-27T14:05:00Z",
+        system = false,
+        resolvable = true,
+        resolved = false,
+        resolved_by = nil,
         position = { new_path = "src/utils/token.ts", old_path = "src/utils/token.ts", new_line = 9, old_line = nil },
       },
     },
@@ -206,28 +256,40 @@ local discussions_42 = {
 -- Commits for PR #42 (newest-first, already normalized)
 local commits_42 = {
   {
-    sha = "def5678def5678def5678", short_sha = "def5678d",
+    sha = "def5678def5678def5678",
+    short_sha = "def5678d",
     title = "Add auth middleware unit tests",
-    author = "alice", created_at = "2026-02-27T11:30:00Z",
-    additions = 28, deletions = 0,
+    author = "alice",
+    created_at = "2026-02-27T11:30:00Z",
+    additions = 28,
+    deletions = 0,
   },
   {
-    sha = "ccc4444ccc4444ccc4444", short_sha = "ccc4444c",
+    sha = "ccc4444ccc4444ccc4444",
+    short_sha = "ccc4444c",
     title = "Update login route to use token utility",
-    author = "alice", created_at = "2026-02-27T10:15:00Z",
-    additions = 2, deletions = 2,
+    author = "alice",
+    created_at = "2026-02-27T10:15:00Z",
+    additions = 2,
+    deletions = 2,
   },
   {
-    sha = "bbb3333bbb3333bbb3333", short_sha = "bbb3333b",
+    sha = "bbb3333bbb3333bbb3333",
+    short_sha = "bbb3333b",
     title = "Extract token validation into utils/token.ts",
-    author = "alice", created_at = "2026-02-27T09:45:00Z",
-    additions = 27, deletions = 0,
+    author = "alice",
+    created_at = "2026-02-27T09:45:00Z",
+    additions = 27,
+    deletions = 0,
   },
   {
-    sha = "aaa2222aaa2222aaa2222", short_sha = "aaa2222a",
+    sha = "aaa2222aaa2222aaa2222",
+    short_sha = "aaa2222a",
     title = "Refactor auth middleware to use verifyToken",
-    author = "alice", created_at = "2026-02-27T09:00:00Z",
-    additions = 8, deletions = 12,
+    author = "alice",
+    created_at = "2026-02-27T09:00:00Z",
+    additions = 8,
+    deletions = 12,
   },
 }
 
@@ -338,13 +400,17 @@ end
 
 function M.get_review(_client, _ctx, id)
   for _, r in ipairs(reviews) do
-    if r.id == id then return r, nil end
+    if r.id == id then
+      return r, nil
+    end
   end
   return nil, "Not found"
 end
 
 function M.get_diffs(_client, _ctx, review)
-  if review.id == 42 then return diffs_42, nil end
+  if review.id == 42 then
+    return diffs_42, nil
+  end
   return {}, nil
 end
 
@@ -355,8 +421,12 @@ local posted_comments = {}
 function M.get_discussions(_client, _ctx, review)
   if review.id == 42 then
     local discs = {}
-    for _, d in ipairs(discussions_42) do table.insert(discs, d) end
-    for _, d in ipairs(posted_comments) do table.insert(discs, d) end
+    for _, d in ipairs(discussions_42) do
+      table.insert(discs, d)
+    end
+    for _, d in ipairs(posted_comments) do
+      table.insert(discs, d)
+    end
     return discs, nil
   end
   return {}, nil
@@ -367,7 +437,9 @@ function M.get_file_content(_client, _ctx, _ref, path)
 end
 
 function M.get_commits(_client, _ctx, review)
-  if review.id == 42 then return commits_42, nil end
+  if review.id == 42 then
+    return commits_42, nil
+  end
   return {}, nil
 end
 
@@ -393,12 +465,18 @@ function M.post_comment(_client, _ctx, _review, body, position)
   table.insert(posted_comments, {
     id = "disc-posted-" .. next_id,
     resolved = false,
-    notes = {{
-      id = next_id, author = "demo-user", body = body,
-      created_at = os.date("!%Y-%m-%dT%H:%M:%SZ"), system = false,
-      resolvable = true, resolved = false,
-      position = norm_pos,
-    }},
+    notes = {
+      {
+        id = next_id,
+        author = "demo-user",
+        body = body,
+        created_at = os.date("!%Y-%m-%dT%H:%M:%SZ"),
+        system = false,
+        resolvable = true,
+        resolved = false,
+        position = norm_pos,
+      },
+    },
   })
   return { id = next_id }, nil
 end
@@ -419,31 +497,59 @@ function M.create_draft_comment(_client, _ctx, review, opts)
   table.insert(posted_comments, {
     id = "disc-posted-" .. next_id,
     resolved = false,
-    notes = {{
-      id = next_id, author = "demo-user", body = opts.body or "",
-      created_at = os.date("!%Y-%m-%dT%H:%M:%SZ"), system = false,
-      resolvable = true, resolved = false,
-      position = { new_path = opts.path, old_path = opts.path, new_line = opts.line },
-    }},
+    notes = {
+      {
+        id = next_id,
+        author = "demo-user",
+        body = opts.body or "",
+        created_at = os.date("!%Y-%m-%dT%H:%M:%SZ"),
+        system = false,
+        resolvable = true,
+        resolved = false,
+        position = { new_path = opts.path, old_path = opts.path, new_line = opts.line },
+      },
+    },
   })
   return { id = next_id }, nil
 end
 
 -- Other write stubs
-function M.edit_note(_client, _ctx, _review, _note_id, _body) return { id = 903 }, nil end
-function M.delete_note(_client, _ctx, _review, _note_id) return true, nil end
-function M.resolve_discussion(_client, _ctx, _review, _disc_id, _resolved) return true, nil end
-function M.approve(_client, _ctx, _review) return true, nil end
-function M.unapprove(_client, _ctx, _review) return true, nil end
-function M.merge(_client, _ctx, _review) return true, nil end
-function M.close(_client, _ctx, _review) return true, nil end
+function M.edit_note(_client, _ctx, _review, _note_id, _body)
+  return { id = 903 }, nil
+end
+function M.delete_note(_client, _ctx, _review, _note_id)
+  return true, nil
+end
+function M.resolve_discussion(_client, _ctx, _review, _disc_id, _resolved)
+  return true, nil
+end
+function M.approve(_client, _ctx, _review)
+  return true, nil
+end
+function M.unapprove(_client, _ctx, _review)
+  return true, nil
+end
+function M.merge(_client, _ctx, _review)
+  return true, nil
+end
+function M.close(_client, _ctx, _review)
+  return true, nil
+end
 function M.create_review(_client, _ctx, _opts)
   return { data = { iid = 99, web_url = "https://gitlab.com/acme/api-server/-/merge_requests/99" } }, nil
 end
-function M.get_pending_review_drafts(_client, _ctx, _review) return {}, nil end
-function M.get_draft_notes(_client, _ctx, _review, _review_id) return {}, nil end
-function M.delete_draft_note(_client, _ctx, _review, _note_id) return true, nil end
-function M.publish_review(_client, _ctx, _review, _review_id, _body) return true, nil end
+function M.get_pending_review_drafts(_client, _ctx, _review)
+  return {}, nil
+end
+function M.get_draft_notes(_client, _ctx, _review, _review_id)
+  return {}, nil
+end
+function M.delete_draft_note(_client, _ctx, _review, _note_id)
+  return true, nil
+end
+function M.publish_review(_client, _ctx, _review, _review_id, _body)
+  return true, nil
+end
 
 -- ── Pipeline mock data (PR #42) ──────────────────────────────
 local mock_pipeline = {
@@ -458,13 +564,83 @@ local mock_pipeline = {
 }
 
 local mock_jobs = {
-  { id = 1001, name = "compile",            stage = "build",    status = "success", duration = 45,  allow_failure = false, web_url = "", started_at = "", finished_at = "" },
-  { id = 1002, name = "lint",               stage = "build",    status = "success", duration = 12,  allow_failure = false, web_url = "", started_at = "", finished_at = "" },
-  { id = 1003, name = "unit-tests",         stage = "test",     status = "failed",  duration = 125, allow_failure = false, web_url = "", started_at = "", finished_at = "" },
-  { id = 1004, name = "integration-tests",  stage = "test",     status = "success", duration = 198, allow_failure = false, web_url = "", started_at = "", finished_at = "" },
-  { id = 1005, name = "sast-scan",          stage = "security", status = "success", duration = 67,  allow_failure = false, web_url = "", started_at = "", finished_at = "" },
-  { id = 1006, name = "staging",            stage = "deploy",   status = "skipped", duration = 0,   allow_failure = false, web_url = "", started_at = "", finished_at = "" },
-  { id = 1007, name = "production",         stage = "deploy",   status = "skipped", duration = 0,   allow_failure = false, web_url = "", started_at = "", finished_at = "" },
+  {
+    id = 1001,
+    name = "compile",
+    stage = "build",
+    status = "success",
+    duration = 45,
+    allow_failure = false,
+    web_url = "",
+    started_at = "",
+    finished_at = "",
+  },
+  {
+    id = 1002,
+    name = "lint",
+    stage = "build",
+    status = "success",
+    duration = 12,
+    allow_failure = false,
+    web_url = "",
+    started_at = "",
+    finished_at = "",
+  },
+  {
+    id = 1003,
+    name = "unit-tests",
+    stage = "test",
+    status = "failed",
+    duration = 125,
+    allow_failure = false,
+    web_url = "",
+    started_at = "",
+    finished_at = "",
+  },
+  {
+    id = 1004,
+    name = "integration-tests",
+    stage = "test",
+    status = "success",
+    duration = 198,
+    allow_failure = false,
+    web_url = "",
+    started_at = "",
+    finished_at = "",
+  },
+  {
+    id = 1005,
+    name = "sast-scan",
+    stage = "security",
+    status = "success",
+    duration = 67,
+    allow_failure = false,
+    web_url = "",
+    started_at = "",
+    finished_at = "",
+  },
+  {
+    id = 1006,
+    name = "staging",
+    stage = "deploy",
+    status = "skipped",
+    duration = 0,
+    allow_failure = false,
+    web_url = "",
+    started_at = "",
+    finished_at = "",
+  },
+  {
+    id = 1007,
+    name = "production",
+    stage = "deploy",
+    status = "skipped",
+    duration = 0,
+    allow_failure = false,
+    web_url = "",
+    started_at = "",
+    finished_at = "",
+  },
 }
 
 -- ANSI-colored fake test output for the failed unit-tests job.
@@ -483,7 +659,7 @@ local unit_test_trace = table.concat({
   "",
   "\27[1m\27[31m  FAIL \27[0m src/middleware/auth.test.ts > authMiddleware > calls next with valid token",
   "",
-  "\27[31m  AssertionError: expected \"spy\" to be called with valid payload\27[0m",
+  '\27[31m  AssertionError: expected "spy" to be called with valid payload\27[0m',
   "",
   "    \27[2m  at tests/middleware/auth.test.ts:22:12\27[0m",
   "    \27[2m  at processTicksAndRejections (node:internal/process/task_queues:95:5)\27[0m",
@@ -495,7 +671,9 @@ local unit_test_trace = table.concat({
 local fallback_trace = "No log output available."
 
 function M.get_pipeline(_client, _ctx, review)
-  if review.id == 42 then return mock_pipeline, nil end
+  if review.id == 42 then
+    return mock_pipeline, nil
+  end
   return nil, "No pipeline"
 end
 
@@ -504,12 +682,26 @@ function M.get_pipeline_jobs(_client, _ctx, _review, _pipeline_id)
 end
 
 function M.get_job_trace(_client, _ctx, _review, job_id)
-  if job_id == 1003 then return unit_test_trace, nil end
+  if job_id == 1003 then
+    return unit_test_trace, nil
+  end
   return fallback_trace, nil
 end
 
-function M.retry_job(_client, _ctx, _review, _job_id) return true, nil end
-function M.cancel_job(_client, _ctx, _review, _job_id) return true, nil end
-function M.play_job(_client, _ctx, _review, _job_id) return true, nil end
+function M.retry_job(_client, _ctx, _review, _job_id)
+  return true, nil
+end
+function M.cancel_job(_client, _ctx, _review, _job_id)
+  return true, nil
+end
+function M.play_job(_client, _ctx, _review, _job_id)
+  return true, nil
+end
+
+function M.build_commit_matcher(_commits, _versions)
+  return function()
+    return true
+  end
+end
 
 return M
