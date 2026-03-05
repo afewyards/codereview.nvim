@@ -13,10 +13,7 @@ function M.set_commit(win, sha, title)
   end
   local short_sha = sha:sub(1, 7)
   -- %#HlGroup# syntax: dim SHA, normal title
-  vim.wo[win].winbar = " %#CodeReviewWinbarIcon#●%* %#CodeReviewWinbarSha#"
-    .. short_sha
-    .. "%* "
-    .. title
+  vim.wo[win].winbar = " %#CodeReviewWinbarIcon#●%* %#CodeReviewWinbarSha#" .. short_sha .. "%* " .. title
 end
 
 --- Clear the winbar on the main pane.
