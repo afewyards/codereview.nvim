@@ -15,88 +15,15 @@ local function clear_caches(state)
   state.file_sections = {}
 end
 
---- Build a map from commit SHA to the version head_commit_sha(s) that contain it.
---- Commits list is newest-first. Versions are sorted by created_at ascending.
---- @param commits table[] Array of { sha, ... } (newest first)
---- @param versions table[] Array of { head_commit_sha, created_at }
---- @return table<string, string[]> commit_sha -> list of version head SHAs
-function M.build_version_map(commits, versions)
-  if #commits == 0 or #versions == 0 then
-    return {}
-  end
-
-  -- Sort versions by created_at ascending (oldest first)
-  local sorted_versions = {}
-  for _, v in ipairs(versions) do
-    table.insert(sorted_versions, v)
-  end
-  table.sort(sorted_versions, function(a, b)
-    return (a.created_at or "") < (b.created_at or "")
-  end)
-
-  -- Reverse commits to oldest-first
-  local ordered = {}
-  for i = #commits, 1, -1 do
-    table.insert(ordered, commits[i].sha)
-  end
-
-  -- Build commit_index for O(1) lookup
-  local commit_index = {}
-  for i, sha in ipairs(ordered) do
-    commit_index[sha] = i
-  end
-
-  -- Walk versions; each version "owns" commits from prev boundary+1 to its head
-  local map = {}
-  local prev_idx = 0
-  for _, v in ipairs(sorted_versions) do
-    local v_idx = commit_index[v.head_commit_sha]
-    if v_idx then
-      for i = prev_idx + 1, v_idx do
-        map[ordered[i]] = map[ordered[i]] or {}
-        table.insert(map[ordered[i]], v.head_commit_sha)
-      end
-      prev_idx = v_idx
-    end
-  end
-
-  return map
-end
-
---- Check if a discussion matches the given commit filter.
---- Matching order: 1) direct SHA, 2) version map, 3) file-path fallback.
+--- Check if a discussion matches the given commit SHA via the provider matcher.
 --- @param disc table
---- @param filter table { from_sha, to_sha, changed_paths_set? }
---- @param version_map table<string, string[]>? commit_sha -> version head SHAs
+--- @param commit_sha string
+--- @param matcher fun(position: table|nil, commit_sha: string): boolean
 --- @return boolean
-function M.matches_discussion(disc, filter, version_map)
-  local version_heads = version_map and version_map[filter.to_sha]
+function M.matches_discussion(disc, commit_sha, matcher)
   for _, note in ipairs(disc.notes or {}) do
-    local pos = note.position
-    if pos then
-      -- 1) Direct SHA match (works when comment was made at this exact commit HEAD)
-      if pos.head_sha == filter.to_sha or pos.commit_sha == filter.to_sha then
-        return true
-      end
-      -- 2) Version map match (GitLab: head_sha matches a version that owns this commit)
-      if version_heads then
-        for _, vh in ipairs(version_heads) do
-          if pos.head_sha == vh then
-            return true
-          end
-        end
-      end
-    end
-  end
-  -- 3) File-path fallback (discussion is on a file changed by this commit)
-  if filter.changed_paths_set then
-    for _, note in ipairs(disc.notes or {}) do
-      local pos = note.position
-      if pos then
-        if filter.changed_paths_set[pos.new_path] or filter.changed_paths_set[pos.old_path] then
-          return true
-        end
-      end
+    if matcher(note.position, commit_sha) then
+      return true
     end
   end
   return false
@@ -143,15 +70,12 @@ function M.apply(state, filter)
   end
   state.files = filtered_files
 
-  -- Build version map for commit→version_head_sha matching
-  local version_map = M.build_version_map(state.commits or {}, state.versions or {})
-
-  -- Expose changed_paths_set on commit_filter for file-path fallback
-  state.commit_filter.changed_paths_set = path_set
+  -- Build matcher via provider
+  local matcher = state.provider.build_commit_matcher(state.commits or {}, state.versions or {})
 
   local filtered_discussions = {}
   for _, d in ipairs(state.original_discussions) do
-    if M.matches_discussion(d, state.commit_filter, version_map) then
+    if M.matches_discussion(d, state.commit_filter.to_sha, matcher) then
       table.insert(filtered_discussions, d)
     end
   end

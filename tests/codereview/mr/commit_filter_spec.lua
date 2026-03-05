@@ -9,14 +9,24 @@ describe("commit_filter", function()
         { new_path = "c.lua", diff = "diff c" },
       },
       discussions = {
-        { id = "d1", notes = { { position = { head_sha = "commit2", new_path = "a.lua" } } } },
-        { id = "d2", notes = { { position = { head_sha = "other_sha", new_path = "b.lua" } } } },
+        { id = "d1", notes = { { position = { original_commit_sha = "commit2", new_path = "a.lua" } } } },
+        { id = "d2", notes = { { position = { original_commit_sha = "other_sha", new_path = "b.lua" } } } },
         { id = "d3", notes = { { position = nil } } },
       },
       commits = {
         { sha = "commit1", title = "First" },
         { sha = "commit2", title = "Second" },
         { sha = "commit3", title = "Third" },
+      },
+      provider = {
+        build_commit_matcher = function(commits, versions) -- luacheck: ignore
+          return function(position, commit_sha)
+            if not position then
+              return false
+            end
+            return position.original_commit_sha == commit_sha
+          end
+        end,
       },
       commit_filter = nil,
       original_files = nil,
@@ -62,46 +72,17 @@ describe("commit_filter", function()
       assert.equals("a.lua", state.files[1].new_path)
     end)
 
-    it("filters discussions by SHA and file-path fallback", function()
+    it("filters discussions using provider matcher", function()
       local state = make_state()
       commit_filter.apply(state, {
         from_sha = "commit1",
         to_sha = "commit2",
         label = "Second",
-        changed_paths = { "a.lua", "b.lua" },
+        changed_paths = { "a.lua" },
       })
-      -- d1 matches by head_sha, d2 matches by file-path fallback (new_path="b.lua")
-      assert.equals(2, #state.discussions)
-    end)
-
-    it("uses version map to match discussions when available", function()
-      local state = make_state()
-      -- d2 has head_sha="other_sha" which doesn't match commit2 directly.
-      -- But if version map says commit2 belongs to version with head "other_sha", it should match.
-      state.versions = {
-        { head_commit_sha = "other_sha", created_at = "2026-01-01" },
-      }
-      commit_filter.apply(state, {
-        from_sha = "commit1",
-        to_sha = "commit2",
-        label = "Second",
-        changed_paths = { "a.lua", "b.lua" },
-      })
-      -- Both d1 (direct SHA match) and d2 (version map match) should be present
-      assert.equals(2, #state.discussions)
-    end)
-
-    it("uses file-path fallback when no SHA or version match", function()
-      local state = make_state()
-      -- d2 has head_sha="other_sha", new_path="b.lua" — no SHA match, but path matches
-      commit_filter.apply(state, {
-        from_sha = "commit1",
-        to_sha = "commit2",
-        label = "Second",
-        changed_paths = { "a.lua", "b.lua" },
-      })
-      -- d1 matches by SHA, d2 matches by file-path fallback
-      assert.equals(2, #state.discussions)
+      -- d1 matches (original_commit_sha = "commit2"), d2 and d3 do not
+      assert.equals(1, #state.discussions)
+      assert.equals("d1", state.discussions[1].id)
     end)
 
     it("resets current_file and clears caches", function()
@@ -186,85 +167,38 @@ describe("commit_filter", function()
   end)
 
   describe("matches_discussion", function()
-    it("matches via version map when head_sha matches version head", function()
-      local disc = { notes = { { position = { head_sha = "version_head_C", new_path = "a.lua" } } } }
-      local filter = { from_sha = "sha1", to_sha = "B" }
-      local version_map = { B = { "version_head_C" } }
-      assert.is_true(commit_filter.matches_discussion(disc, filter, version_map))
+    local function make_matcher()
+      return function(position, commit_sha)
+        if not position then
+          return false
+        end
+        return position.original_commit_sha == commit_sha
+      end
+    end
+
+    it("returns true when matcher matches a note", function()
+      local disc = { notes = { { position = { original_commit_sha = "sha2" } } } }
+      assert.is_true(commit_filter.matches_discussion(disc, "sha2", make_matcher()))
     end)
 
-    it("matches via direct SHA (legacy behavior)", function()
-      local disc = { notes = { { position = { head_sha = "sha2" } } } }
-      assert.is_true(commit_filter.matches_discussion(disc, { from_sha = "sha1", to_sha = "sha2" }))
-    end)
-
-    it("matches via commit_sha for GitHub", function()
-      local disc = { notes = { { position = { commit_sha = "sha2" } } } }
-      assert.is_true(commit_filter.matches_discussion(disc, { from_sha = "sha1", to_sha = "sha2" }))
-    end)
-
-    it("falls back to file-path match when no SHA/version match", function()
-      local disc = { notes = { { position = { head_sha = "unrelated", new_path = "a.lua" } } } }
-      local filter = { from_sha = "sha1", to_sha = "sha2", changed_paths_set = { ["a.lua"] = true } }
-      assert.is_true(commit_filter.matches_discussion(disc, filter))
-    end)
-
-    it("file-path fallback checks old_path too", function()
-      local disc = { notes = { { position = { head_sha = "unrelated", old_path = "renamed.lua" } } } }
-      local filter = { from_sha = "sha1", to_sha = "sha2", changed_paths_set = { ["renamed.lua"] = true } }
-      assert.is_true(commit_filter.matches_discussion(disc, filter))
-    end)
-
-    it("rejects when no SHA, version, or path match", function()
-      local disc = { notes = { { position = { head_sha = "other", new_path = "z.lua" } } } }
-      local filter = { from_sha = "sha1", to_sha = "sha2", changed_paths_set = { ["a.lua"] = true } }
-      assert.is_false(commit_filter.matches_discussion(disc, filter))
+    it("returns false when matcher rejects all notes", function()
+      local disc = { notes = { { position = { original_commit_sha = "sha1" } } } }
+      assert.is_false(commit_filter.matches_discussion(disc, "sha2", make_matcher()))
     end)
 
     it("rejects general comments (no position)", function()
       local disc = { notes = { { position = nil } } }
-      assert.is_false(commit_filter.matches_discussion(disc, { from_sha = "sha1", to_sha = "sha2" }))
+      assert.is_false(commit_filter.matches_discussion(disc, "sha2", make_matcher()))
     end)
-  end)
 
-  describe("build_version_map", function()
-    it("maps commits to version head SHAs", function()
-      local commits = {
-        { sha = "E" },
-        { sha = "D" },
-        { sha = "C" },
-        { sha = "B" },
-        { sha = "A" },
+    it("returns true if any note in a multi-note discussion matches", function()
+      local disc = {
+        notes = {
+          { position = { original_commit_sha = "other" } },
+          { position = { original_commit_sha = "sha2" } },
+        },
       }
-      local versions = {
-        { head_commit_sha = "E", created_at = "2026-01-02" },
-        { head_commit_sha = "C", created_at = "2026-01-01" },
-      }
-      local map = commit_filter.build_version_map(commits, versions)
-      assert.same({ "C" }, map["A"])
-      assert.same({ "C" }, map["B"])
-      assert.same({ "C" }, map["C"])
-      assert.same({ "E" }, map["D"])
-      assert.same({ "E" }, map["E"])
-    end)
-
-    it("returns empty table when no versions", function()
-      local map = commit_filter.build_version_map({ { sha = "A" } }, {})
-      assert.same({}, map)
-    end)
-
-    it("returns empty table when no commits", function()
-      local map = commit_filter.build_version_map({}, { { head_commit_sha = "X" } })
-      assert.same({}, map)
-    end)
-
-    it("handles commit not in any version range", function()
-      local commits = { { sha = "B" }, { sha = "A" } }
-      local versions = { { head_commit_sha = "A", created_at = "2026-01-01" } }
-      local map = commit_filter.build_version_map(commits, versions)
-      assert.same({ "A" }, map["A"])
-      -- B is after the last known version head; assign to no version
-      assert.is_nil(map["B"])
+      assert.is_true(commit_filter.matches_discussion(disc, "sha2", make_matcher()))
     end)
   end)
 
