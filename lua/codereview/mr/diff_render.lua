@@ -1286,10 +1286,12 @@ function M.render_all_files(
     local cfg_sep = config.get().diff
     if cfg_sep.separator_lines > 0 and cfg_sep.separator_char ~= "" then
       local win_w = 80
-      for _, w in ipairs(vim.api.nvim_list_wins()) do
-        if vim.api.nvim_win_get_buf(w) == buf then
-          win_w = vim.api.nvim_win_get_width(w)
-          break
+      if vim.api.nvim_list_wins then
+        for _, w in ipairs(vim.api.nvim_list_wins()) do
+          if vim.api.nvim_win_get_buf(w) == buf then
+            win_w = vim.api.nvim_win_get_width(w)
+            break
+          end
         end
       end
       local keymaps = require("codereview.keymaps")

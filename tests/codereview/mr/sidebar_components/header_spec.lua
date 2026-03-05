@@ -45,7 +45,7 @@ describe("sidebar_components.header", function()
       end
     end)
 
-    it("shows commit filter indicator when state has commit_filter", function()
+    it("renders 4 lines even when state has commit_filter (filter moved to winbar)", function()
       local state = {
         review = {
           id = 1,
@@ -60,14 +60,7 @@ describe("sidebar_components.header", function()
         commit_filter = { label = "Fix login redirect" },
       }
       local result = header.render(state, 40)
-      assert.equals(5, #result.lines)
-      local found = false
-      for _, line in ipairs(result.lines) do
-        if line:match("Fix login redirect") then
-          found = true
-        end
-      end
-      assert.is_true(found, "Expected commit filter label in header")
+      assert.equals(4, #result.lines)
     end)
 
     it("renders 4 lines when no commit_filter", function()
