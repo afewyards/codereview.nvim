@@ -90,8 +90,8 @@ local function safe_request(params)
 end
 
 local function safe_async_request(params)
-  local async_util = require("plenary.async.util")
-  local ok, response = pcall(async_util.wrap(curl.request, 2), params)
+  local wrap = require("plenary.async").wrap
+  local ok, response = pcall(wrap(curl.request, 2), params)
   if not ok then
     return nil, tostring(response)
   end
