@@ -111,6 +111,42 @@ describe("commit_filter", function()
       assert.equals("commit2", state.commit_filter.to_sha)
       assert.equals("Second", state.commit_filter.label)
     end)
+
+    it("stores is_current closure from provider", function()
+      local state = make_state()
+      local called_with = {}
+      state.provider.build_commit_matcher = function()
+        local matcher = function(position, commit_sha)
+          return position and position.original_commit_sha == commit_sha
+        end
+        local is_current = function(position, _commit_sha)
+          table.insert(called_with, position)
+          return position and position.head_sha == "version_head_A"
+        end
+        return matcher, is_current
+      end
+      commit_filter.apply(state, {
+        from_sha = "commit1",
+        to_sha = "commit2",
+        label = "Second",
+        changed_paths = { "a.lua" },
+      })
+      assert.is_function(state.commit_filter.is_current)
+      -- is_current should be bound to to_sha
+      assert.is_true(state.commit_filter.is_current({ head_sha = "version_head_A" }))
+      assert.is_false(state.commit_filter.is_current({ head_sha = "other" }))
+    end)
+
+    it("sets nil is_current when provider returns no second value", function()
+      local state = make_state()
+      commit_filter.apply(state, {
+        from_sha = "commit1",
+        to_sha = "commit2",
+        label = "Second",
+        changed_paths = { "a.lua" },
+      })
+      assert.is_nil(state.commit_filter.is_current)
+    end)
   end)
 
   describe("clear", function()

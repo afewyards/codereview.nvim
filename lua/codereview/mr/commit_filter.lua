@@ -41,8 +41,6 @@ function M.apply(state, filter)
     state.original_discussions = state.discussions
   end
 
-  state.commit_filter = { from_sha = filter.from_sha, to_sha = filter.to_sha, label = filter.label }
-
   local path_set = {}
   for _, p in ipairs(filter.changed_paths or {}) do
     path_set[p] = true
@@ -70,8 +68,23 @@ function M.apply(state, filter)
   end
   state.files = filtered_files
 
-  -- Build matcher via provider
-  local matcher = state.provider.build_commit_matcher(state.commits or {}, state.versions or {})
+  -- Build matcher and is_current via provider
+  local matcher, is_current_fn = state.provider.build_commit_matcher(state.commits or {}, state.versions or {})
+
+  -- Bind is_current to the selected commit SHA for use by is_outdated
+  local bound_is_current = nil
+  if is_current_fn then
+    bound_is_current = function(position)
+      return is_current_fn(position, filter.to_sha)
+    end
+  end
+
+  state.commit_filter = {
+    from_sha = filter.from_sha,
+    to_sha = filter.to_sha,
+    label = filter.label,
+    is_current = bound_is_current,
+  }
 
   local filtered_discussions = {}
   for _, d in ipairs(state.original_discussions) do
