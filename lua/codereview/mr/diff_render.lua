@@ -372,6 +372,19 @@ end
 
 M.render_ai_suggestions_at_row = render_ai_suggestions_at_row
 
+--- Return the carrier rows immediately following anchor_row (contiguous block).
+local function find_carrier_rows(line_data, anchor_row)
+  local carriers = {}
+  for i = anchor_row + 1, #line_data do
+    if line_data[i].type == "carrier" then
+      table.insert(carriers, i)
+    else
+      break
+    end
+  end
+  return carriers
+end
+
 --- Selective per-row extmark update when only the selection indicator changes.
 --- Clears AIDRAFT_NS and DIFF_NS virt_lines extmarks on the target row, then
 --- re-renders AI suggestions and comment threads for that row only.
@@ -383,7 +396,17 @@ M.render_ai_suggestions_at_row = render_ai_suggestions_at_row
 --- @param current_user string
 --- @param review table
 --- @param editing_note table|nil
-function M.update_selection_at_row(buf, row, row_selection, row_ai, row_disc, current_user, review, editing_note)
+function M.update_selection_at_row(
+  buf,
+  row,
+  row_selection,
+  row_ai,
+  row_disc,
+  current_user,
+  review,
+  editing_note,
+  line_data
+)
   -- Clear AIDRAFT_NS extmarks on this row only
   local ai_marks = vim.api.nvim_buf_get_extmarks(buf, AIDRAFT_NS, { row - 1, 0 }, { row - 1, -1 }, {})
   for _, mark in ipairs(ai_marks) do
@@ -399,13 +422,23 @@ function M.update_selection_at_row(buf, row, row_selection, row_ai, row_disc, cu
     end
   end
 
-  local virt_offset = 0
+  local carriers = line_data and find_carrier_rows(line_data, row) or {}
+  for _, cr in ipairs(carriers) do
+    local marks = vim.api.nvim_buf_get_extmarks(buf, DIFF_NS, { cr - 1, 0 }, { cr - 1, -1 }, { details = true })
+    for _, mark in ipairs(marks) do
+      if mark[4] and mark[4].virt_lines then
+        pcall(vim.api.nvim_buf_del_extmark, buf, DIFF_NS, mark[1])
+      end
+    end
+  end
+
   local sel_virt_offset = nil
+  local sel_row = nil
+  local sel_note_offset = nil
 
   -- Re-render AI suggestions at row
   if row_ai and row_ai[row] then
-    local ai_count, ai_sel = render_ai_suggestions_at_row(buf, row, row_ai[row], row_selection)
-    virt_offset = ai_count or 0
+    local _, ai_sel = render_ai_suggestions_at_row(buf, row, row_ai[row], row_selection)
     if ai_sel then
       sel_virt_offset = ai_sel
     end
@@ -427,19 +460,25 @@ function M.update_selection_at_row(buf, row, row_selection, row_ai, row_disc, cu
           spacer_height = editing_note and editing_note.spacer_height or 0,
           gutter = 4,
         })
-        if result.sel_line_offset ~= nil then
-          sel_virt_offset = virt_offset + result.sel_line_offset
+        local segments = result.note_segments or { result }
+        for seg_i, seg in ipairs(segments) do
+          local target_row = (seg_i == 1) and row or carriers[seg_i - 1]
+          if target_row and #seg.virt_lines > 0 then
+            pcall(vim.api.nvim_buf_set_extmark, buf, DIFF_NS, target_row - 1, 0, {
+              virt_lines = seg.virt_lines,
+              virt_lines_above = false,
+            })
+          end
+          if sel_row == nil and seg.sel_line_offset ~= nil then
+            sel_row = (seg_i == 1) and row or carriers[seg_i - 1]
+            sel_note_offset = seg.sel_line_offset
+          end
         end
-        virt_offset = virt_offset + #result.virt_lines
-        pcall(vim.api.nvim_buf_set_extmark, buf, DIFF_NS, row - 1, 0, {
-          virt_lines = result.virt_lines,
-          virt_lines_above = false,
-        })
       end
     end
   end
 
-  return sel_virt_offset
+  return sel_virt_offset, sel_row, sel_note_offset
 end
 
 -- ─── Lookup map builders ──────────────────────────────────────────────────────
