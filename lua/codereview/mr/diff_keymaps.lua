@@ -438,6 +438,19 @@ function M.setup_keymaps(state, layout, active_states)
 
   -- ── Main buffer callbacks (all 26 remappable actions) ───────────────────────
 
+  -- When cursor is on a carrier line, walk back to find the anchor code line.
+  local function resolve_anchor_row(line_data, cursor_row)
+    if not line_data or not line_data[cursor_row] or line_data[cursor_row].type ~= "carrier" then
+      return cursor_row
+    end
+    for r = cursor_row - 1, 1, -1 do
+      if not line_data[r] or line_data[r].type ~= "carrier" then
+        return r
+      end
+    end
+    return cursor_row
+  end
+
   local main_callbacks = {
     next_file = function()
       if state.view_mode == "summary" then
@@ -1371,34 +1384,43 @@ function M.setup_keymaps(state, layout, active_states)
       local row_ai = state.scroll_mode and state.scroll_row_ai or (state.row_ai_cache[state.current_file] or {})
       local row_disc_map = state.scroll_mode and state.scroll_row_disc
         or (state.row_disc_cache[state.current_file] or {})
-      local ai_at_row = row_ai[cursor_row] or {}
-      local discs_at_row = row_disc_map[cursor_row] or {}
+      local line_data = state.scroll_mode and state.scroll_line_data
+        or (state.line_data_cache[state.current_file] or {})
+      local anchor_row = resolve_anchor_row(line_data, cursor_row)
+      local ai_at_row = row_ai[anchor_row] or {}
+      local discs_at_row = row_disc_map[anchor_row] or {}
       local items = diff_comments.build_row_items(ai_at_row, discs_at_row)
 
       -- Try cycling within current row first
       if #items > 0 then
-        local current = state.row_selection[cursor_row]
+        local current = state.row_selection[anchor_row]
         local next_sel = diff_comments.cycle_row_selection(items, current, 1)
         if next_sel then
-          state.row_selection = { [cursor_row] = next_sel }
-          local sel_offset = diff_render.update_selection_at_row(
+          state.row_selection = { [anchor_row] = next_sel }
+          local _, sel_row, sel_offset = diff_render.update_selection_at_row(
             layout.main_buf,
-            cursor_row,
+            anchor_row,
             state.row_selection,
             row_ai,
             row_disc_map,
             state.current_user,
             state.review,
-            state.editing_note
+            state.editing_note,
+            line_data
           )
-          state._pending_scroll = { row = cursor_row, focus_offset = sel_offset }
+          if sel_row then
+            vim.api.nvim_win_set_cursor(layout.main_win, { sel_row, 0 })
+            state._pending_scroll = { row = sel_row, focus_offset = sel_offset }
+          else
+            state._pending_scroll = { row = anchor_row, focus_offset = sel_offset }
+          end
           rerender_view()
           return
         end
       end
 
       -- Past edge (or empty row): jump to next annotated row
-      local all_rows = diff_nav.get_annotated_rows(row_disc_map, row_ai)
+      local all_rows = diff_nav.get_annotated_rows(row_disc_map, row_ai, line_data)
       for _, r in ipairs(all_rows) do
         if r > cursor_row then
           vim.api.nvim_win_set_cursor(layout.main_win, { r, 0 })
@@ -1406,7 +1428,7 @@ function M.setup_keymaps(state, layout, active_states)
           local next_disc = row_disc_map[r] or {}
           local next_items = diff_comments.build_row_items(next_ai, next_disc)
           state.row_selection = { [r] = next_items[1] or nil }
-          local sel_offset = diff_render.update_selection_at_row(
+          local _, sel_row, sel_offset = diff_render.update_selection_at_row(
             layout.main_buf,
             r,
             state.row_selection,
@@ -1414,9 +1436,15 @@ function M.setup_keymaps(state, layout, active_states)
             row_disc_map,
             state.current_user,
             state.review,
-            state.editing_note
+            state.editing_note,
+            line_data
           )
-          state._pending_scroll = { row = r, focus_offset = sel_offset }
+          if sel_row then
+            vim.api.nvim_win_set_cursor(layout.main_win, { sel_row, 0 })
+            state._pending_scroll = { row = sel_row, focus_offset = sel_offset }
+          else
+            state._pending_scroll = { row = r, focus_offset = sel_offset }
+          end
           rerender_view()
           return
         end
@@ -1432,7 +1460,7 @@ function M.setup_keymaps(state, layout, active_states)
           local next_disc = row_disc_map[r] or {}
           local next_items = diff_comments.build_row_items(next_ai, next_disc)
           state.row_selection = { [r] = next_items[1] or nil }
-          local sel_offset = diff_render.update_selection_at_row(
+          local _, sel_row, sel_offset = diff_render.update_selection_at_row(
             layout.main_buf,
             r,
             state.row_selection,
@@ -1440,9 +1468,15 @@ function M.setup_keymaps(state, layout, active_states)
             row_disc_map,
             state.current_user,
             state.review,
-            state.editing_note
+            state.editing_note,
+            line_data
           )
-          state._pending_scroll = { row = r, focus_offset = sel_offset }
+          if sel_row then
+            vim.api.nvim_win_set_cursor(layout.main_win, { sel_row, 0 })
+            state._pending_scroll = { row = sel_row, focus_offset = sel_offset }
+          else
+            state._pending_scroll = { row = r, focus_offset = sel_offset }
+          end
           rerender_view()
         end
       else
@@ -1455,14 +1489,15 @@ function M.setup_keymaps(state, layout, active_states)
             diff_nav.switch_to_file(layout, state, idx)
             local ra = state.row_ai_cache[idx] or {}
             local rd = state.row_disc_cache[idx] or {}
-            local rows = diff_nav.get_annotated_rows(rd, ra)
+            local ld = state.line_data_cache[idx] or {}
+            local rows = diff_nav.get_annotated_rows(rd, ra, ld)
             if #rows > 0 then
               vim.api.nvim_win_set_cursor(layout.main_win, { rows[1], 0 })
               local next_ai = ra[rows[1]] or {}
               local next_disc = rd[rows[1]] or {}
               local next_items = diff_comments.build_row_items(next_ai, next_disc)
               state.row_selection = { [rows[1]] = next_items[1] or nil }
-              local sel_offset = diff_render.update_selection_at_row(
+              local _, sel_row, sel_offset = diff_render.update_selection_at_row(
                 layout.main_buf,
                 rows[1],
                 state.row_selection,
@@ -1470,9 +1505,15 @@ function M.setup_keymaps(state, layout, active_states)
                 rd,
                 state.current_user,
                 state.review,
-                state.editing_note
+                state.editing_note,
+                ld
               )
-              state._pending_scroll = { row = rows[1], focus_offset = sel_offset }
+              if sel_row then
+                vim.api.nvim_win_set_cursor(layout.main_win, { sel_row, 0 })
+                state._pending_scroll = { row = sel_row, focus_offset = sel_offset }
+              else
+                state._pending_scroll = { row = rows[1], focus_offset = sel_offset }
+              end
               rerender_view()
             end
             return
@@ -1554,34 +1595,43 @@ function M.setup_keymaps(state, layout, active_states)
       local row_ai = state.scroll_mode and state.scroll_row_ai or (state.row_ai_cache[state.current_file] or {})
       local row_disc_map = state.scroll_mode and state.scroll_row_disc
         or (state.row_disc_cache[state.current_file] or {})
-      local ai_at_row = row_ai[cursor_row] or {}
-      local discs_at_row = row_disc_map[cursor_row] or {}
+      local line_data = state.scroll_mode and state.scroll_line_data
+        or (state.line_data_cache[state.current_file] or {})
+      local anchor_row = resolve_anchor_row(line_data, cursor_row)
+      local ai_at_row = row_ai[anchor_row] or {}
+      local discs_at_row = row_disc_map[anchor_row] or {}
       local items = diff_comments.build_row_items(ai_at_row, discs_at_row)
 
       -- Try cycling within current row first
       if #items > 0 then
-        local current = state.row_selection[cursor_row]
+        local current = state.row_selection[anchor_row]
         local next_sel = diff_comments.cycle_row_selection(items, current, -1)
         if next_sel then
-          state.row_selection = { [cursor_row] = next_sel }
-          local sel_offset = diff_render.update_selection_at_row(
+          state.row_selection = { [anchor_row] = next_sel }
+          local _, sel_row, sel_offset = diff_render.update_selection_at_row(
             layout.main_buf,
-            cursor_row,
+            anchor_row,
             state.row_selection,
             row_ai,
             row_disc_map,
             state.current_user,
             state.review,
-            state.editing_note
+            state.editing_note,
+            line_data
           )
-          state._pending_scroll = { row = cursor_row, focus_offset = sel_offset }
+          if sel_row then
+            vim.api.nvim_win_set_cursor(layout.main_win, { sel_row, 0 })
+            state._pending_scroll = { row = sel_row, focus_offset = sel_offset }
+          else
+            state._pending_scroll = { row = anchor_row, focus_offset = sel_offset }
+          end
           rerender_view()
           return
         end
       end
 
       -- Past edge: jump to prev annotated row
-      local all_rows = diff_nav.get_annotated_rows(row_disc_map, row_ai)
+      local all_rows = diff_nav.get_annotated_rows(row_disc_map, row_ai, line_data)
       for i = #all_rows, 1, -1 do
         if all_rows[i] < cursor_row then
           local r = all_rows[i]
@@ -1590,7 +1640,7 @@ function M.setup_keymaps(state, layout, active_states)
           local prev_disc = row_disc_map[r] or {}
           local prev_items = diff_comments.build_row_items(prev_ai, prev_disc)
           state.row_selection = { [r] = prev_items[#prev_items] or nil }
-          local sel_offset = diff_render.update_selection_at_row(
+          local _, sel_row, sel_offset = diff_render.update_selection_at_row(
             layout.main_buf,
             r,
             state.row_selection,
@@ -1598,9 +1648,15 @@ function M.setup_keymaps(state, layout, active_states)
             row_disc_map,
             state.current_user,
             state.review,
-            state.editing_note
+            state.editing_note,
+            line_data
           )
-          state._pending_scroll = { row = r, focus_offset = sel_offset }
+          if sel_row then
+            vim.api.nvim_win_set_cursor(layout.main_win, { sel_row, 0 })
+            state._pending_scroll = { row = sel_row, focus_offset = sel_offset }
+          else
+            state._pending_scroll = { row = r, focus_offset = sel_offset }
+          end
           rerender_view()
           return
         end
@@ -1615,7 +1671,7 @@ function M.setup_keymaps(state, layout, active_states)
           local prev_disc = row_disc_map[r] or {}
           local prev_items = diff_comments.build_row_items(prev_ai, prev_disc)
           state.row_selection = { [r] = prev_items[#prev_items] or nil }
-          local sel_offset = diff_render.update_selection_at_row(
+          local _, sel_row, sel_offset = diff_render.update_selection_at_row(
             layout.main_buf,
             r,
             state.row_selection,
@@ -1623,9 +1679,15 @@ function M.setup_keymaps(state, layout, active_states)
             row_disc_map,
             state.current_user,
             state.review,
-            state.editing_note
+            state.editing_note,
+            line_data
           )
-          state._pending_scroll = { row = r, focus_offset = sel_offset }
+          if sel_row then
+            vim.api.nvim_win_set_cursor(layout.main_win, { sel_row, 0 })
+            state._pending_scroll = { row = sel_row, focus_offset = sel_offset }
+          else
+            state._pending_scroll = { row = r, focus_offset = sel_offset }
+          end
           rerender_view()
         end
       else
@@ -1637,7 +1699,8 @@ function M.setup_keymaps(state, layout, active_states)
             diff_nav.switch_to_file(layout, state, idx)
             local ra = state.row_ai_cache[idx] or {}
             local rd = state.row_disc_cache[idx] or {}
-            local rows = diff_nav.get_annotated_rows(rd, ra)
+            local ld = state.line_data_cache[idx] or {}
+            local rows = diff_nav.get_annotated_rows(rd, ra, ld)
             if #rows > 0 then
               local r = rows[#rows]
               vim.api.nvim_win_set_cursor(layout.main_win, { r, 0 })
@@ -1645,7 +1708,7 @@ function M.setup_keymaps(state, layout, active_states)
               local prev_disc = rd[r] or {}
               local prev_items = diff_comments.build_row_items(prev_ai, prev_disc)
               state.row_selection = { [r] = prev_items[#prev_items] or nil }
-              local sel_offset = diff_render.update_selection_at_row(
+              local _, sel_row, sel_offset = diff_render.update_selection_at_row(
                 layout.main_buf,
                 r,
                 state.row_selection,
@@ -1653,9 +1716,15 @@ function M.setup_keymaps(state, layout, active_states)
                 rd,
                 state.current_user,
                 state.review,
-                state.editing_note
+                state.editing_note,
+                ld
               )
-              state._pending_scroll = { row = r, focus_offset = sel_offset }
+              if sel_row then
+                vim.api.nvim_win_set_cursor(layout.main_win, { sel_row, 0 })
+                state._pending_scroll = { row = sel_row, focus_offset = sel_offset }
+              else
+                state._pending_scroll = { row = r, focus_offset = sel_offset }
+              end
               rerender_view()
             end
             return
@@ -1677,28 +1746,38 @@ function M.setup_keymaps(state, layout, active_states)
       local row_ai = state.scroll_mode and state.scroll_row_ai or (state.row_ai_cache[state.current_file] or {})
       local row_disc_map = state.scroll_mode and state.scroll_row_disc
         or (state.row_disc_cache[state.current_file] or {})
+      local line_data = state.scroll_mode and state.scroll_line_data
+        or (state.line_data_cache[state.current_file] or {})
       local has_sel = next(state.row_selection) ~= nil
-      local cur_has_ann = row_ai[cursor_row] or row_disc_map[cursor_row]
+      local anchor_row = resolve_anchor_row(line_data, cursor_row)
+      local cur_has_ann = row_ai[anchor_row] or row_disc_map[anchor_row]
 
       -- Fast path: no selection, no annotations on current row → move and quick-check next
       if not has_sel and not cur_has_ann then
         vim.cmd("normal! j")
         local new_row = vim.api.nvim_win_get_cursor(layout.main_win)[1]
-        if new_row ~= cursor_row and (row_ai[new_row] or row_disc_map[new_row]) then
-          local new_items = diff_comments.build_row_items(row_ai[new_row] or {}, row_disc_map[new_row] or {})
+        local new_anchor = resolve_anchor_row(line_data, new_row)
+        if new_row ~= cursor_row and (row_ai[new_anchor] or row_disc_map[new_anchor]) then
+          local new_items = diff_comments.build_row_items(row_ai[new_anchor] or {}, row_disc_map[new_anchor] or {})
           if #new_items > 0 then
-            state.row_selection = { [new_row] = new_items[1] }
-            local sel_offset = diff_render.update_selection_at_row(
+            state.row_selection = { [new_anchor] = new_items[1] }
+            local _, sel_row, sel_offset = diff_render.update_selection_at_row(
               layout.main_buf,
-              new_row,
+              new_anchor,
               state.row_selection,
               row_ai,
               row_disc_map,
               state.current_user,
               state.review,
-              state.editing_note
+              state.editing_note,
+              line_data
             )
-            state._pending_scroll = { row = new_row, focus_offset = sel_offset }
+            if sel_row then
+              vim.api.nvim_win_set_cursor(layout.main_win, { sel_row, 0 })
+              state._pending_scroll = { row = sel_row, focus_offset = sel_offset }
+            else
+              state._pending_scroll = { row = new_anchor, focus_offset = sel_offset }
+            end
             rerender_view()
           end
         end
@@ -1706,22 +1785,28 @@ function M.setup_keymaps(state, layout, active_states)
       end
 
       -- Current row has annotations and something selected → try cycling forward
-      if cur_has_ann and has_sel and state.row_selection[cursor_row] then
-        local items = diff_comments.build_row_items(row_ai[cursor_row] or {}, row_disc_map[cursor_row] or {})
-        local next_sel = diff_comments.cycle_row_selection(items, state.row_selection[cursor_row], 1)
+      if cur_has_ann and has_sel and state.row_selection[anchor_row] then
+        local items = diff_comments.build_row_items(row_ai[anchor_row] or {}, row_disc_map[anchor_row] or {})
+        local next_sel = diff_comments.cycle_row_selection(items, state.row_selection[anchor_row], 1)
         if next_sel then
-          state.row_selection = { [cursor_row] = next_sel }
-          local sel_offset = diff_render.update_selection_at_row(
+          state.row_selection = { [anchor_row] = next_sel }
+          local _, sel_row, sel_offset = diff_render.update_selection_at_row(
             layout.main_buf,
-            cursor_row,
+            anchor_row,
             state.row_selection,
             row_ai,
             row_disc_map,
             state.current_user,
             state.review,
-            state.editing_note
+            state.editing_note,
+            line_data
           )
-          state._pending_scroll = { row = cursor_row, focus_offset = sel_offset }
+          if sel_row then
+            vim.api.nvim_win_set_cursor(layout.main_win, { sel_row, 0 })
+            state._pending_scroll = { row = sel_row, focus_offset = sel_offset }
+          else
+            state._pending_scroll = { row = anchor_row, focus_offset = sel_offset }
+          end
           rerender_view()
           return
         end
@@ -1734,21 +1819,28 @@ function M.setup_keymaps(state, layout, active_states)
         return
       end
 
-      if row_ai[new_row] or row_disc_map[new_row] then
-        local new_items = diff_comments.build_row_items(row_ai[new_row] or {}, row_disc_map[new_row] or {})
+      local new_anchor = resolve_anchor_row(line_data, new_row)
+      if row_ai[new_anchor] or row_disc_map[new_anchor] then
+        local new_items = diff_comments.build_row_items(row_ai[new_anchor] or {}, row_disc_map[new_anchor] or {})
         if #new_items > 0 then
-          state.row_selection = { [new_row] = new_items[1] }
-          local sel_offset = diff_render.update_selection_at_row(
+          state.row_selection = { [new_anchor] = new_items[1] }
+          local _, sel_row, sel_offset = diff_render.update_selection_at_row(
             layout.main_buf,
-            new_row,
+            new_anchor,
             state.row_selection,
             row_ai,
             row_disc_map,
             state.current_user,
             state.review,
-            state.editing_note
+            state.editing_note,
+            line_data
           )
-          state._pending_scroll = { row = new_row, focus_offset = sel_offset }
+          if sel_row then
+            vim.api.nvim_win_set_cursor(layout.main_win, { sel_row, 0 })
+            state._pending_scroll = { row = sel_row, focus_offset = sel_offset }
+          else
+            state._pending_scroll = { row = new_anchor, focus_offset = sel_offset }
+          end
           rerender_view()
           return
         end
@@ -1772,28 +1864,38 @@ function M.setup_keymaps(state, layout, active_states)
       local row_ai = state.scroll_mode and state.scroll_row_ai or (state.row_ai_cache[state.current_file] or {})
       local row_disc_map = state.scroll_mode and state.scroll_row_disc
         or (state.row_disc_cache[state.current_file] or {})
+      local line_data = state.scroll_mode and state.scroll_line_data
+        or (state.line_data_cache[state.current_file] or {})
       local has_sel = next(state.row_selection) ~= nil
-      local cur_has_ann = row_ai[cursor_row] or row_disc_map[cursor_row]
+      local anchor_row = resolve_anchor_row(line_data, cursor_row)
+      local cur_has_ann = row_ai[anchor_row] or row_disc_map[anchor_row]
 
       -- Fast path: no selection, no annotations on current row → move and quick-check next
       if not has_sel and not cur_has_ann then
         vim.cmd("normal! k")
         local new_row = vim.api.nvim_win_get_cursor(layout.main_win)[1]
-        if new_row ~= cursor_row and (row_ai[new_row] or row_disc_map[new_row]) then
-          local new_items = diff_comments.build_row_items(row_ai[new_row] or {}, row_disc_map[new_row] or {})
+        local new_anchor = resolve_anchor_row(line_data, new_row)
+        if new_row ~= cursor_row and (row_ai[new_anchor] or row_disc_map[new_anchor]) then
+          local new_items = diff_comments.build_row_items(row_ai[new_anchor] or {}, row_disc_map[new_anchor] or {})
           if #new_items > 0 then
-            state.row_selection = { [new_row] = new_items[#new_items] }
-            local sel_offset = diff_render.update_selection_at_row(
+            state.row_selection = { [new_anchor] = new_items[#new_items] }
+            local _, sel_row, sel_offset = diff_render.update_selection_at_row(
               layout.main_buf,
-              new_row,
+              new_anchor,
               state.row_selection,
               row_ai,
               row_disc_map,
               state.current_user,
               state.review,
-              state.editing_note
+              state.editing_note,
+              line_data
             )
-            state._pending_scroll = { row = new_row, focus_offset = sel_offset }
+            if sel_row then
+              vim.api.nvim_win_set_cursor(layout.main_win, { sel_row, 0 })
+              state._pending_scroll = { row = sel_row, focus_offset = sel_offset }
+            else
+              state._pending_scroll = { row = new_anchor, focus_offset = sel_offset }
+            end
             rerender_view()
           end
         end
@@ -1801,22 +1903,28 @@ function M.setup_keymaps(state, layout, active_states)
       end
 
       -- Current row has annotations and something selected → try cycling backward
-      if cur_has_ann and has_sel and state.row_selection[cursor_row] then
-        local items = diff_comments.build_row_items(row_ai[cursor_row] or {}, row_disc_map[cursor_row] or {})
-        local next_sel = diff_comments.cycle_row_selection(items, state.row_selection[cursor_row], -1)
+      if cur_has_ann and has_sel and state.row_selection[anchor_row] then
+        local items = diff_comments.build_row_items(row_ai[anchor_row] or {}, row_disc_map[anchor_row] or {})
+        local next_sel = diff_comments.cycle_row_selection(items, state.row_selection[anchor_row], -1)
         if next_sel then
-          state.row_selection = { [cursor_row] = next_sel }
-          local sel_offset = diff_render.update_selection_at_row(
+          state.row_selection = { [anchor_row] = next_sel }
+          local _, sel_row, sel_offset = diff_render.update_selection_at_row(
             layout.main_buf,
-            cursor_row,
+            anchor_row,
             state.row_selection,
             row_ai,
             row_disc_map,
             state.current_user,
             state.review,
-            state.editing_note
+            state.editing_note,
+            line_data
           )
-          state._pending_scroll = { row = cursor_row, focus_offset = sel_offset }
+          if sel_row then
+            vim.api.nvim_win_set_cursor(layout.main_win, { sel_row, 0 })
+            state._pending_scroll = { row = sel_row, focus_offset = sel_offset }
+          else
+            state._pending_scroll = { row = anchor_row, focus_offset = sel_offset }
+          end
           rerender_view()
           return
         end
@@ -1829,21 +1937,28 @@ function M.setup_keymaps(state, layout, active_states)
         return
       end
 
-      if row_ai[new_row] or row_disc_map[new_row] then
-        local new_items = diff_comments.build_row_items(row_ai[new_row] or {}, row_disc_map[new_row] or {})
+      local new_anchor = resolve_anchor_row(line_data, new_row)
+      if row_ai[new_anchor] or row_disc_map[new_anchor] then
+        local new_items = diff_comments.build_row_items(row_ai[new_anchor] or {}, row_disc_map[new_anchor] or {})
         if #new_items > 0 then
-          state.row_selection = { [new_row] = new_items[#new_items] }
-          local sel_offset = diff_render.update_selection_at_row(
+          state.row_selection = { [new_anchor] = new_items[#new_items] }
+          local _, sel_row, sel_offset = diff_render.update_selection_at_row(
             layout.main_buf,
-            new_row,
+            new_anchor,
             state.row_selection,
             row_ai,
             row_disc_map,
             state.current_user,
             state.review,
-            state.editing_note
+            state.editing_note,
+            line_data
           )
-          state._pending_scroll = { row = new_row, focus_offset = sel_offset }
+          if sel_row then
+            vim.api.nvim_win_set_cursor(layout.main_win, { sel_row, 0 })
+            state._pending_scroll = { row = sel_row, focus_offset = sel_offset }
+          else
+            state._pending_scroll = { row = new_anchor, focus_offset = sel_offset }
+          end
           rerender_view()
           return
         end

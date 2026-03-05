@@ -300,10 +300,12 @@ end
 --- @param row_disc table map of row->discussions
 --- @param row_ai table map of row->AI suggestions
 --- @return number[] sorted unique row numbers
-function M.get_annotated_rows(row_disc, row_ai)
+function M.get_annotated_rows(row_disc, row_ai, line_data)
   local seen = {}
   for r in pairs(row_disc or {}) do
-    seen[r] = true
+    if not line_data or not line_data[r] or line_data[r].type ~= "carrier" then
+      seen[r] = true
+    end
   end
   for r in pairs(row_ai or {}) do
     seen[r] = true
