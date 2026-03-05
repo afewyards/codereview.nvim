@@ -159,7 +159,64 @@ function M.open(job, trace, max_lines)
     pcall(vim.api.nvim_win_close, win, true)
   end
 
-  -- ... keymaps set in Task 5 ...
+  -- Re-render helper
+  local function rerender()
+    local cursor = vim.api.nvim_win_get_cursor(win)
+    local old_si = handle.section_map[cursor[1]]
+
+    local new_display = M.build_display(parsed, max_lines)
+    handle.section_map = new_display.section_map
+
+    vim.bo[buf].modifiable = true
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, new_display.lines)
+    vim.bo[buf].modifiable = false
+
+    vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
+    for _, hl in ipairs(new_display.highlights) do
+      if hl.line <= #new_display.lines then
+        pcall(vim.api.nvim_buf_add_highlight, buf, ns, hl.hl_group, hl.line - 1, hl.col_start, hl.col_end)
+      end
+    end
+
+    -- Restore cursor to same section
+    if old_si then
+      for r, si in pairs(new_display.section_map) do
+        if si == old_si then
+          pcall(vim.api.nvim_win_set_cursor, win, { r, 0 })
+          return
+        end
+      end
+    end
+    pcall(vim.api.nvim_win_set_cursor, win, { math.min(cursor[1], #new_display.lines), 0 })
+  end
+
+  -- Keymaps
+  local opts = { noremap = true, silent = true, buffer = buf }
+  vim.keymap.set("n", "q", handle.close, vim.tbl_extend("force", opts, { desc = "Close log" }))
+  vim.keymap.set("n", "<Esc>", handle.close, vim.tbl_extend("force", opts, { desc = "Close log" }))
+
+  vim.keymap.set("n", "<CR>", function()
+    local cur_row = vim.api.nvim_win_get_cursor(win)[1]
+    local si = handle.section_map[cur_row]
+    if si and parsed.sections[si] then
+      parsed.sections[si].collapsed = not parsed.sections[si].collapsed
+      rerender()
+    end
+  end, vim.tbl_extend("force", opts, { desc = "Toggle section" }))
+
+  vim.keymap.set("n", "zM", function()
+    for _, section in ipairs(parsed.sections) do
+      section.collapsed = true
+    end
+    rerender()
+  end, vim.tbl_extend("force", opts, { desc = "Collapse all" }))
+
+  vim.keymap.set("n", "zR", function()
+    for _, section in ipairs(parsed.sections) do
+      section.collapsed = false
+    end
+    rerender()
+  end, vim.tbl_extend("force", opts, { desc = "Expand all" }))
 
   vim.api.nvim_create_autocmd("WinClosed", {
     pattern = tostring(win),
