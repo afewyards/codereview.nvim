@@ -26,20 +26,28 @@ function M.parse_remote(url)
   return nil, nil
 end
 
-function M.get_repo_root()
-  local result = vim.fn.systemlist({ "git", "rev-parse", "--show-toplevel" })
-  if vim.v.shell_error ~= 0 or #result == 0 then
+--- Run a shell command and return trimmed stdout, or nil on failure.
+--- Uses io.popen so it is safe to call from plenary.async coroutines
+--- (vim.fn.systemlist is not).
+local function shell(cmd)
+  local handle = io.popen(cmd)
+  if not handle then
     return nil
   end
-  return vim.trim(result[1])
+  local out = handle:read("*a")
+  handle:close()
+  if not out or out == "" then
+    return nil
+  end
+  return vim.trim(out)
+end
+
+function M.get_repo_root()
+  return shell("git rev-parse --show-toplevel 2>/dev/null")
 end
 
 function M.get_remote_url()
-  local result = vim.fn.systemlist({ "git", "remote", "get-url", "origin" })
-  if vim.v.shell_error ~= 0 or #result == 0 then
-    return nil
-  end
-  return vim.trim(result[1])
+  return shell("git remote get-url origin 2>/dev/null")
 end
 
 function M.detect_project()
