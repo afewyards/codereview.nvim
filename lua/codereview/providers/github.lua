@@ -44,33 +44,9 @@ local function graphql_url(base_url)
   return url .. "/graphql"
 end
 
-local function graphql(base_url, headers, query, variables)
-  local curl = require("plenary.curl")
-  local payload = { query = query }
-  if variables then
-    payload.variables = variables
-  end
-  local resp = curl.request({
-    url = graphql_url(base_url),
-    method = "post",
-    headers = headers,
-    body = vim.json.encode(payload),
-  })
-  if not resp or resp.status ~= 200 then
-    local msg = "GraphQL request failed: " .. (resp and resp.body or "no response")
-    log.error(msg)
-    return nil, msg
-  end
-  local ok, data = pcall(vim.json.decode, resp.body)
-  if not ok then
-    return nil, "Failed to parse GraphQL response"
-  end
-  if data.errors then
-    local msg = "GraphQL errors: " .. vim.json.encode(data.errors)
-    log.error(msg)
-    return nil, msg
-  end
-  return data.data
+local function graphql(client, base_url, headers, query, variables)
+  local url = graphql_url(base_url)
+  return client.graphql(url, headers, query, variables)
 end
 
 -- Pagination -----------------------------------------------------------------
@@ -300,7 +276,7 @@ function M.get_discussions(client, ctx, review)
       }
     ]]
 
-    local data, gql_err = graphql(ctx.base_url, headers, query, {
+    local data, gql_err = graphql(client, ctx.base_url, headers, query, {
       owner = owner,
       repo = repo,
       pr = review.id,
@@ -582,7 +558,7 @@ function M.resolve_discussion(client, ctx, review, discussion_id, resolved, node
     )
 
     log.debug("GraphQL: fetching review threads for comment " .. discussion_id)
-    local ldata, lerr = graphql(nil, headers, lookup_query)
+    local ldata, lerr = graphql(client, ctx.base_url, headers, lookup_query)
     if not ldata then
       return nil, lerr or "GraphQL lookup failed"
     end
@@ -631,7 +607,7 @@ function M.resolve_discussion(client, ctx, review, discussion_id, resolved, node
     )
   end
 
-  local _, merr = graphql(nil, headers, mutation)
+  local _, merr = graphql(client, ctx.base_url, headers, mutation)
   if merr then
     return nil, merr
   end
@@ -754,7 +730,7 @@ function M.create_draft_comment(client, ctx, review, params)
       }
     }
   ]]
-  local data, gql_err = graphql(ctx.base_url, headers, mutation, {
+  local data, gql_err = graphql(client, ctx.base_url, headers, mutation, {
     reviewId = M._pending_review_node_id,
     body = params.body,
     path = params.path,
