@@ -138,6 +138,42 @@ local function place_hunk_separators(buf, data_list, file_scoped)
       prev_file = cur_file
     end
   end
+
+  -- Edge separators: top/bottom of per-file view when content is truncated
+  if not file_scoped then
+    local function build_edge_hint(arrow)
+      local edge_hint = " " .. arrow .. " Press " .. toggle_key .. " to show full file " .. arrow .. " "
+      local edge_hint_len = vim.fn.strdisplaywidth(edge_hint)
+      local edge_remaining = win_width - edge_hint_len
+      if edge_remaining >= 2 then
+        local left = math.floor(edge_remaining / 2)
+        local right = edge_remaining - left
+        return {
+          { string.rep(cfg.separator_char, left), "CodeReviewHunkSeparator" },
+          { edge_hint, "CodeReviewHunkSeparatorHint" },
+          { string.rep(cfg.separator_char, right), "CodeReviewHunkSeparator" },
+        }
+      end
+      return full_virt
+    end
+
+    -- Top edge: below the "load more above" line
+    if #data_list > 0 and data_list[1].type == "load_more" and data_list[1].direction == "above" then
+      vim.api.nvim_buf_set_extmark(buf, SEPARATOR_NS, 0, 0, {
+        virt_lines = { build_edge_hint("▲"), full_virt },
+        virt_lines_above = false,
+      })
+    end
+
+    -- Bottom edge: above the "load more below" line
+    local n = #data_list
+    if n > 0 and data_list[n].type == "load_more" and data_list[n].direction == "below" then
+      vim.api.nvim_buf_set_extmark(buf, SEPARATOR_NS, n - 1, 0, {
+        virt_lines = { full_virt, build_edge_hint("▼") },
+        virt_lines_above = true,
+      })
+    end
+  end
 end
 
 -- ─── Discussion helpers ───────────────────────────────────────────────────────
@@ -908,9 +944,11 @@ function M.render_all_files(
     local cache_key = fpath and (fpath .. ":" .. file_ctx .. filter_suffix) or nil
     local file_cached = diff_cache and cache_key and diff_cache[cache_key]
 
-    local display
+    local display, hunks, file_line_count
     if file_cached then
       display = file_cached.display
+      hunks = file_cached.hunks
+      file_line_count = file_cached.file_line_count
     else
       local diff_text = file_diff.diff or ""
       if base_sha and head_sha and fpath then
@@ -940,10 +978,19 @@ function M.render_all_files(
           diff_text = result
         end
       end
-      local hunks = parser.parse_hunks(diff_text)
+      hunks = parser.parse_hunks(diff_text)
       display = parser.build_display(hunks, file_ctx)
+
+      -- Get file line count for BOF/EOF detection
+      if fpath and head_sha then
+        local wc = vim.fn.system({ "git", "show", head_sha .. ":" .. fpath })
+        if vim.v.shell_error == 0 then
+          file_line_count = select(2, wc:gsub("\n", "\n"))
+        end
+      end
+
       if diff_cache and cache_key then
-        diff_cache[cache_key] = { hunks = hunks, display = display }
+        diff_cache[cache_key] = { hunks = hunks, display = display, file_line_count = file_line_count }
       end
     end
 
@@ -972,11 +1019,25 @@ function M.render_all_files(
       table.insert(all_line_data, { type = "separator", file_idx = file_idx })
     end
 
+    -- BOF/EOF detection for edge separators
+    local at_bof = #hunks > 0 and hunks[1].new_start <= 1 and hunks[1].old_start <= 1
+    local at_eof = false
+    if file_line_count and #display > 0 then
+      for i = #display, 1, -1 do
+        if display[i].new_line then
+          at_eof = display[i].new_line >= file_line_count
+          break
+        end
+      end
+    end
+
     table.insert(file_sections, {
       start_line = section_start,
       end_line = section_end,
       file_idx = file_idx,
       file = file_diff,
+      at_bof = at_bof,
+      at_eof = at_eof,
     })
   end
 
@@ -1097,6 +1158,54 @@ function M.render_all_files(
   end)
 
   place_hunk_separators(buf, all_line_data, true)
+
+  -- Edge separators for scroll mode: top/bottom of each file section
+  do
+    local cfg_sep = config.get().diff
+    if cfg_sep.separator_lines > 0 and cfg_sep.separator_char ~= "" then
+      local win_w = 80
+      for _, w in ipairs(vim.api.nvim_list_wins()) do
+        if vim.api.nvim_win_get_buf(w) == buf then
+          win_w = vim.api.nvim_win_get_width(w)
+          break
+        end
+      end
+      local keymaps = require("codereview.keymaps")
+      local toggle_key = keymaps.get("toggle_full_file") or "<C-f>"
+      local plain = { { string.rep(cfg_sep.separator_char, win_w), "CodeReviewHunkSeparator" } }
+
+      local function edge_hint(arrow)
+        local txt = " " .. arrow .. " Press " .. toggle_key .. " to show full file " .. arrow .. " "
+        local rem = win_w - vim.fn.strdisplaywidth(txt)
+        if rem >= 2 then
+          local l = math.floor(rem / 2)
+          return {
+            { string.rep(cfg_sep.separator_char, l), "CodeReviewHunkSeparator" },
+            { txt, "CodeReviewHunkSeparatorHint" },
+            { string.rep(cfg_sep.separator_char, rem - l), "CodeReviewHunkSeparator" },
+          }
+        end
+        return plain
+      end
+
+      for _, section in ipairs(file_sections) do
+        -- Top edge: below file_header when not at BOF
+        if not section.at_bof and section.start_line < section.end_line then
+          vim.api.nvim_buf_set_extmark(buf, SEPARATOR_NS, section.start_line - 1, 0, {
+            virt_lines = { edge_hint("▲"), plain },
+            virt_lines_above = false,
+          })
+        end
+        -- Bottom edge: below last content line when not at EOF
+        if not section.at_eof and section.end_line >= section.start_line then
+          vim.api.nvim_buf_set_extmark(buf, SEPARATOR_NS, section.end_line - 1, 0, {
+            virt_lines = { plain, edge_hint("▼") },
+            virt_lines_above = false,
+          })
+        end
+      end
+    end
+  end
 
   -- Build scroll lookup map once for O(1) comment and suggestion placement
   local scroll_map = M.build_line_to_row_scroll(all_line_data)
