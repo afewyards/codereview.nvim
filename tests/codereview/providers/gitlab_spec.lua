@@ -726,6 +726,49 @@ describe("get_versions", function()
   end)
 end)
 
+describe("build_commit_matcher", function()
+  local commits = {
+    { sha = "E" },
+    { sha = "D" },
+    { sha = "C" },
+    { sha = "B" },
+    { sha = "A" },
+  }
+  local versions = {
+    { head_commit_sha = "C", created_at = "2026-01-01" },
+    { head_commit_sha = "E", created_at = "2026-01-02" },
+  }
+
+  it("matches when position.head_sha belongs to version owning the commit", function()
+    local matcher = gitlab.build_commit_matcher(commits, versions)
+    -- Commit "A" is owned by version with head "C"
+    local position = { head_sha = "C" }
+    assert.is_true(matcher(position, "A"))
+  end)
+
+  it("rejects when position.head_sha belongs to a different version", function()
+    local matcher = gitlab.build_commit_matcher(commits, versions)
+    -- Commit "A" is owned by version "C", not "E"
+    local position = { head_sha = "E" }
+    assert.is_false(matcher(position, "A"))
+  end)
+
+  it("returns always-false when no versions", function()
+    local matcher = gitlab.build_commit_matcher(commits, {})
+    assert.is_false(matcher({ head_sha = "C" }, "A"))
+  end)
+
+  it("returns always-false when no commits", function()
+    local matcher = gitlab.build_commit_matcher({}, versions)
+    assert.is_false(matcher({ head_sha = "C" }, "A"))
+  end)
+
+  it("handles nil position gracefully", function()
+    local matcher = gitlab.build_commit_matcher(commits, versions)
+    assert.is_false(matcher(nil, "A"))
+  end)
+end)
+
 describe("pipeline methods", function()
   local mock_client
 

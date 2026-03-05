@@ -733,6 +733,70 @@ function M.retry_job(client, ctx, review, job_id)
   return client.post(ctx.base_url, path, { body = {}, headers = headers })
 end
 
+--- Build a matcher closure that checks if a note position belongs to a given commit.
+--- Reuses the same version-map logic as commit_filter.build_version_map.
+--- @param commits table[] Array of { sha, ... } (newest first)
+--- @param versions table[] Array of { head_commit_sha, created_at }
+--- @return fun(position: table|nil, commit_sha: string): boolean
+function M.build_commit_matcher(commits, versions)
+  if #commits == 0 or #versions == 0 then
+    return function()
+      return false
+    end
+  end
+
+  -- Sort versions by created_at ascending
+  local sorted_versions = {}
+  for _, v in ipairs(versions) do
+    table.insert(sorted_versions, v)
+  end
+  table.sort(sorted_versions, function(a, b)
+    return (a.created_at or "") < (b.created_at or "")
+  end)
+
+  -- Reverse commits to oldest-first
+  local ordered = {}
+  for i = #commits, 1, -1 do
+    table.insert(ordered, commits[i].sha)
+  end
+
+  -- Build commit_index for O(1) lookup
+  local commit_index = {}
+  for i, sha in ipairs(ordered) do
+    commit_index[sha] = i
+  end
+
+  -- Walk versions; each version owns commits from prev boundary+1 to its head index
+  local version_map = {}
+  local prev_idx = 0
+  for _, v in ipairs(sorted_versions) do
+    local v_idx = commit_index[v.head_commit_sha]
+    if v_idx then
+      for i = prev_idx + 1, v_idx do
+        version_map[ordered[i]] = version_map[ordered[i]] or {}
+        table.insert(version_map[ordered[i]], v.head_commit_sha)
+      end
+      prev_idx = v_idx
+    end
+  end
+
+  return function(position, commit_sha)
+    if not position then
+      return false
+    end
+    local version_heads = version_map[commit_sha]
+    if not version_heads then
+      return false
+    end
+    for _, vh in ipairs(version_heads) do
+      if position.head_sha == vh then
+        return true
+      end
+    end
+    return false
+  end
+end
+
 --- Cancel a running job.
 function M.cancel_job(client, ctx, review, job_id)
   local headers, err = get_headers()
