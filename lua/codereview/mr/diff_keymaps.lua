@@ -971,23 +971,30 @@ function M.setup_keymaps(state, layout, active_states)
         return
       end
 
-      -- Post as draft comment via API
-      local client_mod = require("codereview.api.client")
-      local _, post_err = state.provider.create_draft_comment(client_mod, state.ctx, state.review, {
-        body = suggestion.comment,
-        path = suggestion.file,
-        line = suggestion.line,
-      })
-      if post_err then
-        vim.notify("Failed to post draft: " .. post_err, vim.log.levels.ERROR)
-        return
-      end
-
-      vim.notify("Draft comment posted", vim.log.levels.INFO)
+      -- Optimistic UI update
       suggestion.status = "accepted"
       suggestion.drafted = true
       rerender_ai()
       nav_to_next_ai(cursor)
+
+      -- Post as draft comment via async API
+      require("plenary.async").run(function()
+        local async_client = require("codereview.api.async_client")
+        local _, post_err = state.provider.create_draft_comment(async_client, state.ctx, state.review, {
+          body = suggestion.comment,
+          path = suggestion.file,
+          line = suggestion.line,
+        })
+        if post_err then
+          vim.schedule(function()
+            vim.notify("Failed to post draft: " .. post_err, vim.log.levels.ERROR)
+          end)
+        else
+          vim.schedule(function()
+            vim.notify("Draft comment posted", vim.log.levels.INFO)
+          end)
+        end
+      end)
     end,
 
     -- approve shares default key "a" with accept_suggestion; independent remapping supported
@@ -1041,25 +1048,32 @@ function M.setup_keymaps(state, layout, active_states)
       comment.open_input_popup("Edit AI Suggestion", function(text)
         suggestion.comment = text
 
-        -- Post edited suggestion as draft comment
-        local client_mod = require("codereview.api.client")
-        local _, post_err = state.provider.create_draft_comment(client_mod, state.ctx, state.review, {
-          body = suggestion.comment,
-          path = suggestion.file,
-          line = suggestion.line,
-        })
-        if post_err then
-          vim.notify("Failed to post draft: " .. post_err, vim.log.levels.ERROR)
-          suggestion.status = "edited"
-          rerender_ai()
-          return
-        end
-
-        vim.notify("Draft comment posted", vim.log.levels.INFO)
+        -- Optimistic UI update
         suggestion.status = "accepted"
         suggestion.drafted = true
         rerender_ai()
         nav_to_next_ai(cursor)
+
+        -- Post edited suggestion as draft comment via async API
+        require("plenary.async").run(function()
+          local async_client = require("codereview.api.async_client")
+          local _, post_err = state.provider.create_draft_comment(async_client, state.ctx, state.review, {
+            body = suggestion.comment,
+            path = suggestion.file,
+            line = suggestion.line,
+          })
+          if post_err then
+            vim.schedule(function()
+              vim.notify("Failed to post draft: " .. post_err, vim.log.levels.ERROR)
+              suggestion.status = "edited"
+              rerender_ai()
+            end)
+          else
+            vim.schedule(function()
+              vim.notify("Draft comment posted", vim.log.levels.INFO)
+            end)
+          end
+        end)
       end, {
         action_type = "edit",
         prefill = suggestion.comment,
@@ -1939,11 +1953,11 @@ function M.setup_keymaps(state, layout, active_states)
     if not provider then
       return
     end
-    local client = require("codereview.api.client")
+    local async_client = require("codereview.api.async_client")
     local comment = require("codereview.mr.comment")
     local pos = note.position or {}
     comment.post_with_retry(function()
-      return provider.post_comment(client, ctx, state.review, note.body, pos)
+      return provider.post_comment(async_client, ctx, state.review, note.body, pos)
     end, function()
       vim.notify("Comment posted", vim.log.levels.INFO)
       refresh_discussions()
