@@ -268,6 +268,40 @@ function M.get_url(full_url, opts)
   return process_response(response)
 end
 
+function M.async_get_url(full_url, opts)
+  opts = opts or {}
+
+  -- Fall back to token auth if no headers provided (legacy support)
+  if not opts.headers then
+    local auth = require("codereview.api.auth")
+    local token, token_type = auth.get_token()
+    if not token then
+      return nil, "No authentication token. Run :CodeReviewAuth"
+    end
+    opts = vim.tbl_extend("keep", opts, { headers = build_headers(token, token_type) })
+  end
+
+  local params = {
+    url = full_url,
+    headers = opts.headers,
+    method = "get",
+  }
+
+  local response, curl_err = safe_async_request(params)
+  if not response and curl_err then
+    return nil, "Request failed: " .. curl_err
+  end
+  if not response then
+    return nil, "Request failed: no response"
+  end
+
+  if response.status < 200 or response.status >= 300 then
+    return nil, string.format("HTTP %d: %s", response.status, response.body or "")
+  end
+
+  return process_response(response)
+end
+
 function M.paginate_all(base_url, path, opts)
   opts = vim.deepcopy(opts or {})
   local all_data = {}
@@ -280,6 +314,37 @@ function M.paginate_all(base_url, path, opts)
     opts.query.per_page = per_page
 
     local result, err = M.get(base_url, path, opts)
+    if not result then
+      return nil, err
+    end
+
+    if type(result.data) == "table" then
+      for _, item in ipairs(result.data) do
+        table.insert(all_data, item)
+      end
+    end
+
+    if not result.next_page then
+      break
+    end
+    page = result.next_page
+  end
+
+  return all_data
+end
+
+function M.async_paginate_all(base_url, path, opts)
+  opts = vim.deepcopy(opts or {})
+  local all_data = {}
+  local page = 1
+  local per_page = opts.per_page or 100
+
+  while true do
+    opts.query = opts.query or {}
+    opts.query.page = page
+    opts.query.per_page = per_page
+
+    local result, err = M.async_get(base_url, path, opts)
     if not result then
       return nil, err
     end
@@ -319,6 +384,102 @@ function M.paginate_all_url(start_url, opts)
   end
 
   return all_data
+end
+
+function M.async_paginate_all_url(start_url, opts)
+  local all_data = {}
+  local current_url = start_url
+
+  while current_url do
+    local result, err = M.async_get_url(current_url, opts)
+    if not result then
+      return nil, err
+    end
+
+    if type(result.data) == "table" then
+      for _, item in ipairs(result.data) do
+        table.insert(all_data, item)
+      end
+    end
+
+    current_url = result.next_url
+  end
+
+  return all_data
+end
+
+function M.graphql(url, headers, query, variables)
+  local payload = { query = query, variables = variables }
+  local params = {
+    url = url,
+    headers = headers,
+    method = "post",
+    body = vim.json.encode(payload),
+  }
+
+  local response, curl_err = safe_request(params)
+  if not response and curl_err then
+    return nil, "Request failed: " .. curl_err
+  end
+  if not response then
+    return nil, "Request failed: no response"
+  end
+
+  if response.status ~= 200 then
+    return nil, string.format("HTTP %d: %s", response.status, response.body or "")
+  end
+
+  local ok, data = pcall(vim.json.decode, response.body)
+  if not ok then
+    return nil, "Failed to decode GraphQL response: " .. tostring(data)
+  end
+
+  if data.errors then
+    local msgs = {}
+    for _, e in ipairs(data.errors) do
+      table.insert(msgs, e.message or tostring(e))
+    end
+    return nil, "GraphQL errors: " .. table.concat(msgs, "; ")
+  end
+
+  return data.data
+end
+
+function M.async_graphql(url, headers, query, variables)
+  local payload = { query = query, variables = variables }
+  local params = {
+    url = url,
+    headers = headers,
+    method = "post",
+    body = vim.json.encode(payload),
+  }
+
+  local response, curl_err = safe_async_request(params)
+  if not response and curl_err then
+    return nil, "Request failed: " .. curl_err
+  end
+  if not response then
+    return nil, "Request failed: no response"
+  end
+
+  if response.status ~= 200 then
+    return nil, string.format("HTTP %d: %s", response.status, response.body or "")
+  end
+
+  local ok, data = pcall(vim.json.decode, response.body)
+  if not ok then
+    return nil, "Failed to decode GraphQL response: " .. tostring(data)
+  end
+
+  if data.errors then
+    local msgs = {}
+    for _, e in ipairs(data.errors) do
+      table.insert(msgs, e.message or tostring(e))
+    end
+    return nil, "GraphQL errors: " .. table.concat(msgs, "; ")
+  end
+
+  return data.data
 end
 
 return M
