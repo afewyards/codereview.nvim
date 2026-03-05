@@ -193,13 +193,9 @@ end
 
 -- ─── Discussion helpers ───────────────────────────────────────────────────────
 
-local function is_outdated(discussion, review, commit_filter)
+local function is_outdated(discussion, review)
   local note = discussion.notes and discussion.notes[1]
   if not note or not note.position then
-    return false
-  end
-  -- When viewing a specific commit, delegate to the provider's is_current
-  if commit_filter and commit_filter.is_current and commit_filter.is_current(note.position) then
     return false
   end
   if note.position.outdated then
@@ -219,7 +215,7 @@ local function discussion_matches_file(discussion, file_diff, review, commit_fil
   if not note or not note.position then
     return false
   end
-  if is_outdated(discussion, review, commit_filter) and note.change_position then
+  if is_outdated(discussion, review) and note.change_position then
     local cp = note.change_position
     local path = cp.new_path or cp.old_path
     return path == file_diff.new_path or path == file_diff.old_path
@@ -234,7 +230,7 @@ local function discussion_line(discussion, review, commit_filter)
   if not note or not note.position then
     return nil
   end
-  if is_outdated(discussion, review, commit_filter) then
+  if is_outdated(discussion, review) then
     if note.position.outdated then
       -- GitHub outdated: new_line is already set to the fallback originalLine
       local end_line = tonumber(note.position.new_line) or tonumber(note.position.old_line)
@@ -246,7 +242,11 @@ local function discussion_line(discussion, review, commit_filter)
       local end_line = tonumber(cp.new_line) or tonumber(cp.old_line)
       return end_line, nil, true
     end
-    -- GitLab outdated without change_position: skip
+    -- Outdated without change_position: use original line if provider says it's current
+    if commit_filter and commit_filter.is_current and commit_filter.is_current(note.position) then
+      local end_line = tonumber(note.position.new_line) or tonumber(note.position.old_line)
+      return end_line, nil, true
+    end
     return nil
   end
   local pos = note.position
@@ -564,6 +564,10 @@ function M.place_comment_signs(
         -- Find the end-line row for the inline thread (O(1) lookup)
         local row = map[target_line]
         if row then
+          -- In commit view, skip outdated comments on context lines (not actual changes)
+          if outdated and commit_filter and line_data[row] and line_data[row].type == "context" then
+            goto next_discussion
+          end
           -- Place gutter sign (also covers single-line comments)
           pcall(vim.fn.sign_place, 0, "CodeReview", sign_name, buf, { lnum = row })
 
@@ -603,6 +607,7 @@ function M.place_comment_signs(
         end
       end
     end
+    ::next_discussion::
   end
 
   return row_discussions
@@ -930,7 +935,7 @@ local function index_discussions_by_path(discussions, review, commit_filter)
       goto continue
     end
     local path
-    if is_outdated(disc, review, commit_filter) and note.change_position then
+    if is_outdated(disc, review) and note.change_position then
       local cp = note.change_position
       path = cp.new_path or cp.old_path
     else
@@ -1365,6 +1370,10 @@ function M.render_all_files(
         -- Find the end-line row for the inline thread (O(1) lookup)
         local i = scroll_map[file_prefix .. target_line]
         if i then
+          -- In commit view, skip outdated comments on context lines (not actual changes)
+          if disc_outdated and commit_filter and all_line_data[i] and all_line_data[i].type == "context" then
+            goto next_scroll_disc
+          end
           -- Place sign (also covers single-line comments)
           pcall(vim.fn.sign_place, 0, "CodeReview", sign_name, buf, { lnum = i })
 
@@ -1401,6 +1410,7 @@ function M.render_all_files(
           table.insert(all_row_discussions[i], disc)
         end
       end
+      ::next_scroll_disc::
     end
   end
 

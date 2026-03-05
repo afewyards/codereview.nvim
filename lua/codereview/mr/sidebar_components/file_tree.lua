@@ -11,13 +11,18 @@ local build_line_to_row = diff_render.build_line_to_row
 
 -- ─── Count helpers ─────────────────────────────────────────────────────────
 
-local function count_file_comments(file, discussions, line_to_row)
+local function is_context_line(row, commit_filter, line_data)
+  return commit_filter and line_data and line_data[row] and line_data[row].type == "context"
+end
+
+local function count_file_comments(file, discussions, line_to_row, review, commit_filter, line_data)
   local n = 0
   for _, disc in ipairs(discussions or {}) do
-    if discussion_matches_file(disc, file) then
+    if discussion_matches_file(disc, file, review, commit_filter) then
       if line_to_row then
-        local target_line = discussion_line(disc)
-        if target_line and line_to_row[target_line] then
+        local target_line, _, outdated = discussion_line(disc, review, commit_filter)
+        local row = target_line and line_to_row[target_line]
+        if row and not (outdated and is_context_line(row, commit_filter, line_data)) then
           n = n + 1
         end
       else
@@ -28,13 +33,14 @@ local function count_file_comments(file, discussions, line_to_row)
   return n
 end
 
-local function count_file_unresolved(file, discussions, line_to_row)
+local function count_file_unresolved(file, discussions, line_to_row, review, commit_filter, line_data)
   local n = 0
   for _, disc in ipairs(discussions or {}) do
-    if discussion_matches_file(disc, file) and not disc.local_draft and not disc.resolved then
+    if discussion_matches_file(disc, file, review, commit_filter) and not disc.local_draft and not disc.resolved then
       if line_to_row then
-        local target_line = discussion_line(disc)
-        if target_line and line_to_row[target_line] then
+        local target_line, _, outdated = discussion_line(disc, review, commit_filter)
+        local row = target_line and line_to_row[target_line]
+        if row and not (outdated and is_context_line(row, commit_filter, line_data)) then
           n = n + 1
         end
       else
@@ -87,9 +93,10 @@ local function render_file_entry(state, files, entry, lines, row_map, max_name_b
     line_to_row = build_line_to_row(cached_ld)
   end
 
-  local ccount = count_file_comments(file, state.discussions, line_to_row)
+  local ccount = count_file_comments(file, state.discussions, line_to_row, state.review, state.commit_filter, cached_ld)
   local cstr = ccount > 0 and (" " .. ccount) or ""
-  local ucount = count_file_unresolved(file, state.discussions, line_to_row)
+  local ucount =
+    count_file_unresolved(file, state.discussions, line_to_row, state.review, state.commit_filter, cached_ld)
   local ustr = ucount > 0 and (" ⚠" .. ucount) or ""
   local aicount = count_file_ai(file, state.ai_suggestions)
   local aistr = aicount > 0 and (" ✨" .. aicount) or ""

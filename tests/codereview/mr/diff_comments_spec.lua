@@ -366,7 +366,7 @@ describe("mr.diff_comments", function()
       vim.api.nvim_buf_delete(buf, { force = true })
     end)
 
-    it("GitLab: treats old-version discussion as current when commit_filter.is_current matches", function()
+    it("GitLab: places old-version comment via is_current fallback, still marked outdated", function()
       local review = { head_sha = "v2_head" }
       local discussions = {
         {
@@ -390,11 +390,11 @@ describe("mr.diff_comments", function()
 
       local target_line, _, outdated = diff_render.discussion_line(discussions[1], review, commit_filter)
       assert.equals(12, target_line)
-      assert.is_falsy(outdated)
+      assert.is_true(outdated)
       assert.is_true(diff_render.discussion_matches_file(discussions[1], file_diff, review, commit_filter))
     end)
 
-    it("GitHub: treats outdated discussion as current when commit_filter.is_current matches", function()
+    it("GitHub: places outdated discussion at original line, still marked outdated", function()
       local review = { head_sha = "current_head" }
       local discussions = {
         {
@@ -418,7 +418,7 @@ describe("mr.diff_comments", function()
 
       local target_line, _, outdated = diff_render.discussion_line(discussions[1], review, commit_filter)
       assert.equals(14, target_line)
-      assert.is_falsy(outdated)
+      assert.is_true(outdated)
       assert.is_true(diff_render.discussion_matches_file(discussions[1], file_diff, review, commit_filter))
     end)
   end)

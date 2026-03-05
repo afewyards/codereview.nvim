@@ -814,51 +814,20 @@ describe("is_outdated", function()
     assert.is_false(diff_render.is_outdated(disc, review))
   end)
 
-  it("returns false when commit_filter.is_current says position is current", function()
-    local disc = { notes = { { position = { head_sha = "old_version_head" } } } }
+  it("returns true for GitHub position.outdated", function()
+    local disc = { notes = { { position = { outdated = true } } } }
     local review = { head_sha = "current_head" }
-    local commit_filter = {
-      is_current = function(pos)
-        return pos.head_sha == "old_version_head"
-      end,
-    }
-    assert.is_false(diff_render.is_outdated(disc, review, commit_filter))
-  end)
-
-  it("still returns true when commit_filter.is_current returns false", function()
-    local disc = { notes = { { position = { head_sha = "unknown" } } } }
-    local review = { head_sha = "current_head" }
-    local commit_filter = {
-      is_current = function()
-        return false
-      end,
-    }
-    assert.is_true(diff_render.is_outdated(disc, review, commit_filter))
-  end)
-
-  it("overrides GitHub position.outdated when is_current returns true", function()
-    local disc = {
-      notes = { { position = { original_commit_sha = "abc123", outdated = true } } },
-    }
-    local review = { head_sha = "current_head" }
-    local commit_filter = {
-      is_current = function(pos)
-        return pos.original_commit_sha == "abc123"
-      end,
-    }
-    assert.is_false(diff_render.is_outdated(disc, review, commit_filter))
-  end)
-
-  it("works without commit_filter (nil)", function()
-    local disc = { notes = { { position = { head_sha = "old", outdated = true } } } }
-    local review = { head_sha = "new" }
     assert.is_true(diff_render.is_outdated(disc, review))
-    assert.is_true(diff_render.is_outdated(disc, review, nil))
+  end)
+
+  it("returns false when no review", function()
+    local disc = { notes = { { position = { head_sha = "old" } } } }
+    assert.is_false(diff_render.is_outdated(disc, nil))
   end)
 end)
 
 describe("discussion_line with commit_filter", function()
-  it("returns position.new_line for version-current discussion (not outdated)", function()
+  it("GitLab: returns position.new_line with outdated flag when is_current matches", function()
     local disc = {
       notes = { { position = { head_sha = "v1_head", new_path = "a.lua", new_line = 42 } } },
     }
@@ -870,10 +839,10 @@ describe("discussion_line with commit_filter", function()
     }
     local target_line, _, outdated = diff_render.discussion_line(disc, review, commit_filter)
     assert.equals(42, target_line)
-    assert.is_falsy(outdated)
+    assert.is_true(outdated)
   end)
 
-  it("returns position.new_line for GitHub outdated when is_current", function()
+  it("GitHub: returns position.new_line with outdated flag when is_current matches", function()
     local disc = {
       notes = {
         {
@@ -892,9 +861,10 @@ describe("discussion_line with commit_filter", function()
         return pos.original_commit_sha == "abc123"
       end,
     }
+    -- GitHub outdated path handles this before is_current fallback
     local target_line, _, outdated = diff_render.discussion_line(disc, review, commit_filter)
     assert.equals(30, target_line)
-    assert.is_falsy(outdated)
+    assert.is_true(outdated)
   end)
 
   it("returns nil for truly outdated discussion without change_position", function()
