@@ -99,8 +99,21 @@ function M.setup()
   vim.api.nvim_set_hl(0, "CodeReviewHunkSeparator", { fg = "#565f89", default = true })
   vim.api.nvim_set_hl(0, "CodeReviewHunkSeparatorHint", { fg = "#828bb8", default = true })
   vim.api.nvim_set_hl(0, "CodeReviewCommitFilter", { bg = "#2a2a3a", fg = "#bb9af7", bold = true, default = true })
-  vim.api.nvim_set_hl(0, "CodeReviewWinbarIcon", { fg = "#bb9af7", bold = true, default = true })
-  vim.api.nvim_set_hl(0, "CodeReviewWinbarSha", { fg = "#565f89", default = true })
+  vim.api.nvim_set_hl(
+    0,
+    "CodeReviewWinbarIcon",
+    { fg = "#bb9af7", bg = "#2a2a3a", bold = true, underline = true, sp = "#3b3b5a", default = true }
+  )
+  vim.api.nvim_set_hl(
+    0,
+    "CodeReviewWinbarSha",
+    { fg = "#828bb8", bg = "#2a2a3a", underline = true, sp = "#3b3b5a", default = true }
+  )
+  vim.api.nvim_set_hl(
+    0,
+    "CodeReviewWinbarTitle",
+    { fg = "#c0caf5", bg = "#2a2a3a", underline = true, sp = "#3b3b5a", default = true }
+  )
   vim.api.nvim_set_hl(0, "CodeReviewFileUnvisited", { fg = "#565f89", default = true })
   vim.api.nvim_set_hl(0, "CodeReviewFilePartial", { fg = "#e0af68", default = true })
   vim.api.nvim_set_hl(0, "CodeReviewFileReviewed", { fg = "#9ece6a", default = true })
