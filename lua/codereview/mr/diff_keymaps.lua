@@ -1933,8 +1933,8 @@ function M.setup_keymaps(state, layout, active_states)
 
   -- ── Non-registry keymaps ─────────────────────────────────────────────────────
 
-  -- gR: retry a failed optimistic comment
-  map(main_buf, "n", "gR", function()
+  -- R: retry a failed optimistic comment
+  map(main_buf, "n", "R", function()
     if state.view_mode ~= "diff" then
       return
     end

@@ -294,7 +294,7 @@ function M.build(disc, opts)
   -- Footer
   local footer_content
   if is_err then
-    footer_content = "gR:retry  D:discard"
+    footer_content = "R:retry  D:discard"
   elseif is_pending then
     footer_content = "posting…"
   elseif sel_idx and not editing_this then
