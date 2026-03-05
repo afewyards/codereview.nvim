@@ -743,6 +743,26 @@ function M.render_file_diff(
     end
   end
 
+  -- Pre-compute carrier line counts: diff_line -> number of reply notes needing carriers
+  local disc_carrier_counts = {}
+  for _, disc in ipairs(discussions or {}) do
+    if discussion_matches_file(disc, file_diff, review) then
+      local target_line = discussion_line(disc, review)
+      if target_line then
+        local non_system_count = 0
+        for _, note in ipairs(disc.notes or {}) do
+          if not note.system then
+            non_system_count = non_system_count + 1
+          end
+        end
+        local carriers = math.max(0, non_system_count - 1)
+        if carriers > 0 then
+          disc_carrier_counts[target_line] = (disc_carrier_counts[target_line] or 0) + carriers
+        end
+      end
+    end
+  end
+
   local lines = {}
   local line_data = {}
 
@@ -750,6 +770,12 @@ function M.render_file_diff(
     if item.type ~= "hunk_boundary" then
       table.insert(lines, item.text or "")
       table.insert(line_data, { type = item.type, item = item })
+      local target = item.new_line or item.old_line
+      local carrier_count = target and disc_carrier_counts[target] or 0
+      for k = 1, carrier_count do
+        table.insert(lines, "")
+        table.insert(line_data, { type = "carrier", anchor_line = target, carrier_idx = k })
+      end
     end
   end
 
@@ -798,6 +824,15 @@ function M.render_file_diff(
     else
       prev_delete_row = nil
       prev_delete_text = nil
+    end
+  end
+
+  for i, data in ipairs(line_data) do
+    if data.type == "carrier" then
+      vim.api.nvim_buf_set_extmark(buf, DIFF_NS, i - 1, 0, {
+        virt_text = { { "  \xe2\x94\x83", "CodeReviewCommentBorder" } },
+        virt_text_pos = "overlay",
+      })
     end
   end
 
