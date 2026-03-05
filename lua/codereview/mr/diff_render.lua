@@ -539,6 +539,8 @@ function M.place_comment_signs(
   -- Track which rows have discussions (for keymap lookups)
   local row_discussions = {}
   local map = line_to_row or M.build_line_to_row(line_data)
+  -- Per-anchor carrier offset: tracks how many carrier rows earlier discussions have consumed
+  local carrier_offsets = {}
 
   for _, discussion in ipairs(discussions or {}) do
     if discussion_matches_file(discussion, file_diff, review) then
@@ -560,7 +562,7 @@ function M.place_comment_signs(
           -- Place gutter sign (also covers single-line comments)
           pcall(vim.fn.sign_place, 0, "CodeReview", sign_name, buf, { lnum = row })
 
-          -- Render full comment thread inline
+          -- Render full comment thread inline, spreading replies across carrier rows
           local notes = discussion.notes
           if notes and #notes > 0 then
             local sel = row_selection and row_selection[row]
@@ -573,10 +575,19 @@ function M.place_comment_signs(
               spacer_height = editing_note and editing_note.spacer_height or 0,
               gutter = 4,
             })
-            pcall(vim.api.nvim_buf_set_extmark, buf, DIFF_NS, row - 1, 0, {
-              virt_lines = result.virt_lines,
-              virt_lines_above = false,
-            })
+            local carriers = find_carrier_rows(line_data, row)
+            local offset = carrier_offsets[row] or 0
+            local segments = result.note_segments or { result }
+            for seg_i, seg in ipairs(segments) do
+              local target_row = (seg_i == 1) and row or carriers[offset + seg_i - 1]
+              if target_row and #seg.virt_lines > 0 then
+                pcall(vim.api.nvim_buf_set_extmark, buf, DIFF_NS, target_row - 1, 0, {
+                  virt_lines = seg.virt_lines,
+                  virt_lines_above = false,
+                })
+              end
+            end
+            carrier_offsets[row] = offset + math.max(0, #segments - 1)
           end
 
           -- Store discussion for this row
@@ -863,15 +874,6 @@ function M.render_file_diff(
     else
       prev_delete_row = nil
       prev_delete_text = nil
-    end
-  end
-
-  for i, data in ipairs(line_data) do
-    if data.type == "carrier" then
-      vim.api.nvim_buf_set_extmark(buf, DIFF_NS, i - 1, 0, {
-        virt_text = { { "  \xe2\x94\x83", "CodeReviewCommentBorder" } },
-        virt_text_pos = "overlay",
-      })
     end
   end
 
@@ -1186,15 +1188,6 @@ function M.render_all_files(
     end
   end
 
-  for i, data in ipairs(all_line_data) do
-    if data.type == "carrier" then
-      vim.api.nvim_buf_set_extmark(buf, DIFF_NS, i - 1, 0, {
-        virt_text = { { "  \xe2\x94\x83", "CodeReviewCommentBorder" } },
-        virt_text_pos = "overlay",
-      })
-    end
-  end
-
   -- Apply Vim syntax highlighting per file section using syntax include/region
   vim.api.nvim_buf_call(buf, function()
     vim.cmd("syntax clear")
@@ -1322,6 +1315,8 @@ function M.render_all_files(
   -- Place comment signs and inline threads per file section
   local all_row_discussions = {}
   local disc_by_path = index_discussions_by_path(discussions, review)
+  -- Per-anchor carrier offset: tracks how many carrier rows earlier discussions have consumed
+  local scroll_carrier_offsets = {}
   for _, section in ipairs(file_sections) do
     local fpath = section.file.new_path or section.file.old_path
     for _, disc in ipairs(disc_by_path[fpath] or {}) do
@@ -1356,10 +1351,19 @@ function M.render_all_files(
               spacer_height = editing_note and editing_note.spacer_height or 0,
               gutter = 4,
             })
-            pcall(vim.api.nvim_buf_set_extmark, buf, DIFF_NS, i - 1, 0, {
-              virt_lines = result.virt_lines,
-              virt_lines_above = false,
-            })
+            local carriers = find_carrier_rows(all_line_data, i)
+            local offset = scroll_carrier_offsets[i] or 0
+            local segments = result.note_segments or { result }
+            for seg_i, seg in ipairs(segments) do
+              local target_row = (seg_i == 1) and i or carriers[offset + seg_i - 1]
+              if target_row and #seg.virt_lines > 0 then
+                pcall(vim.api.nvim_buf_set_extmark, buf, DIFF_NS, target_row - 1, 0, {
+                  virt_lines = seg.virt_lines,
+                  virt_lines_above = false,
+                })
+              end
+            end
+            scroll_carrier_offsets[i] = offset + math.max(0, #segments - 1)
           end
 
           if not all_row_discussions[i] then
