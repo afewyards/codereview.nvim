@@ -945,6 +945,29 @@ function M.render_all_files(
     end
   end
 
+  -- Pre-compute carrier line counts for scroll mode: "file_idx:line" -> carrier count
+  local disc_by_path_scroll = index_discussions_by_path(discussions, review)
+  local disc_carrier_counts_scroll = {}
+  for fi, fd in ipairs(files) do
+    local fpath = fd.new_path or fd.old_path
+    for _, disc in ipairs(disc_by_path_scroll[fpath] or {}) do
+      local target_line = discussion_line(disc, review)
+      if target_line then
+        local non_system_count = 0
+        for _, note in ipairs(disc.notes or {}) do
+          if not note.system then
+            non_system_count = non_system_count + 1
+          end
+        end
+        local carriers = math.max(0, non_system_count - 1)
+        if carriers > 0 then
+          local key = fi .. ":" .. target_line
+          disc_carrier_counts_scroll[key] = (disc_carrier_counts_scroll[key] or 0) + carriers
+        end
+      end
+    end
+  end
+
   for file_idx, file_diff in ipairs(files) do
     local section_start = #all_lines + 1
 
@@ -1026,10 +1049,24 @@ function M.render_all_files(
         if item.type ~= "hunk_boundary" then
           table.insert(all_lines, item.text or "")
           table.insert(all_line_data, { type = item.type, item = item, file_idx = file_idx })
+          local target = item.new_line or item.old_line
+          local key = target and (file_idx .. ":" .. target)
+          local carrier_count = key and disc_carrier_counts_scroll[key] or 0
+          for k = 1, carrier_count do
+            table.insert(all_lines, "")
+            table.insert(
+              all_line_data,
+              { type = "carrier", file_idx = file_idx, anchor_line = target, carrier_idx = k }
+            )
+          end
         end
       end
       -- trim trailing empty-text context lines (parser artifact from trailing \n)
-      while #all_lines > section_start and all_lines[#all_lines] == "" do
+      while
+        #all_lines > section_start
+        and all_lines[#all_lines] == ""
+        and all_line_data[#all_line_data].type ~= "carrier"
+      do
         table.remove(all_lines)
         table.remove(all_line_data)
       end
@@ -1107,6 +1144,15 @@ function M.render_all_files(
     else
       prev_delete_row = nil
       prev_delete_text = nil
+    end
+  end
+
+  for i, data in ipairs(all_line_data) do
+    if data.type == "carrier" then
+      vim.api.nvim_buf_set_extmark(buf, DIFF_NS, i - 1, 0, {
+        virt_text = { { "  \xe2\x94\x83", "CodeReviewCommentBorder" } },
+        virt_text_pos = "overlay",
+      })
     end
   end
 
