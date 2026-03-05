@@ -211,6 +211,7 @@ function M.select(state, layout, entry)
   local diff = require("codereview.mr.diff")
   local diff_render = require("codereview.mr.diff_render")
   local diff_state = require("codereview.mr.diff_state")
+  local winbar = require("codereview.mr.winbar")
 
   local function render_current_file()
     if state.scroll_mode then
@@ -253,6 +254,7 @@ function M.select(state, layout, entry)
   if entry.type == "all" then
     if M.is_active(state) then
       M.clear(state)
+      winbar.clear(layout.main_win)
       diff.render_sidebar(layout.sidebar_buf, state)
       if state.view_mode == "diff" then
         render_current_file()
@@ -270,6 +272,7 @@ function M.select(state, layout, entry)
     state.view_mode = "diff"
     diff.render_sidebar(layout.sidebar_buf, state)
     render_current_file()
+    winbar.set_commit(layout.main_win, state.review.head_sha, "Since last review")
     if layout.main_win and vim.api.nvim_win_is_valid(layout.main_win) then
       vim.api.nvim_set_current_win(layout.main_win)
     end
@@ -300,6 +303,7 @@ function M.select(state, layout, entry)
     state.view_mode = "diff"
     diff.render_sidebar(layout.sidebar_buf, state)
     render_current_file()
+    winbar.set_commit(layout.main_win, entry.sha, entry.title or entry.sha:sub(1, 8))
     if layout.main_win and vim.api.nvim_win_is_valid(layout.main_win) then
       vim.api.nvim_set_current_win(layout.main_win)
     end
