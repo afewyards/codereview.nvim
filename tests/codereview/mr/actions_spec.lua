@@ -27,29 +27,47 @@ describe("mr.actions", function()
 
     stub(providers, "detect").returns(mock_provider, mock_ctx, nil)
 
-    -- stub require for client so provider receives our mock_client
-    package.loaded["codereview.api.client"] = mock_client
+    -- stub plenary.async so run() executes its callback synchronously
+    package.loaded["plenary.async"] = {
+      run = function(fn)
+        fn()
+      end,
+    }
+
+    -- stub async_client so provider receives our mock_client
+    package.loaded["codereview.api.async_client"] = mock_client
+
+    -- stub vim.schedule to execute immediately
+    _G._original_vim_schedule = vim.schedule
+    vim.schedule = function(fn)
+      fn()
+    end
   end)
 
   after_each(function()
     providers.detect:revert()
-    package.loaded["codereview.api.client"] = nil
+    package.loaded["plenary.async"] = nil
+    package.loaded["codereview.api.async_client"] = nil
+    vim.schedule = _G._original_vim_schedule
+    _G._original_vim_schedule = nil
   end)
 
   describe("approve", function()
     it("calls provider.approve with client, ctx, and review", function()
       local review = { iid = 1, sha = "abc" }
-      local _, err = actions.approve(review)
-      assert.is_nil(err)
+      actions.approve(review)
       assert.spy(mock_provider.approve).was_called_with(mock_client, mock_ctx, review)
     end)
 
-    it("returns nil and error when detect fails", function()
+    it("notifies with error when detect fails", function()
       providers.detect:revert()
       stub(providers, "detect").returns(nil, nil, "no remote")
-      local result, err = actions.approve({})
-      assert.is_nil(result)
-      assert.equals("no remote", err)
+      local notified_msg
+      vim.notify = function(msg)
+        notified_msg = msg
+      end
+      actions.approve({})
+      assert.equals("no remote", notified_msg)
     end)
   end)
 
@@ -73,9 +91,7 @@ describe("mr.actions", function()
       _G.vim.log = _G.vim.log or {}
       _G.vim.log.levels = _G.vim.log.levels or { WARN = 3 }
 
-      local result, err = actions.unapprove({ iid = 2 })
-      assert.is_nil(result)
-      assert.equals("unapprove failed", err)
+      actions.unapprove({ iid = 2 })
       assert.equals("unapprove failed", notified_msg)
       assert.equals(vim.log.levels.WARN, notified_level)
     end)
@@ -89,12 +105,15 @@ describe("mr.actions", function()
       assert.spy(mock_provider.merge).was_called_with(mock_client, mock_ctx, review, opts)
     end)
 
-    it("returns nil and error when detect fails", function()
+    it("notifies with error when detect fails", function()
       providers.detect:revert()
       stub(providers, "detect").returns(nil, nil, "no remote")
-      local result, err = actions.merge({}, {})
-      assert.is_nil(result)
-      assert.equals("no remote", err)
+      local notified_msg
+      vim.notify = function(msg)
+        notified_msg = msg
+      end
+      actions.merge({}, {})
+      assert.equals("no remote", notified_msg)
     end)
   end)
 
@@ -105,12 +124,15 @@ describe("mr.actions", function()
       assert.spy(mock_provider.close).was_called_with(mock_client, mock_ctx, review)
     end)
 
-    it("returns nil and error when detect fails", function()
+    it("notifies with error when detect fails", function()
       providers.detect:revert()
       stub(providers, "detect").returns(nil, nil, "no remote")
-      local result, err = actions.close({})
-      assert.is_nil(result)
-      assert.equals("no remote", err)
+      local notified_msg
+      vim.notify = function(msg)
+        notified_msg = msg
+      end
+      actions.close({})
+      assert.equals("no remote", notified_msg)
     end)
   end)
 end)

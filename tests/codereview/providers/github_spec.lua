@@ -252,7 +252,12 @@ describe("providers.github", function()
     end)
 
     it("resolve_discussion returns error when thread not found", function()
-      local result, err = github.resolve_discussion(make_client({}), ctx, review, "1", true)
+      local client = make_client({
+        graphql = function()
+          return { repository = { pullRequest = { reviewThreads = { nodes = {} } } } }, nil
+        end,
+      })
+      local result, err = github.resolve_discussion(client, ctx, review, "1", true)
       assert.is_nil(result)
       assert.truthy(err:find("thread"))
     end)
@@ -311,20 +316,43 @@ describe("providers.github", function()
     end)
 
     it("get_discussions fetches threads via GraphQL", function()
-      -- Use raw JSON strings to avoid vim.json.encode array/object issues in test env
-      local body = '{"data":{"repository":{"pullRequest":{"reviewThreads":'
-        .. '{"pageInfo":{"hasNextPage":false,"endCursor":null},'
-        .. '"nodes":[{"id":"PRRT_1","isResolved":false,"diffSide":"RIGHT","startDiffSide":null,"comments":{"nodes":['
-        .. '{"databaseId":1,"author":{"login":"a"},"body":"root",'
-        .. '"createdAt":"2026-01-01T00:00:00Z","path":"f.lua","line":5,'
-        .. '"startLine":null,'
-        .. '"commit":{"oid":"abc"}}]}}]}}}}}'
-      package.loaded["plenary.curl"] = {
-        request = function()
-          return { status = 200, body = body }
+      local client = make_client({
+        graphql = function()
+          return {
+            repository = {
+              pullRequest = {
+                reviewThreads = {
+                  pageInfo = { hasNextPage = false, endCursor = vim.NIL },
+                  nodes = {
+                    {
+                      id = "PRRT_1",
+                      isResolved = false,
+                      diffSide = "RIGHT",
+                      startDiffSide = vim.NIL,
+                      comments = {
+                        nodes = {
+                          {
+                            databaseId = 1,
+                            author = { login = "a" },
+                            body = "root",
+                            createdAt = "2026-01-01T00:00:00Z",
+                            path = "f.lua",
+                            line = 5,
+                            startLine = vim.NIL,
+                            commit = { oid = "abc" },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+            nil
         end,
-      }
-      local discs, err = github.get_discussions(make_client({}), ctx, review)
+      })
+      local discs, err = github.get_discussions(client, ctx, review)
       assert.is_nil(err)
       assert.equal(1, #discs)
       assert.equal("1", discs[1].id)
@@ -332,29 +360,78 @@ describe("providers.github", function()
     end)
 
     it("get_discussions paginates when hasNextPage is true", function()
-      -- Use raw JSON strings to avoid vim.json.encode array/object issues in test env
-      local page1 = '{"data":{"repository":{"pullRequest":{"reviewThreads":'
-        .. '{"pageInfo":{"hasNextPage":true,"endCursor":"cursor1"},'
-        .. '"nodes":[{"id":"PRRT_1","isResolved":false,"diffSide":"RIGHT","startDiffSide":null,"comments":{"nodes":['
-        .. '{"databaseId":1,"author":{"login":"a"},"body":"first",'
-        .. '"createdAt":"2026-01-01T00:00:00Z","path":"a.lua","line":1,'
-        .. '"startLine":null,'
-        .. '"commit":{"oid":"abc"}}]}}]}}}}}'
-      local page2 = '{"data":{"repository":{"pullRequest":{"reviewThreads":'
-        .. '{"pageInfo":{"hasNextPage":false,"endCursor":"cursor2"},'
-        .. '"nodes":[{"id":"PRRT_2","isResolved":true,"diffSide":"RIGHT","startDiffSide":null,"comments":{"nodes":['
-        .. '{"databaseId":2,"author":{"login":"b"},"body":"second",'
-        .. '"createdAt":"2026-01-01T00:01:00Z","path":"b.lua","line":5,'
-        .. '"startLine":null,'
-        .. '"commit":{"oid":"def"}}]}}]}}}}}'
       local call_count = 0
-      package.loaded["plenary.curl"] = {
-        request = function()
-          call_count = call_count + 1
-          return { status = 200, body = call_count == 1 and page1 or page2 }
-        end,
+      local pages = {
+        {
+          repository = {
+            pullRequest = {
+              reviewThreads = {
+                pageInfo = { hasNextPage = true, endCursor = "cursor1" },
+                nodes = {
+                  {
+                    id = "PRRT_1",
+                    isResolved = false,
+                    diffSide = "RIGHT",
+                    startDiffSide = vim.NIL,
+                    comments = {
+                      nodes = {
+                        {
+                          databaseId = 1,
+                          author = { login = "a" },
+                          body = "first",
+                          createdAt = "2026-01-01T00:00:00Z",
+                          path = "a.lua",
+                          line = 1,
+                          startLine = vim.NIL,
+                          commit = { oid = "abc" },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        {
+          repository = {
+            pullRequest = {
+              reviewThreads = {
+                pageInfo = { hasNextPage = false, endCursor = "cursor2" },
+                nodes = {
+                  {
+                    id = "PRRT_2",
+                    isResolved = true,
+                    diffSide = "RIGHT",
+                    startDiffSide = vim.NIL,
+                    comments = {
+                      nodes = {
+                        {
+                          databaseId = 2,
+                          author = { login = "b" },
+                          body = "second",
+                          createdAt = "2026-01-01T00:01:00Z",
+                          path = "b.lua",
+                          line = 5,
+                          startLine = vim.NIL,
+                          commit = { oid = "def" },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
       }
-      local discs, err = github.get_discussions(make_client({}), ctx, review)
+      local client = make_client({
+        graphql = function()
+          call_count = call_count + 1
+          return pages[call_count], nil
+        end,
+      })
+      local discs, err = github.get_discussions(client, ctx, review)
       assert.is_nil(err)
       assert.equal(2, #discs)
       assert.equal(2, call_count)
@@ -475,19 +552,13 @@ describe("providers.github", function()
 
     it("resolve_discussion uses node_id to skip lookup query", function()
       local mutations = {}
-      package.loaded["plenary.curl"] = {
-        request = function(params)
-          local body = vim.json.decode(params.body)
-          table.insert(mutations, body.query)
-          return {
-            status = 200,
-            body = vim.json.encode({
-              data = { resolveReviewThread = { thread = { id = "PRRT_1", isResolved = true } } },
-            }),
-          }
+      local client = make_client({
+        graphql = function(_, _, query, _)
+          table.insert(mutations, query)
+          return { resolveReviewThread = { thread = { id = "PRRT_1", isResolved = true } } }, nil
         end,
-      }
-      local result, err = github.resolve_discussion(make_client({}), ctx, review, "1", true, "PRRT_1")
+      })
+      local result, err = github.resolve_discussion(client, ctx, review, "1", true, "PRRT_1")
       assert.is_nil(err)
       assert.truthy(result)
       -- Should only have made ONE GraphQL call (the mutation), not two (lookup + mutation)
@@ -585,20 +656,16 @@ describe("providers.github", function()
       github._pending_review_id = 300
       github._pending_review_node_id = "PRR_abc"
       local client_post_calls = 0
+      local gql_query, gql_variables
       local mock_client = {
         post = function(_, _, _)
           client_post_calls = client_post_calls + 1
           return { data = { id = 2 } }, nil
         end,
-      }
-      local gql_body
-      package.loaded["plenary.curl"] = {
-        request = function(params)
-          gql_body = vim.json.decode(params.body)
-          return {
-            status = 200,
-            body = vim.json.encode({ data = { addPullRequestReviewThread = { thread = { id = "PRRT_1" } } } }),
-          }
+        graphql = function(_, _, query, variables)
+          gql_query = query
+          gql_variables = variables
+          return { addPullRequestReviewThread = { thread = { id = "PRRT_1" } } }, nil
         end,
       }
       local ctx = { base_url = "https://api.github.com", project = "owner/repo" }
@@ -606,13 +673,13 @@ describe("providers.github", function()
       local _, err =
         github.create_draft_comment(mock_client, ctx, review, { body = "And this", path = "bar.lua", line = 20 })
       assert.is_nil(err)
-      -- NO client.post calls (GraphQL goes through plenary.curl, not the client)
+      -- NO client.post calls (GraphQL goes through client.graphql, not client.post)
       assert.equal(0, client_post_calls)
-      assert.truthy(gql_body.query:find("addPullRequestReviewThread"))
-      assert.equal("PRR_abc", gql_body.variables.reviewId)
-      assert.equal("And this", gql_body.variables.body)
-      assert.equal("bar.lua", gql_body.variables.path)
-      assert.equal(20, gql_body.variables.line)
+      assert.truthy(gql_query:find("addPullRequestReviewThread"))
+      assert.equal("PRR_abc", gql_variables.reviewId)
+      assert.equal("And this", gql_variables.body)
+      assert.equal("bar.lua", gql_variables.path)
+      assert.equal(20, gql_variables.line)
       assert.equal(300, github._pending_review_id)
     end)
 
