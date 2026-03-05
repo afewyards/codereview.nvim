@@ -126,7 +126,7 @@ function M.build(disc, opts)
 
   local notes = disc.notes
   if not notes or #notes == 0 then
-    return { virt_lines = {}, spacer_offset = nil, sel_line_offset = nil }
+    return { virt_lines = {}, note_segments = {}, spacer_offset = nil, sel_line_offset = nil }
   end
 
   local editing_this = editing_note and editing_note.disc_id == disc.id
@@ -162,6 +162,32 @@ function M.build(disc, opts)
   local sel_start = nil -- virt_line index where selected note starts
   local sel_end = nil -- virt_line index where selected note ends (exclusive)
 
+  -- Per-note segments
+  local note_segments = {}
+  local current_segment = { virt_lines = {} }
+  local seg_sel_start = nil
+  local seg_sel_end = nil
+
+  -- Insert a line into both the flat virt_lines and the current segment
+  local function push(line)
+    table.insert(virt_lines, line)
+    table.insert(current_segment.virt_lines, line)
+  end
+
+  -- Finalize the current segment and start a new one
+  local function close_segment()
+    if seg_sel_start ~= nil and seg_sel_end == nil then
+      seg_sel_end = #current_segment.virt_lines
+    end
+    if seg_sel_start ~= nil and seg_sel_end ~= nil then
+      current_segment.sel_line_offset = seg_sel_start + math.floor((seg_sel_end - seg_sel_start) / 2)
+    end
+    table.insert(note_segments, current_segment)
+    current_segment = { virt_lines = {} }
+    seg_sel_start = nil
+    seg_sel_end = nil
+  end
+
   -- Helper: build prefix chunks for a line. When selected, prepend ██ in status_hl
   -- then remaining pad + suffix in suffix_hl. When not selected, pad + suffix in suffix_hl.
   local function sel_prefix(is_sel, suffix, suffix_hl)
@@ -179,6 +205,7 @@ function M.build(disc, opts)
   local n1_sel = (sel_idx == 1)
   if n1_sel then
     sel_start = 0
+    seg_sel_start = 0
   end
 
   local header_chunks = {}
@@ -215,25 +242,25 @@ function M.build(disc, opts)
     table.insert(header_chunks, { label, status_hl })
   end
 
-  table.insert(virt_lines, header_chunks)
+  push(header_chunks)
 
   -- Body lines (or spacer when editing this note)
   if editing_note_idx == 1 then
     spacer_offset = #virt_lines
     for _ = 1, spacer_height do
       if n1_sel then
-        table.insert(virt_lines, {
+        push({
           { "██", status_hl },
           { string.rep(" ", math.max(0, gutter - 2)) .. "┃" .. string.rep(" ", comment_width + 1), bdr },
         })
       else
-        table.insert(virt_lines, { { pad .. "┃" .. string.rep(" ", comment_width + 1), bdr } })
+        push({ { pad .. "┃" .. string.rep(" ", comment_width + 1), bdr } })
       end
     end
   else
     for _, bl in ipairs(wrap_text(first.body, comment_width)) do
       local prefix = sel_prefix(n1_sel, "┃ ", bdr)
-      table.insert(virt_lines, md_virt_line(prefix, bl, body_hl))
+      push(md_virt_line(prefix, bl, body_hl))
     end
   end
 
@@ -245,15 +272,20 @@ function M.build(disc, opts)
       local rmeta = rt ~= "" and (" · " .. rt) or ""
       local ri_sel = (sel_idx == i)
       if editing_note_idx == i then
+        -- Close previous segment before this reply
+        close_segment()
+        if ri_sel then
+          seg_sel_start = 0
+        end
         spacer_offset = #virt_lines
         for _ = 1, spacer_height do
           if ri_sel then
-            table.insert(virt_lines, {
+            push({
               { "██", status_hl },
               { string.rep(" ", math.max(0, gutter - 2)) .. "┃" .. string.rep(" ", comment_width + 1), bdr },
             })
           else
-            table.insert(virt_lines, { { pad .. "┃" .. string.rep(" ", comment_width + 1), bdr } })
+            push({ { pad .. "┃" .. string.rep(" ", comment_width + 1), bdr } })
           end
         end
       else
@@ -262,10 +294,13 @@ function M.build(disc, opts)
         if sel_start ~= nil and sel_end == nil and not ri_sel then
           sel_end = #virt_lines
         end
+        -- Close previous segment, start new one for this reply
+        close_segment()
         if ri_sel then
           sel_start = #virt_lines
+          seg_sel_start = #current_segment.virt_lines
         end
-        table.insert(virt_lines, { { pad .. "┃", bdr } })
+        push({ { pad .. "┃", bdr } })
         -- Reply header
         local reply_header = {}
         if ri_sel then
@@ -276,11 +311,11 @@ function M.build(disc, opts)
         end
         table.insert(reply_header, { "@" .. reply.author, aut })
         table.insert(reply_header, { rmeta, bdr })
-        table.insert(virt_lines, reply_header)
+        push(reply_header)
         -- Reply body
         for _, rl in ipairs(wrap_text(reply.body, comment_width - 2)) do
           local prefix = sel_prefix(ri_sel, "┃    ", bdr)
-          table.insert(virt_lines, md_virt_line(prefix, rl, body_hl))
+          push(md_virt_line(prefix, rl, body_hl))
         end
       end
     end
@@ -310,14 +345,17 @@ function M.build(disc, opts)
 
   if footer_content then
     local footer_fill = math.max(0, comment_width + 2 - #footer_content - 1)
-    table.insert(virt_lines, {
+    push({
       { pad .. "┗ ", bdr },
       { footer_content, bdr },
       { " " .. string.rep("━", footer_fill), bdr },
     })
   else
-    table.insert(virt_lines, { { pad .. "┗━━", bdr } })
+    push({ { pad .. "┗━━", bdr } })
   end
+
+  -- Close last segment (footer is included in it)
+  close_segment()
 
   -- Return the vertical center of the selected note for scroll centering
   local sel_line_offset = nil
@@ -325,7 +363,12 @@ function M.build(disc, opts)
     sel_line_offset = sel_start + math.floor((sel_end - sel_start) / 2)
   end
 
-  return { virt_lines = virt_lines, spacer_offset = spacer_offset, sel_line_offset = sel_line_offset }
+  return {
+    virt_lines = virt_lines,
+    note_segments = note_segments,
+    spacer_offset = spacer_offset,
+    sel_line_offset = sel_line_offset,
+  }
 end
 
 M.format_time_relative = format_time_relative
