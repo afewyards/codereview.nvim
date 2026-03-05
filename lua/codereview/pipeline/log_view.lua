@@ -87,23 +87,28 @@ end
 --- @param job table  normalized pipeline job
 --- @param trace string  raw job log text
 --- @param max_lines number?  truncation limit (default 5000)
---- @return table  handle { buf, win, close, closed }
+--- @return table  handle { buf, win, close, closed, parsed, section_map }
 function M.open(job, trace, max_lines)
-  M.close() -- close any existing log view
-
+  M.close()
   max_lines = max_lines or 5000
-  local parsed = ansi.parse(trace)
-  local lines = parsed.lines
 
-  -- Truncate very long logs
-  if #lines > max_lines then
-    local truncated = {}
-    for i = 1, max_lines do
-      truncated[i] = lines[i]
-    end
-    table.insert(truncated, string.format("... truncated (%d lines total)", #lines))
-    lines = truncated
+  local parsed = log_sections.parse(trace)
+
+  -- Initial fold state: all collapsed except last + error sections
+  for _, section in ipairs(parsed.sections) do
+    section.collapsed = true
   end
+  if #parsed.sections > 0 then
+    parsed.sections[#parsed.sections].collapsed = false
+  end
+  for _, section in ipairs(parsed.sections) do
+    if section.has_errors then
+      section.collapsed = false
+    end
+  end
+
+  local display = M.build_display(parsed, max_lines)
+  local lines = display.lines
 
   local buf = vim.api.nvim_create_buf(false, true)
   vim.bo[buf].bufhidden = "wipe"
@@ -112,8 +117,8 @@ function M.open(job, trace, max_lines)
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
   vim.bo[buf].modifiable = false
 
-  -- Apply ANSI highlights
-  for _, hl in ipairs(parsed.highlights) do
+  -- Apply highlights
+  for _, hl in ipairs(display.highlights) do
     if hl.line <= #lines then
       pcall(vim.api.nvim_buf_add_highlight, buf, ns, hl.hl_group, hl.line - 1, hl.col_start, hl.col_end)
     end
@@ -121,8 +126,8 @@ function M.open(job, trace, max_lines)
 
   local width = math.min(120, math.floor(vim.o.columns * 0.8))
   local height = math.min(30, math.floor(vim.o.lines * 0.6))
-  local row = math.floor((vim.o.lines - height) / 2)
-  local col = math.floor((vim.o.columns - width) / 2)
+  local win_row = math.floor((vim.o.lines - height) / 2)
+  local win_col = math.floor((vim.o.columns - width) / 2)
 
   local title = string.format(" %s — %s ", job.name or "Job", job.status or "")
 
@@ -130,19 +135,21 @@ function M.open(job, trace, max_lines)
     relative = "editor",
     width = width,
     height = height,
-    row = row,
-    col = col,
+    row = win_row,
+    col = win_col,
     style = "minimal",
     border = "rounded",
     title = { { title, "CodeReviewFloatTitle" } },
     title_pos = "center",
     zindex = 60,
+    footer = { { " q:close  <CR>:toggle  zM/zR:fold ", "CodeReviewFloatFooter" } },
+    footer_pos = "center",
   })
 
   vim.api.nvim_set_option_value("wrap", false, { win = win })
   vim.api.nvim_set_option_value("number", true, { win = win })
 
-  handle = { buf = buf, win = win, closed = false }
+  handle = { buf = buf, win = win, closed = false, parsed = parsed, section_map = display.section_map }
 
   function handle.close()
     if handle.closed then
@@ -152,12 +159,8 @@ function M.open(job, trace, max_lines)
     pcall(vim.api.nvim_win_close, win, true)
   end
 
-  -- Keymaps
-  local opts = { noremap = true, silent = true, buffer = buf }
-  vim.keymap.set("n", "q", handle.close, vim.tbl_extend("force", opts, { desc = "Close log" }))
-  vim.keymap.set("n", "<Esc>", handle.close, vim.tbl_extend("force", opts, { desc = "Close log" }))
+  -- ... keymaps set in Task 5 ...
 
-  -- Auto-close on WinClosed
   vim.api.nvim_create_autocmd("WinClosed", {
     pattern = tostring(win),
     once = true,
@@ -166,8 +169,15 @@ function M.open(job, trace, max_lines)
     end,
   })
 
-  -- Scroll to bottom (latest output)
-  pcall(vim.api.nvim_win_set_cursor, win, { #lines, 0 })
+  -- Scroll to first error section, or bottom
+  local target_row = #lines
+  for row_num, si in pairs(display.section_map) do
+    if parsed.sections[si] and parsed.sections[si].has_errors and not parsed.sections[si].collapsed then
+      target_row = row_num
+      break
+    end
+  end
+  pcall(vim.api.nvim_win_set_cursor, win, { target_row, 0 })
 
   return handle
 end
