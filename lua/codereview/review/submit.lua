@@ -1,6 +1,5 @@
 -- lua/codereview/review/submit.lua
 local providers = require("codereview.providers")
-local client = require("codereview.api.client")
 local M = {}
 
 function M.filter_accepted(suggestions)
@@ -26,50 +25,87 @@ function M.submit_review(review, suggestions)
     return false
   end
 
-  local errors = {}
-  for _, suggestion in ipairs(accepted) do
-    local _, post_err = provider.create_draft_comment(client, ctx, review, {
-      body = suggestion.comment,
-      path = suggestion.file,
-      line = suggestion.line,
-    })
-    if post_err then
-      table.insert(errors, string.format("%s:%d - %s", suggestion.file, suggestion.line, post_err))
-    else
-      suggestion.drafted = true
+  require("plenary.async").run(function()
+    local async_client = require("codereview.api.async_client")
+    local errors = {}
+    for _, suggestion in ipairs(accepted) do
+      local _, post_err = provider.create_draft_comment(async_client, ctx, review, {
+        body = suggestion.comment,
+        path = suggestion.file,
+        line = suggestion.line,
+      })
+      if post_err then
+        table.insert(errors, string.format("%s:%d - %s", suggestion.file, suggestion.line, post_err))
+      else
+        suggestion.drafted = true
+      end
     end
-  end
 
-  local _, pub_err = provider.publish_review(client, ctx, review)
-  if pub_err then
-    table.insert(errors, "Publish failed: " .. pub_err)
-  end
+    local _, pub_err = provider.publish_review(async_client, ctx, review)
+    if pub_err then
+      table.insert(errors, "Publish failed: " .. pub_err)
+    end
 
-  if #errors > 0 then
-    vim.notify("Some drafts failed:\n" .. table.concat(errors, "\n"), vim.log.levels.WARN)
-  else
-    vim.notify(string.format("Review submitted: %d comments", #accepted), vim.log.levels.INFO)
-  end
+    vim.schedule(function()
+      if #errors > 0 then
+        vim.notify("Some drafts failed:\n" .. table.concat(errors, "\n"), vim.log.levels.WARN)
+      else
+        vim.notify(string.format("Review submitted: %d comments", #accepted), vim.log.levels.INFO)
+      end
+    end)
+  end)
 
-  return #errors == 0
+  return true
 end
 
 function M.submit_and_publish(review, ai_suggestions, opts)
-  -- Post remaining accepted AI suggestions as drafts
-  if ai_suggestions then
-    local remaining = M.filter_accepted(ai_suggestions)
-    if #remaining > 0 then
-      M.submit_review(review, ai_suggestions)
-    end
+  local provider, ctx, err = providers.detect()
+  if not provider then
+    vim.notify("Could not detect platform: " .. (err or ""), vim.log.levels.ERROR)
+    return
   end
-  -- Publish all drafts (human + AI)
-  M.bulk_publish(review, opts)
-  -- Dismiss all AI suggestions
-  if ai_suggestions then
-    for _, s in ipairs(ai_suggestions) do
-      s.status = "dismissed"
+
+  local remaining = ai_suggestions and M.filter_accepted(ai_suggestions) or {}
+
+  require("plenary.async").run(function()
+    local async_client = require("codereview.api.async_client")
+    local errors = {}
+
+    -- Post remaining accepted AI suggestions as drafts
+    for _, suggestion in ipairs(remaining) do
+      local _, post_err = provider.create_draft_comment(async_client, ctx, review, {
+        body = suggestion.comment,
+        path = suggestion.file,
+        line = suggestion.line,
+      })
+      if post_err then
+        table.insert(errors, string.format("%s:%d - %s", suggestion.file, suggestion.line, post_err))
+      else
+        suggestion.drafted = true
+      end
     end
-  end
+
+    -- Publish all drafts (human + AI) after submission
+    local _, pub_err = provider.publish_review(async_client, ctx, review, opts)
+    if pub_err then
+      table.insert(errors, "Publish failed: " .. pub_err)
+    end
+
+    vim.schedule(function()
+      if #errors > 0 then
+        vim.notify("Some steps failed:\n" .. table.concat(errors, "\n"), vim.log.levels.WARN)
+      else
+        vim.notify("Review submitted and published", vim.log.levels.INFO)
+      end
+
+      -- Dismiss all AI suggestions
+      if ai_suggestions then
+        for _, s in ipairs(ai_suggestions) do
+          s.status = "dismissed"
+        end
+      end
+    end)
+  end)
 end
 
 function M.bulk_publish(review, opts)
@@ -78,11 +114,17 @@ function M.bulk_publish(review, opts)
     vim.notify("Could not detect platform: " .. (err or ""), vim.log.levels.ERROR)
     return false
   end
-  local _, pub_err = provider.publish_review(client, ctx, review, opts)
-  if pub_err then
-    vim.notify("Failed to publish: " .. pub_err, vim.log.levels.ERROR)
-    return false
-  end
+
+  require("plenary.async").run(function()
+    local async_client = require("codereview.api.async_client")
+    local _, pub_err = provider.publish_review(async_client, ctx, review, opts)
+    vim.schedule(function()
+      if pub_err then
+        vim.notify("Failed to publish: " .. pub_err, vim.log.levels.ERROR)
+      end
+    end)
+  end)
+
   return true
 end
 

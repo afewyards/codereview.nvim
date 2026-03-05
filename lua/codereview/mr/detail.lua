@@ -1,5 +1,4 @@
 local providers = require("codereview.providers")
-local client = require("codereview.api.client")
 local markdown = require("codereview.ui.markdown")
 local list_mod = require("codereview.mr.list")
 local tvl = require("codereview.mr.thread_virt_lines")
@@ -468,100 +467,116 @@ function M._apply_resumed_drafts(state, server_drafts)
 end
 
 function M.open(entry)
-  local ok, provider, ctx, review, discussions, files, commits, versions = pcall(function()
+  local loading = require("codereview.ui.loading")
+  local async = require("plenary.async")
+  local async_client = require("codereview.api.async_client")
+
+  loading.open("Loading review…")
+
+  async.run(function()
     local prov, pctx, perr = providers.detect()
     if not prov then
-      error(perr or "Could not detect platform")
+      vim.schedule(function()
+        loading.close()
+        vim.notify(perr or "Could not detect platform", vim.log.levels.ERROR)
+      end)
+      return
     end
 
-    local rev, review_err = prov.get_review(client, pctx, entry.id)
+    local rev, review_err = prov.get_review(async_client, pctx, entry.id)
     if not rev then
-      error("Failed to load MR: " .. (review_err or "unknown error"))
+      vim.schedule(function()
+        loading.close()
+        vim.notify("Failed to load MR: " .. (review_err or "unknown error"), vim.log.levels.ERROR)
+      end)
+      return
     end
 
-    local disc, disc_err = prov.get_discussions(client, pctx, rev)
+    local disc, disc_err = prov.get_discussions(async_client, pctx, rev)
     if not disc then
-      vim.notify("Failed to load discussions: " .. (disc_err or "unknown error"), vim.log.levels.WARN)
       disc = {}
+      vim.schedule(function()
+        vim.notify("Failed to load discussions: " .. (disc_err or "unknown error"), vim.log.levels.WARN)
+      end)
     end
 
-    local f, diffs_err = prov.get_diffs(client, pctx, rev)
+    local f, diffs_err = prov.get_diffs(async_client, pctx, rev)
     if not f then
-      vim.notify("Failed to load diffs: " .. (diffs_err or "unknown error"), vim.log.levels.WARN)
       f = {}
+      vim.schedule(function()
+        vim.notify("Failed to load diffs: " .. (diffs_err or "unknown error"), vim.log.levels.WARN)
+      end)
     end
 
     local c = {}
     if prov.get_commits then
-      local fetched, _ = prov.get_commits(client, pctx, rev)
+      local fetched, _ = prov.get_commits(async_client, pctx, rev)
       c = fetched or {}
       if #c > 0 and prov.get_commit_stats then
-        prov.get_commit_stats(client, pctx, c)
+        prov.get_commit_stats(async_client, pctx, c)
       end
     end
 
     local v = {}
     if prov.get_versions then
-      local fetched_v, _ = prov.get_versions(client, pctx, rev)
+      local fetched_v, _ = prov.get_versions(async_client, pctx, rev)
       v = fetched_v or {}
     end
 
-    return prov, pctx, rev, disc, f, c, v
-  end)
+    local user = prov.get_current_user(async_client, pctx)
 
-  if not ok then
-    vim.notify(tostring(provider), vim.log.levels.ERROR)
-    return
-  end
-
-  local diff = require("codereview.mr.diff")
-  local split = require("codereview.ui.split")
-
-  diff.close_active()
-  local layout = split.create()
-
-  local state = diff_state_mod.create_state({
-    view_mode = "summary",
-    review = review,
-    provider = provider,
-    ctx = ctx,
-    entry = entry,
-    files = files,
-    layout = layout,
-    discussions = discussions,
-    commits = commits,
-    versions = versions,
-  })
-
-  -- Fetch current user for note authorship checks (edit/delete guards)
-  local client_mod = require("codereview.api.client")
-  local user = provider.get_current_user(client_mod, ctx)
-  if user then
-    state.current_user = user
-  end
-
-  if user and provider.get_last_reviewed_sha then
-    local sha = provider.get_last_reviewed_sha(client_mod, ctx, review, user)
-    if sha then
-      state.last_reviewed_sha = sha
+    local sha
+    if user and prov.get_last_reviewed_sha then
+      sha = prov.get_last_reviewed_sha(async_client, pctx, rev, user)
     end
-  end
 
-  diff.render_sidebar(layout.sidebar_buf, state)
-  diff.render_summary(layout.main_buf, state)
-  diff.setup_keymaps(layout, state)
-  vim.api.nvim_set_current_win(layout.main_win)
+    vim.schedule(function()
+      loading.close()
 
-  -- Check for server-side draft comments
-  local drafts_mod = require("codereview.review.drafts")
-  drafts_mod.check_and_prompt(provider, client_mod, ctx, review, function(server_drafts)
-    if server_drafts then
-      M._apply_resumed_drafts(state, server_drafts)
-      diff.render_sidebar(layout.sidebar_buf, state)
-      if state.view_mode == "summary" then
-        diff.render_summary(layout.main_buf, state)
+      local diff = require("codereview.mr.diff")
+      local split = require("codereview.ui.split")
+
+      diff.close_active()
+      local layout = split.create()
+
+      local state = diff_state_mod.create_state({
+        view_mode = "summary",
+        review = rev,
+        provider = prov,
+        ctx = pctx,
+        entry = entry,
+        files = f,
+        layout = layout,
+        discussions = disc,
+        commits = c,
+        versions = v,
+      })
+
+      if user then
+        state.current_user = user
       end
-    end
+
+      if sha then
+        state.last_reviewed_sha = sha
+      end
+
+      diff.render_sidebar(layout.sidebar_buf, state)
+      diff.render_summary(layout.main_buf, state)
+      diff.setup_keymaps(layout, state)
+      vim.api.nvim_set_current_win(layout.main_win)
+
+      -- Check for server-side draft comments
+      local drafts_mod = require("codereview.review.drafts")
+      drafts_mod.check_and_prompt(prov, async_client, pctx, rev, function(server_drafts)
+        if server_drafts then
+          M._apply_resumed_drafts(state, server_drafts)
+          diff.render_sidebar(layout.sidebar_buf, state)
+          if state.view_mode == "summary" then
+            diff.render_summary(layout.main_buf, state)
+          end
+        end
+      end)
+    end)
   end)
 end
 

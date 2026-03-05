@@ -102,12 +102,7 @@ function M.approve()
     vim.notify("Open a diff view first with :CodeReview", vim.log.levels.WARN)
     return
   end
-  local result, err = require("codereview.mr.actions").approve(active.state.review)
-  if err then
-    vim.notify("Approve failed: " .. err, vim.log.levels.ERROR)
-  elseif result then
-    vim.notify("Review approved", vim.log.levels.INFO)
-  end
+  require("codereview.mr.actions").approve(active.state.review)
 end
 function M.create_mr()
   require("codereview.mr.create").create()

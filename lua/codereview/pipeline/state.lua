@@ -95,6 +95,28 @@ function M.fetch(pstate)
   return changed
 end
 
+--- Async variant of fetch — must be called inside plenary.async.run().
+--- @param pstate table  pipeline state from create()
+--- @return boolean changed  whether data changed
+function M.async_fetch(pstate)
+  local async_client = require("codereview.api.async_client")
+  local pipeline, _ = pstate.provider.get_pipeline(async_client, pstate.ctx, pstate.review)
+  if not pipeline then
+    pstate.poll_failures = pstate.poll_failures + 1
+    return false
+  end
+  pstate.poll_failures = 0
+  local jobs, _ = pstate.provider.get_pipeline_jobs(async_client, pstate.ctx, pstate.review, pipeline.id)
+  if not jobs then
+    jobs = {}
+  end
+  local changed = not pstate.pipeline or pstate.pipeline.status ~= pipeline.status or #jobs ~= #pstate.jobs
+  pstate.pipeline = pipeline
+  pstate.jobs = jobs
+  pstate.stages = M.group_by_stage(jobs)
+  return changed
+end
+
 --- Start polling for pipeline updates.
 --- @param pstate table
 --- @param interval_ms number
@@ -104,21 +126,29 @@ function M.start_polling(pstate, interval_ms, on_update)
     return
   end
   pstate.poll_timer = vim.fn.timer_start(interval_ms, function()
-    vim.schedule(function()
-      if not pstate.poll_timer then
-        return
-      end
-      if pstate.poll_failures >= 3 then
+    if not pstate.poll_timer then
+      return
+    end
+    if pstate.poll_failures >= 3 then
+      vim.schedule(function()
         M.stop_polling(pstate)
-        return
-      end
-      local changed = M.fetch(pstate)
-      if changed then
-        on_update(pstate)
-      end
-      if pstate.pipeline and M.is_terminal(pstate.pipeline.status) then
-        M.stop_polling(pstate)
-      end
+      end)
+      return
+    end
+    require("plenary.async").run(function()
+      return M.async_fetch(pstate)
+    end, function(changed)
+      vim.schedule(function()
+        if not pstate.poll_timer then
+          return
+        end
+        if changed then
+          on_update(pstate)
+        end
+        if pstate.pipeline and M.is_terminal(pstate.pipeline.status) then
+          M.stop_polling(pstate)
+        end
+      end)
     end)
   end, { ["repeat"] = -1 })
 end

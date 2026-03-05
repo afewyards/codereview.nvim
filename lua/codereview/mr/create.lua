@@ -1,5 +1,4 @@
 local providers = require("codereview.providers")
-local client = require("codereview.api.client")
 local ai_providers = require("codereview.ai.providers")
 local prompt_mod = require("codereview.ai.prompt")
 local M = {}
@@ -269,23 +268,29 @@ function M.submit_mr(source_branch, fields)
     vim.notify("Could not detect platform: " .. (err or ""), vim.log.levels.ERROR)
     return
   end
-  local result, post_err = provider.create_review(client, ctx, {
-    source_branch = source_branch,
-    target_branch = fields.target,
-    title = fields.title,
-    description = fields.description,
-    draft = fields.draft,
-  })
-  if not result then
-    vim.notify("Failed to create MR: " .. (post_err or ""), vim.log.levels.ERROR)
-    return
-  end
-  local mr = result.data
-  if mr then
-    local url = mr.web_url or mr.html_url or ""
-    local id = mr.iid or mr.number or mr.id
-    vim.notify(string.format("MR #%s created: %s", id, url), vim.log.levels.INFO)
-  end
+
+  require("plenary.async").run(function()
+    local async_client = require("codereview.api.async_client")
+    local result, post_err = provider.create_review(async_client, ctx, {
+      source_branch = source_branch,
+      target_branch = fields.target,
+      title = fields.title,
+      description = fields.description,
+      draft = fields.draft,
+    })
+    vim.schedule(function()
+      if not result then
+        vim.notify("Failed to create MR: " .. (post_err or ""), vim.log.levels.ERROR)
+        return
+      end
+      local mr = result.data
+      if mr then
+        local url = mr.web_url or mr.html_url or ""
+        local id = mr.iid or mr.number or mr.id
+        vim.notify(string.format("MR #%s created: %s", id, url), vim.log.levels.INFO)
+      end
+    end)
+  end)
 end
 
 return M

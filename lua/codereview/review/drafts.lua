@@ -29,24 +29,32 @@ end
 --- Check for server drafts and prompt user. Calls on_done(drafts_or_nil) when resolved.
 --- drafts_or_nil is the list of draft discussions if user chose Resume, or nil if Discard/none found.
 function M.check_and_prompt(provider, client, ctx, review, on_done)
-  local server_drafts = M.fetch_server_drafts(provider, client, ctx, review)
-  if #server_drafts == 0 then
-    on_done(nil)
-    return
-  end
-
-  vim.ui.select({ "Resume", "Discard" }, {
-    prompt = string.format("%d draft comment(s) from a previous review. Resume or discard?", #server_drafts),
-  }, function(choice)
-    if choice == "Resume" then
-      on_done(server_drafts)
-    elseif choice == "Discard" then
-      M.discard_server_drafts(provider, client, ctx, review, server_drafts)
-      on_done(nil)
-    else
-      -- User cancelled the prompt — leave drafts on server, don't enter session
-      on_done(nil)
-    end
+  require("plenary.async").run(function()
+    local async_client = require("codereview.api.async_client")
+    local server_drafts = M.fetch_server_drafts(provider, async_client, ctx, review)
+    vim.schedule(function()
+      if #server_drafts == 0 then
+        on_done(nil)
+        return
+      end
+      vim.ui.select({ "Resume", "Discard" }, {
+        prompt = string.format("%d draft comment(s) from a previous review. Resume or discard?", #server_drafts),
+      }, function(choice)
+        if choice == "Resume" then
+          on_done(server_drafts)
+        elseif choice == "Discard" then
+          require("plenary.async").run(function()
+            M.discard_server_drafts(provider, async_client, ctx, review, server_drafts)
+            vim.schedule(function()
+              on_done(nil)
+            end)
+          end)
+        else
+          -- User cancelled the prompt — leave drafts on server, don't enter session
+          on_done(nil)
+        end
+      end)
+    end)
   end)
 end
 

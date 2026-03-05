@@ -119,26 +119,30 @@ function M.setup_keymaps(state, layout, active_states)
 
   -- Re-fetch discussions from API and re-render the diff view
   local function refresh_discussions()
-    local client_mod = require("codereview.api.client")
-    local discs = state.provider.get_discussions(client_mod, state.ctx, state.review) or {}
-    -- Merge local drafts that the API won't return
-    for _, d in ipairs(state.local_drafts or {}) do
-      table.insert(discs, d)
-    end
-    -- Preserve failed optimistic comments; discard still-pending ones
-    for _, d in ipairs(state.discussions or {}) do
-      if d.is_failed then
-        table.insert(discs, d)
-      end
-    end
-    state.discussions = discs
-    if state.view_mode == "summary" then
-      diff_sidebar.render_summary(layout.main_buf, state)
-      diff_sidebar.render_sidebar(layout.sidebar_buf, state)
-      return
-    end
-    diff_state.clear_diff_cache(state)
-    rerender_view()
+    require("plenary.async").run(function()
+      local async_client = require("codereview.api.async_client")
+      local discs = state.provider.get_discussions(async_client, state.ctx, state.review) or {}
+      vim.schedule(function()
+        -- Merge local drafts that the API won't return
+        for _, d in ipairs(state.local_drafts or {}) do
+          table.insert(discs, d)
+        end
+        -- Preserve failed optimistic comments; discard still-pending ones
+        for _, d in ipairs(state.discussions or {}) do
+          if d.is_failed then
+            table.insert(discs, d)
+          end
+        end
+        state.discussions = discs
+        if state.view_mode == "summary" then
+          diff_sidebar.render_summary(layout.main_buf, state)
+          diff_sidebar.render_sidebar(layout.sidebar_buf, state)
+          return
+        end
+        diff_state.clear_diff_cache(state)
+        rerender_view()
+      end)
+    end)
   end
 
   -- Add a draft comment to local state and re-render
@@ -2023,6 +2027,58 @@ function M.setup_keymaps(state, layout, active_states)
       diff_sidebar.render_sidebar(layout.sidebar_buf, state)
       pcall(vim.api.nvim_win_set_cursor, layout.sidebar_win, { row, 0 })
     elseif entry.type == "file" then
+      -- Navigate to the selected file entry (called after diffs are loaded)
+      local function navigate_to_file_entry()
+        state.view_mode = "diff"
+        state.current_file = entry.idx
+        state.row_selection = {}
+        vim.wo[layout.main_win].wrap = false
+        vim.wo[layout.main_win].linebreak = false
+
+        if state.scroll_mode then
+          -- Always re-render all files (buffer may have summary content)
+          local result = diff_render.render_all_files(
+            layout.main_buf,
+            state.files,
+            state.review,
+            state.discussions,
+            state.context,
+            state.file_contexts,
+            state.ai_suggestions,
+            state.row_selection,
+            state.current_user,
+            nil,
+            state.git_diff_cache,
+            state.commit_filter
+          )
+          diff_state.apply_scroll_result(state, result)
+          diff_sidebar.render_sidebar(layout.sidebar_buf, state)
+          for _, sec in ipairs(state.file_sections) do
+            if sec.file_idx == entry.idx then
+              vim.api.nvim_win_set_cursor(layout.main_win, { sec.start_line, 0 })
+              break
+            end
+          end
+        else
+          diff_sidebar.render_sidebar(layout.sidebar_buf, state)
+          local line_data, row_disc, row_ai = diff_render.render_file_diff(
+            layout.main_buf,
+            state.files[entry.idx],
+            state.review,
+            state.discussions,
+            state.context,
+            state.ai_suggestions,
+            state.row_selection,
+            state.current_user,
+            nil,
+            state.git_diff_cache,
+            state.commit_filter
+          )
+          diff_state.apply_file_result(state, entry.idx, line_data, row_disc, row_ai)
+        end
+        vim.api.nvim_set_current_win(layout.main_win)
+      end
+
       -- Lazy load diffs if needed
       if not state.files then
         local provider = state.provider
@@ -2030,64 +2086,26 @@ function M.setup_keymaps(state, layout, active_states)
         if not provider or not ctx then
           return
         end
-        local client_mod = require("codereview.api.client")
-        local files, fetch_err = provider.get_diffs(client_mod, ctx, state.review)
-        if fetch_err then
-          vim.notify("Failed to fetch diffs: " .. fetch_err, vim.log.levels.ERROR)
-          return
-        end
-        diff_state.load_diffs_into_state(state, files or {})
-        diff_sidebar.render_sidebar(layout.sidebar_buf, state)
+        local loading = require("codereview.ui.loading")
+        loading.open("Loading diffs…")
+        require("plenary.async").run(function()
+          local async_client = require("codereview.api.async_client")
+          local files, fetch_err = provider.get_diffs(async_client, ctx, state.review)
+          vim.schedule(function()
+            loading.close()
+            if fetch_err then
+              vim.notify("Failed to fetch diffs: " .. fetch_err, vim.log.levels.ERROR)
+              return
+            end
+            diff_state.load_diffs_into_state(state, files or {})
+            diff_sidebar.render_sidebar(layout.sidebar_buf, state)
+            navigate_to_file_entry()
+          end)
+        end)
+        return
       end
 
-      state.view_mode = "diff"
-      state.current_file = entry.idx
-      state.row_selection = {}
-      vim.wo[layout.main_win].wrap = false
-      vim.wo[layout.main_win].linebreak = false
-
-      if state.scroll_mode then
-        -- Always re-render all files (buffer may have summary content)
-        local result = diff_render.render_all_files(
-          layout.main_buf,
-          state.files,
-          state.review,
-          state.discussions,
-          state.context,
-          state.file_contexts,
-          state.ai_suggestions,
-          state.row_selection,
-          state.current_user,
-          nil,
-          state.git_diff_cache,
-          state.commit_filter
-        )
-        diff_state.apply_scroll_result(state, result)
-        diff_sidebar.render_sidebar(layout.sidebar_buf, state)
-        for _, sec in ipairs(state.file_sections) do
-          if sec.file_idx == entry.idx then
-            vim.api.nvim_win_set_cursor(layout.main_win, { sec.start_line, 0 })
-            break
-          end
-        end
-      else
-        diff_sidebar.render_sidebar(layout.sidebar_buf, state)
-        local line_data, row_disc, row_ai = diff_render.render_file_diff(
-          layout.main_buf,
-          state.files[entry.idx],
-          state.review,
-          state.discussions,
-          state.context,
-          state.ai_suggestions,
-          state.row_selection,
-          state.current_user,
-          nil,
-          state.git_diff_cache,
-          state.commit_filter
-        )
-        diff_state.apply_file_result(state, entry.idx, line_data, row_disc, row_ai)
-      end
-      vim.api.nvim_set_current_win(layout.main_win)
+      navigate_to_file_entry()
     elseif entry.type == "commits_header" then
       state.collapsed_commits = not state.collapsed_commits
       local diff_sidebar_mod = require("codereview.mr.diff_sidebar")

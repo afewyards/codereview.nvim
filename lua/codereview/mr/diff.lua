@@ -69,8 +69,8 @@ end
 
 function M.open(review, discussions)
   local providers = require("codereview.providers")
-  local client_mod = require("codereview.api.client")
   local split = require("codereview.ui.split")
+  local loading = require("codereview.ui.loading")
 
   local provider, ctx, err = providers.detect()
   if not provider then
@@ -78,118 +78,145 @@ function M.open(review, discussions)
     return
   end
 
-  local files, fetch_err = provider.get_diffs(client_mod, ctx, review)
-  if not files then
-    vim.notify(fetch_err or "Failed to fetch diffs", vim.log.levels.ERROR)
-    return
-  end
+  loading.open("Loading diffs…")
 
-  local layout = split.create()
+  require("plenary.async").run(function()
+    local async_client = require("codereview.api.async_client")
 
-  local state = diff_state.create_state({
-    view_mode = "diff",
-    review = review,
-    provider = provider,
-    ctx = ctx,
-    files = files,
-    layout = layout,
-    discussions = discussions,
-  })
+    local ok, files, fetch_err = pcall(function()
+      return provider.get_diffs(async_client, ctx, review)
+    end)
 
-  M.render_sidebar(layout.sidebar_buf, state)
-
-  -- Fetch current user for note authorship checks (edit/delete guards)
-  local user = provider.get_current_user(client_mod, ctx)
-  if user then
-    state.current_user = user
-  end
-
-  if #files > 0 then
-    if state.scroll_mode then
-      local render_result = M.render_all_files(
-        layout.main_buf,
-        files,
-        review,
-        state.discussions,
-        state.context,
-        state.file_contexts,
-        state.ai_suggestions,
-        state.row_selection,
-        state.current_user,
-        nil,
-        state.git_diff_cache,
-        state.commit_filter
-      )
-      diff_state.apply_scroll_result(state, render_result)
-    else
-      local line_data, row_disc, row_ai = M.render_file_diff(
-        layout.main_buf,
-        files[1],
-        review,
-        state.discussions,
-        state.context,
-        state.ai_suggestions,
-        state.row_selection,
-        state.current_user,
-        nil,
-        state.git_diff_cache,
-        state.commit_filter
-      )
-      diff_state.apply_file_result(state, 1, line_data, row_disc, row_ai)
-    end
-  else
-    vim.bo[layout.main_buf].modifiable = true
-    vim.api.nvim_buf_set_lines(layout.main_buf, 0, -1, false, { "No diffs found." })
-    vim.bo[layout.main_buf].modifiable = false
-  end
-
-  M.setup_keymaps(layout, state)
-  vim.api.nvim_set_current_win(layout.main_win)
-
-  -- Check for server-side draft comments
-  local drafts_mod = require("codereview.review.drafts")
-  drafts_mod.check_and_prompt(provider, client_mod, ctx, review, function(server_drafts)
-    if server_drafts then
-      local session = require("codereview.review.session")
-      session.start()
-      for _, d in ipairs(server_drafts) do
-        table.insert(state.local_drafts, d)
-        table.insert(state.discussions, d)
+    local user
+    if ok and files then
+      local uok, u = pcall(function()
+        return provider.get_current_user(async_client, ctx)
+      end)
+      if uok then
+        user = u
       end
-      -- Re-render to show draft markers
+    end
+
+    vim.schedule(function()
+      loading.close()
+
+      if not ok then
+        vim.notify(tostring(files) or "Failed to fetch diffs", vim.log.levels.ERROR)
+        return
+      end
+      if not files then
+        vim.notify(fetch_err or "Failed to fetch diffs", vim.log.levels.ERROR)
+        return
+      end
+
+      local layout = split.create()
+
+      local state = diff_state.create_state({
+        view_mode = "diff",
+        review = review,
+        provider = provider,
+        ctx = ctx,
+        files = files,
+        layout = layout,
+        discussions = discussions,
+      })
+
       M.render_sidebar(layout.sidebar_buf, state)
-      if state.scroll_mode then
-        local render_result = M.render_all_files(
-          layout.main_buf,
-          state.files,
-          review,
-          state.discussions,
-          state.context,
-          state.file_contexts,
-          state.ai_suggestions,
-          state.row_selection,
-          state.current_user,
-          nil,
-          state.git_diff_cache,
-          state.commit_filter
-        )
-        diff_state.apply_scroll_result(state, render_result)
-      else
-        M.render_file_diff(
-          layout.main_buf,
-          state.files[state.current_file],
-          review,
-          state.discussions,
-          state.context,
-          state.ai_suggestions,
-          state.row_selection,
-          state.current_user,
-          nil,
-          state.git_diff_cache,
-          state.commit_filter
-        )
+
+      -- Apply current user for note authorship checks (edit/delete guards)
+      if user then
+        state.current_user = user
       end
-    end
+
+      if #files > 0 then
+        if state.scroll_mode then
+          local render_result = M.render_all_files(
+            layout.main_buf,
+            files,
+            review,
+            state.discussions,
+            state.context,
+            state.file_contexts,
+            state.ai_suggestions,
+            state.row_selection,
+            state.current_user,
+            nil,
+            state.git_diff_cache,
+            state.commit_filter
+          )
+          diff_state.apply_scroll_result(state, render_result)
+        else
+          local line_data, row_disc, row_ai = M.render_file_diff(
+            layout.main_buf,
+            files[1],
+            review,
+            state.discussions,
+            state.context,
+            state.ai_suggestions,
+            state.row_selection,
+            state.current_user,
+            nil,
+            state.git_diff_cache,
+            state.commit_filter
+          )
+          diff_state.apply_file_result(state, 1, line_data, row_disc, row_ai)
+        end
+      else
+        vim.bo[layout.main_buf].modifiable = true
+        vim.api.nvim_buf_set_lines(layout.main_buf, 0, -1, false, { "No diffs found." })
+        vim.bo[layout.main_buf].modifiable = false
+      end
+
+      M.setup_keymaps(layout, state)
+      vim.api.nvim_set_current_win(layout.main_win)
+
+      -- Check for server-side draft comments
+      local client_mod = require("codereview.api.client")
+      local drafts_mod = require("codereview.review.drafts")
+      drafts_mod.check_and_prompt(provider, client_mod, ctx, review, function(server_drafts)
+        if server_drafts then
+          local session = require("codereview.review.session")
+          session.start()
+          for _, d in ipairs(server_drafts) do
+            table.insert(state.local_drafts, d)
+            table.insert(state.discussions, d)
+          end
+          -- Re-render to show draft markers
+          M.render_sidebar(layout.sidebar_buf, state)
+          if state.scroll_mode then
+            local render_result = M.render_all_files(
+              layout.main_buf,
+              state.files,
+              review,
+              state.discussions,
+              state.context,
+              state.file_contexts,
+              state.ai_suggestions,
+              state.row_selection,
+              state.current_user,
+              nil,
+              state.git_diff_cache,
+              state.commit_filter
+            )
+            diff_state.apply_scroll_result(state, render_result)
+          else
+            M.render_file_diff(
+              layout.main_buf,
+              state.files[state.current_file],
+              review,
+              state.discussions,
+              state.context,
+              state.ai_suggestions,
+              state.row_selection,
+              state.current_user,
+              nil,
+              state.git_diff_cache,
+              state.commit_filter
+            )
+          end
+        end
+      end)
+    end)
   end)
 end
 

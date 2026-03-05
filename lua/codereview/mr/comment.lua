@@ -199,7 +199,8 @@ function M.reply(disc, mr, optimistic, opts)
       note = optimistic.add_reply(text)
     end
     vim.schedule(function()
-      local provider, client, ctx = get_provider()
+      local async_client = require("codereview.api.async_client")
+      local provider, _, ctx = get_provider()
       if not provider then
         if note and optimistic.remove_reply then
           optimistic.remove_reply(disc, note)
@@ -207,7 +208,7 @@ function M.reply(disc, mr, optimistic, opts)
         return
       end
       M.post_with_retry(function()
-        return provider.reply_to_discussion(client, ctx, mr, disc.id, text)
+        return provider.reply_to_discussion(async_client, ctx, mr, disc.id, text)
       end, function()
         vim.notify("Reply posted", vim.log.levels.INFO)
         if optimistic and optimistic.refresh then
@@ -237,20 +238,23 @@ function M.edit_note(disc, note, mr, on_success, opts)
     if text == note.body then
       return
     end -- no change
-    vim.schedule(function()
-      local provider, client, ctx = get_provider()
+    require("plenary.async").run(function()
+      local async_client = require("codereview.api.async_client")
+      local provider, _, ctx = get_provider()
       if not provider then
         return
       end
-      local _, err = provider.edit_note(client, ctx, mr, disc.id, note.id, text)
-      if err then
-        vim.notify("Edit failed: " .. err, vim.log.levels.ERROR)
-        return
-      end
-      note.body = text
-      if on_success then
-        on_success()
-      end
+      local _, err = provider.edit_note(async_client, ctx, mr, disc.id, note.id, text)
+      vim.schedule(function()
+        if err then
+          vim.notify("Edit failed: " .. err, vim.log.levels.ERROR)
+          return
+        end
+        note.body = text
+        if on_success then
+          on_success()
+        end
+      end)
     end)
   end, opts)
 end
@@ -265,33 +269,36 @@ function M.delete_note(disc, note, mr, on_success)
     if not input or input:lower():match("^n") then
       return
     end
-    vim.schedule(function()
-      local provider, client, ctx = get_provider()
+    require("plenary.async").run(function()
+      local async_client = require("codereview.api.async_client")
+      local provider, _, ctx = get_provider()
       if not provider then
         return
       end
-      local _, err = provider.delete_note(client, ctx, mr, disc.id, note.id)
-      if err then
-        vim.notify("Delete failed: " .. err, vim.log.levels.ERROR)
-        return
-      end
-      -- Remove note from discussion
-      for i, n in ipairs(disc.notes) do
-        if n.id == note.id then
-          table.remove(disc.notes, i)
-          break
+      local _, err = provider.delete_note(async_client, ctx, mr, disc.id, note.id)
+      vim.schedule(function()
+        if err then
+          vim.notify("Delete failed: " .. err, vim.log.levels.ERROR)
+          return
         end
-      end
-      -- If thread is now empty, signal caller to remove the discussion
-      if #disc.notes == 0 then
-        if on_success then
-          on_success({ removed_disc = true })
+        -- Remove note from discussion
+        for i, n in ipairs(disc.notes) do
+          if n.id == note.id then
+            table.remove(disc.notes, i)
+            break
+          end
         end
-      else
-        if on_success then
-          on_success()
+        -- If thread is now empty, signal caller to remove the discussion
+        if #disc.notes == 0 then
+          if on_success then
+            on_success({ removed_disc = true })
+          end
+        else
+          if on_success then
+            on_success()
+          end
         end
-      end
+      end)
     end)
   end)
 end
@@ -309,23 +316,28 @@ function M.delete_draft(disc, mr, on_success)
     if not input or input:lower():match("^n") then
       return
     end
-    vim.schedule(function()
-      local provider, client, ctx = get_provider()
+    require("plenary.async").run(function()
+      local async_client = require("codereview.api.async_client")
+      local provider, _, ctx = get_provider()
       if not provider then
         return
       end
       if not provider.delete_draft_note then
-        vim.notify("Draft deletion not supported on this platform", vim.log.levels.WARN)
+        vim.schedule(function()
+          vim.notify("Draft deletion not supported on this platform", vim.log.levels.WARN)
+        end)
         return
       end
-      local _, err = provider.delete_draft_note(client, ctx, mr, disc.server_draft_id)
-      if err then
-        vim.notify("Delete draft failed: " .. err, vim.log.levels.ERROR)
-        return
-      end
-      if on_success then
-        on_success()
-      end
+      local _, err = provider.delete_draft_note(async_client, ctx, mr, disc.server_draft_id)
+      vim.schedule(function()
+        if err then
+          vim.notify("Delete draft failed: " .. err, vim.log.levels.ERROR)
+          return
+        end
+        if on_success then
+          on_success()
+        end
+      end)
     end)
   end)
 end
@@ -336,18 +348,32 @@ function M.resolve_toggle(disc, mr, callback)
     return
   end
 
-  local provider, client, ctx = get_provider()
-  if not provider then
-    return
-  end
-
   local currently_resolved = first.resolved
-  local _, err = provider.resolve_discussion(client, ctx, mr, disc.id, not currently_resolved, disc.node_id)
-  if err then
-    vim.notify("Failed to toggle resolve: " .. err, vim.log.levels.ERROR)
-  elseif callback then
+  -- Optimistic update
+  for _, note in ipairs(disc.notes) do
+    if note.resolvable ~= nil then
+      note.resolved = not currently_resolved
+    end
+  end
+  disc.resolved = not currently_resolved
+  if callback then
     callback()
   end
+
+  -- Fire async
+  require("plenary.async").run(function()
+    local async_client = require("codereview.api.async_client")
+    local provider, _, ctx = get_provider()
+    if not provider then
+      return
+    end
+    local _, err = provider.resolve_discussion(async_client, ctx, mr, disc.id, not currently_resolved, disc.node_id)
+    if err then
+      vim.schedule(function()
+        vim.notify("Failed to toggle resolve: " .. err, vim.log.levels.ERROR)
+      end)
+    end
+  end)
 end
 
 --- Unified comment creation for all inline comment variants.
@@ -372,7 +398,8 @@ function M.create_comment(mr, opts)
 
       -- Yield to event loop so Neovim redraws the optimistic comment before blocking on API
       vim.schedule(function()
-        local provider, client, ctx = get_provider()
+        local async_client = require("codereview.api.async_client")
+        local provider, _, ctx = get_provider()
         if not provider then
           if disc and opts.optimistic.remove then
             opts.optimistic.remove(disc)
@@ -380,7 +407,7 @@ function M.create_comment(mr, opts)
           return
         end
         M.post_with_retry(function()
-          return opts.api_fn(provider, client, ctx, mr, text)
+          return opts.api_fn(provider, async_client, ctx, mr, text)
         end, function()
           vim.notify(opts.success_msg or "Comment posted", vim.log.levels.INFO)
           if opts.optimistic.refresh then
@@ -396,12 +423,13 @@ function M.create_comment(mr, opts)
     elseif opts.use_retry then
       -- Retry path without optimistic UI
       vim.schedule(function()
-        local provider, client, ctx = get_provider()
+        local async_client = require("codereview.api.async_client")
+        local provider, _, ctx = get_provider()
         if not provider then
           return
         end
         M.post_with_retry(function()
-          return opts.api_fn(provider, client, ctx, mr, text)
+          return opts.api_fn(provider, async_client, ctx, mr, text)
         end, function()
           vim.notify(opts.success_msg or "Comment posted", vim.log.levels.INFO)
         end, function(err)
@@ -409,20 +437,25 @@ function M.create_comment(mr, opts)
         end)
       end)
     else
-      -- Draft path: synchronous, no optimistic, no retry
-      local provider, client, ctx = get_provider()
-      if not provider then
-        return
-      end
-      local result, err = opts.api_fn(provider, client, ctx, mr, text)
-      if err then
-        vim.notify((opts.failure_msg or "Failed to create draft comment") .. ": " .. err, vim.log.levels.ERROR)
-      else
-        vim.notify(opts.success_msg or "Draft comment created", vim.log.levels.INFO)
-        if opts.on_success then
-          opts.on_success(text, result)
+      -- Draft path: async, no optimistic, no retry
+      require("plenary.async").run(function()
+        local async_client = require("codereview.api.async_client")
+        local provider, _, ctx = get_provider()
+        if not provider then
+          return
         end
-      end
+        local result, err = opts.api_fn(provider, async_client, ctx, mr, text)
+        vim.schedule(function()
+          if err then
+            vim.notify((opts.failure_msg or "Failed to create draft comment") .. ": " .. err, vim.log.levels.ERROR)
+          else
+            vim.notify(opts.success_msg or "Draft comment created", vim.log.levels.INFO)
+            if opts.on_success then
+              opts.on_success(text, result)
+            end
+          end
+        end)
+      end)
     end
   end, popup_opts)
 end
@@ -433,16 +466,20 @@ function M.create_mr_comment(review, provider, ctx, on_success)
     if not provider or not ctx then
       return
     end
-    local client_mod = require("codereview.api.client")
-    local _, err = provider.post_comment(client_mod, ctx, review, text, nil)
-    if err then
-      vim.notify("Failed to post comment: " .. err, vim.log.levels.ERROR)
-    else
-      vim.notify("Comment posted", vim.log.levels.INFO)
-      if on_success then
-        on_success()
-      end
-    end
+    require("plenary.async").run(function()
+      local async_client = require("codereview.api.async_client")
+      local _, err = provider.post_comment(async_client, ctx, review, text, nil)
+      vim.schedule(function()
+        if err then
+          vim.notify("Failed to post comment: " .. err, vim.log.levels.ERROR)
+        else
+          vim.notify("Comment posted", vim.log.levels.INFO)
+          if on_success then
+            on_success()
+          end
+        end
+      end)
+    end)
   end)
 end
 
@@ -450,25 +487,23 @@ function M.post_with_retry(api_fn, on_success, on_failure, opts)
   opts = opts or {}
   local max = opts.max_retries or 3
   local delay = opts.delay_ms or 2000
-  local attempt = 0
 
-  local function try()
-    local _, err = api_fn()
-    if not err then
-      vim.schedule(on_success)
-      return
+  require("plenary.async").run(function()
+    for attempt = 1, max do
+      local _, err = api_fn()
+      if not err then
+        vim.schedule(on_success)
+        return
+      end
+      if attempt >= max then
+        vim.schedule(function()
+          on_failure(err)
+        end)
+        return
+      end
+      require("plenary.async.util").sleep(delay)
     end
-    attempt = attempt + 1
-    if attempt >= max then
-      vim.schedule(function()
-        on_failure(err)
-      end)
-      return
-    end
-    vim.defer_fn(try, delay)
-  end
-
-  try()
+  end)
 end
 
 return M

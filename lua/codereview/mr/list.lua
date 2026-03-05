@@ -1,5 +1,4 @@
 local providers = require("codereview.providers")
-local client = require("codereview.api.client")
 
 local M = {}
 
@@ -45,30 +44,32 @@ function M.format_mr_entry(review)
 end
 
 function M.fetch(opts, callback)
-  opts = opts or {}
-  local ok, reviews, fetch_err = pcall(function()
-    local prov, pctx, perr = providers.detect()
-    if not prov then
-      return nil, perr
-    end
-    return prov.list_reviews(client, pctx, opts)
+  require("plenary.async").run(function()
+    local async_client = require("codereview.api.async_client")
+    local ok, reviews, fetch_err = pcall(function()
+      local prov, pctx, perr = providers.detect()
+      if not prov then
+        return nil, perr
+      end
+      return prov.list_reviews(async_client, pctx, opts or {})
+    end)
+
+    vim.schedule(function()
+      if not ok then
+        callback(nil, tostring(reviews))
+        return
+      end
+      if not reviews then
+        callback(nil, fetch_err)
+        return
+      end
+      local entries = {}
+      for _, review in ipairs(reviews) do
+        table.insert(entries, M.format_mr_entry(review))
+      end
+      callback(entries)
+    end)
   end)
-
-  if not ok then
-    callback(nil, tostring(reviews))
-    return
-  end
-
-  if not reviews then
-    callback(nil, fetch_err)
-    return
-  end
-
-  local entries = {}
-  for _, review in ipairs(reviews) do
-    table.insert(entries, M.format_mr_entry(review))
-  end
-  callback(entries)
 end
 
 return M
