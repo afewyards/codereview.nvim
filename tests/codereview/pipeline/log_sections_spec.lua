@@ -125,5 +125,59 @@ describe("pipeline.log_sections", function()
       assert.equal(1, #result.sections)
       assert.equal("Build artifacts", result.sections[1].title)
     end)
+
+    it("parses real GitLab format with combined end+start lines", function()
+      local trace = table.concat({
+        "\27[0KRunning with gitlab-runner 17.11.1 (96856197)\27[0;m",
+        "  on runner abc123",
+        'section_start:1772631165:prepare_executor\27[0K\27[0K\27[36;1mPreparing the "docker" executor\27[0;m\27[0;m',
+        "Using Docker executor...",
+        "Pulling docker image...",
+        "section_end:1772631168:prepare_executor\27[0Ksection_start:1772631168:prepare_script\27[0K\27[0K\27[36;1mPreparing environment\27[0;m\27[0;m",
+        "Running on runner-abc123...",
+        "section_end:1772631169:prepare_script\27[0Ksection_start:1772631169:get_sources\27[0K\27[0K\27[36;1mGetting source from Git repository\27[0;m\27[0;m",
+        "Fetching changes...",
+        "Checking out abc123...",
+        'section_end:1772631181:get_sources\27[0Ksection_start:1772631181:step_script\27[0K\27[0K\27[36;1mExecuting "step_script" stage of the job script\27[0;m\27[0;m',
+        "$ npm test",
+        "All tests passed",
+        "section_end:1772631251:step_script\27[0K",
+      }, "\n")
+      local result = log_sections.parse(trace)
+      assert.equal(2, #result.prefix) -- runner info lines before first section
+      assert.equal(4, #result.sections)
+      assert.equal('Preparing the "docker" executor', result.sections[1].title)
+      assert.equal(2, #result.sections[1].lines)
+      assert.equal("Preparing environment", result.sections[2].title)
+      assert.equal(1, #result.sections[2].lines)
+      assert.equal("Getting source from Git repository", result.sections[3].title)
+      assert.equal(2, #result.sections[3].lines)
+      assert.equal('Executing "step_script" stage of the job script', result.sections[4].title)
+      assert.equal(2, #result.sections[4].lines)
+    end)
+
+    it("parses GitLab sections without leading ESC[0K", function()
+      local trace = table.concat({
+        "section_start:1772631165:build\27[0K\27[0K\27[36;1mBuilding\27[0;m",
+        "compiling...",
+        "section_end:1772631168:build\27[0K",
+      }, "\n")
+      local result = log_sections.parse(trace)
+      assert.equal(0, #result.prefix)
+      assert.equal(1, #result.sections)
+      assert.equal("Building", result.sections[1].title)
+      assert.equal(1, #result.sections[1].lines)
+    end)
+
+    it("falls back to section name when title is empty", function()
+      local trace = table.concat({
+        "section_start:1772631165:my_step\27[0K",
+        "content",
+        "section_end:1772631168:my_step\27[0K",
+      }, "\n")
+      local result = log_sections.parse(trace)
+      assert.equal(1, #result.sections)
+      assert.equal("my_step", result.sections[1].title)
+    end)
   end)
 end)

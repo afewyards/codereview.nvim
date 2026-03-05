@@ -145,7 +145,7 @@ function M.open(job, trace, max_lines)
     title = { { title, "CodeReviewFloatTitle" } },
     title_pos = "center",
     zindex = 60,
-    footer = { { " q:close  <CR>:toggle  zM/zR:fold ", "CodeReviewFloatFooter" } },
+    footer = { { " q:close  <CR>:toggle ", "CodeReviewFloatFooter" } },
     footer_pos = "center",
   })
 
@@ -211,20 +211,6 @@ function M.open(job, trace, max_lines)
       rerender()
     end
   end, vim.tbl_extend("force", opts, { desc = "Toggle section" }))
-
-  vim.keymap.set("n", "zM", function()
-    for _, section in ipairs(parsed.sections) do
-      section.collapsed = true
-    end
-    rerender()
-  end, vim.tbl_extend("force", opts, { desc = "Collapse all" }))
-
-  vim.keymap.set("n", "zR", function()
-    for _, section in ipairs(parsed.sections) do
-      section.collapsed = false
-    end
-    rerender()
-  end, vim.tbl_extend("force", opts, { desc = "Expand all" }))
 
   vim.api.nvim_create_autocmd("WinClosed", {
     pattern = tostring(win),

@@ -61,7 +61,7 @@ end
 --- @param seconds number
 --- @return string
 function M.format_duration(seconds)
-  seconds = math.floor(seconds or 0)
+  seconds = math.floor(tonumber(seconds) or 0)
   if seconds >= 3600 then
     local h = math.floor(seconds / 3600)
     local m = math.floor((seconds % 3600) / 60)
