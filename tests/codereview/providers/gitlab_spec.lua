@@ -649,13 +649,13 @@ describe("get_last_reviewed_sha", function()
             },
           }
         end
+      end,
+      paginate_all = function(_, path, _)
         if path:match("/versions$") then
           return {
-            data = {
-              { id = 1, head_commit_sha = "sha_v1", created_at = "2026-02-28T12:00:00Z" },
-              { id = 2, head_commit_sha = "sha_v2", created_at = "2026-03-01T09:00:00Z" },
-              { id = 3, head_commit_sha = "sha_v3", created_at = "2026-03-01T11:00:00Z" },
-            },
+            { id = 1, head_commit_sha = "sha_v1", created_at = "2026-02-28T12:00:00Z" },
+            { id = 2, head_commit_sha = "sha_v2", created_at = "2026-03-01T09:00:00Z" },
+            { id = 3, head_commit_sha = "sha_v3", created_at = "2026-03-01T11:00:00Z" },
           }
         end
       end,
@@ -695,12 +695,10 @@ describe("get_versions", function()
 
   it("returns array of version objects", function()
     local mock_client = {
-      get = function(_, _, _)
+      paginate_all = function(_, _, _)
         return {
-          data = {
-            { head_commit_sha = "abc", created_at = "2026-01-02" },
-            { head_commit_sha = "def", created_at = "2026-01-01" },
-          },
+          { head_commit_sha = "abc", created_at = "2026-01-02" },
+          { head_commit_sha = "def", created_at = "2026-01-01" },
         }
       end,
     }
@@ -715,7 +713,7 @@ describe("get_versions", function()
 
   it("returns error when API fails", function()
     local mock_client = {
-      get = function(_, _, _)
+      paginate_all = function(_, _, _)
         return nil
       end,
     }

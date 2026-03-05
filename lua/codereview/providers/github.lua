@@ -147,15 +147,15 @@ function M.list_reviews(client, ctx, opts)
   end
   local owner, repo = parse_owner_repo(ctx)
   local path_url = string.format("/repos/%s/%s/pulls", owner, repo)
-  local result, err2 = client.get(ctx.base_url, path_url, {
-    query = { state = opts.state or "open", per_page = opts.per_page or 50 },
+  local data, err2 = client.paginate_all(ctx.base_url, path_url, {
+    query = { state = opts.state or "open" },
     headers = headers,
   })
-  if not result then
+  if not data then
     return nil, err2
   end
   local reviews = {}
-  for _, pr in ipairs(result.data or {}) do
+  for _, pr in ipairs(data) do
     table.insert(reviews, M.normalize_pr(pr))
   end
   return reviews

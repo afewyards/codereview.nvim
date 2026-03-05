@@ -136,16 +136,15 @@ function M.list_reviews(client, ctx, opts)
   local query = {
     state = opts.state or "opened",
     scope = opts.scope or "all",
-    per_page = opts.per_page or 50,
   }
   local path = "/api/v4/projects/" .. encoded_project(ctx) .. "/merge_requests"
-  local result, err2 = client.get(ctx.base_url, path, { query = query, headers = headers })
-  if not result then
+  local data, err2 = client.paginate_all(ctx.base_url, path, { query = query, headers = headers })
+  if not data then
     return nil, err2
   end
 
   local reviews = {}
-  for _, mr in ipairs(result.data or {}) do
+  for _, mr in ipairs(data) do
     table.insert(reviews, M.normalize_mr(mr))
   end
   return reviews
@@ -250,13 +249,13 @@ function M.get_last_reviewed_sha(client, ctx, review, username)
     return nil
   end
 
-  local versions_res = client.get(ctx.base_url, base .. "/versions", { headers = headers })
-  if not versions_res or not versions_res.data then
+  local versions_data = client.paginate_all(ctx.base_url, base .. "/versions", { headers = headers })
+  if not versions_data then
     return nil
   end
 
   local best_sha, best_time = nil, ""
-  for _, v in ipairs(versions_res.data) do
+  for _, v in ipairs(versions_data) do
     if v.created_at and v.created_at <= approved_at and v.created_at > best_time then
       best_time = v.created_at
       best_sha = v.head_commit_sha
@@ -290,12 +289,12 @@ function M.get_versions(client, ctx, review)
   if not headers then
     return nil, err
   end
-  local res = client.get(ctx.base_url, mr_base(ctx, review.id) .. "/versions", { headers = headers })
-  if not res or not res.data then
+  local data = client.paginate_all(ctx.base_url, mr_base(ctx, review.id) .. "/versions", { headers = headers })
+  if not data then
     return nil, "Failed to fetch MR versions"
   end
   local versions = {}
-  for _, v in ipairs(res.data) do
+  for _, v in ipairs(data) do
     table.insert(versions, {
       head_commit_sha = v.head_commit_sha,
       created_at = v.created_at,
