@@ -185,6 +185,62 @@ describe("providers.github", function()
       assert.equal(5, discussions[1].notes[1].position.new_line)
       assert.is_false(discussions[1].notes[1].position.outdated)
     end)
+
+    it("normalizes originalCommit.oid into position.original_commit_sha", function()
+      local threads = {
+        {
+          id = "PRRT_orig",
+          isResolved = false,
+          diffSide = "RIGHT",
+          startDiffSide = nil,
+          comments = {
+            nodes = {
+              {
+                databaseId = 20,
+                author = { login = "alice" },
+                body = "comment",
+                createdAt = "2026-01-01T00:00:00Z",
+                path = "foo.lua",
+                line = 5,
+                startLine = vim.NIL,
+                commit = { oid = "current-sha" },
+                originalCommit = { oid = "orig-sha-abc" },
+              },
+            },
+          },
+        },
+      }
+      local discussions = github.normalize_graphql_threads(threads)
+      assert.equal("orig-sha-abc", discussions[1].notes[1].position.original_commit_sha)
+    end)
+
+    it("sets original_commit_sha to nil when originalCommit is missing", function()
+      local threads = {
+        {
+          id = "PRRT_no_orig",
+          isResolved = false,
+          diffSide = "RIGHT",
+          startDiffSide = nil,
+          comments = {
+            nodes = {
+              {
+                databaseId = 21,
+                author = { login = "bob" },
+                body = "no orig",
+                createdAt = "2026-01-01T00:00:00Z",
+                path = "bar.lua",
+                line = 3,
+                startLine = vim.NIL,
+                commit = { oid = "some-sha" },
+                -- no originalCommit field
+              },
+            },
+          },
+        },
+      }
+      local discussions = github.normalize_graphql_threads(threads)
+      assert.is_nil(discussions[1].notes[1].position.original_commit_sha)
+    end)
   end)
 
   describe("build_auth_header", function()
@@ -1333,5 +1389,30 @@ describe("publish_review with pending review", function()
       local _, err = github.play_job(mock_client, ctx, review, 1)
       assert.truthy(err:match("not supported"))
     end)
+  end)
+end)
+
+describe("build_commit_matcher", function()
+  it("matches when position.original_commit_sha equals commit_sha", function()
+    local matcher = github.build_commit_matcher({}, {})
+    local position = { original_commit_sha = "abc123" }
+    assert.is_true(matcher(position, "abc123"))
+  end)
+
+  it("rejects when original_commit_sha differs", function()
+    local matcher = github.build_commit_matcher({}, {})
+    local position = { original_commit_sha = "abc123" }
+    assert.is_false(matcher(position, "different"))
+  end)
+
+  it("rejects when no original_commit_sha on position", function()
+    local matcher = github.build_commit_matcher({}, {})
+    local position = { new_path = "foo.lua" }
+    assert.is_false(matcher(position, "abc123"))
+  end)
+
+  it("handles nil position", function()
+    local matcher = github.build_commit_matcher({}, {})
+    assert.is_false(matcher(nil, "abc123"))
   end)
 end)

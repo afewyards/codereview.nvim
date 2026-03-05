@@ -119,6 +119,7 @@ function M.normalize_graphql_threads(thread_nodes)
             start_line = start_line or original_start_line,
             start_side = thread.startDiffSide,
             commit_sha = type(c.commit) == "table" and c.commit.oid or nil,
+            original_commit_sha = type(c.originalCommit) == "table" and c.originalCommit.oid or nil,
             outdated = thread.isOutdated or c.outdated or false,
           },
         })
@@ -267,6 +268,7 @@ function M.get_discussions(client, ctx, review)
                     originalStartLine
                     outdated
                     commit { oid }
+                    originalCommit { oid }
                   }
                 }
               }
@@ -1118,6 +1120,19 @@ end
 --- GitHub does not support triggering manual jobs directly.
 function M.play_job(client, ctx, review, job_id) -- luacheck: ignore ctx review job_id
   return nil, "Manual job trigger not supported on GitHub"
+end
+
+--- Returns a matcher function that checks whether a discussion position was originally placed on commit_sha.
+--- GitHub tracks the original commit via `originalCommit.oid` on review comments.
+--- @param commits table unused (kept for interface consistency with GitLab)
+--- @param versions table unused (kept for interface consistency with GitLab)
+function M.build_commit_matcher(commits, versions) -- luacheck: ignore commits versions
+  return function(position, commit_sha)
+    if not position then
+      return false
+    end
+    return position.original_commit_sha == commit_sha
+  end
 end
 
 return M
