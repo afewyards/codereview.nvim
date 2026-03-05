@@ -3,10 +3,85 @@
 local M = {}
 
 local ansi = require("codereview.pipeline.ansi")
+local log_sections = require("codereview.pipeline.log_sections")
 
 local ns = vim.api.nvim_create_namespace("codereview_pipeline_log")
 
 local handle = nil
+
+--- Build display lines from parsed sections.
+--- @param parsed ParseResult
+--- @param max_lines number?
+--- @return table { lines: string[], highlights: table[], section_map: table }
+function M.build_display(parsed, max_lines)
+  local lines = {}
+  local highlights = {}
+  local section_map = {} -- row -> section index
+  local total = 0
+
+  -- Prefix lines
+  for _, line in ipairs(parsed.prefix) do
+    local p = ansi.parse(line)
+    table.insert(lines, p.lines[1] or line)
+    for _, hl in ipairs(p.highlights) do
+      hl.line = #lines
+      table.insert(highlights, hl)
+    end
+    total = total + 1
+    if max_lines and total >= max_lines then
+      return { lines = lines, highlights = highlights, section_map = section_map }
+    end
+  end
+
+  -- Sections
+  for si, section in ipairs(parsed.sections) do
+    local row = #lines + 1
+    if section.collapsed then
+      local header = string.format("▸ %s (%d lines)", section.title, #section.lines)
+      table.insert(lines, header)
+      table.insert(highlights, {
+        line = row,
+        col_start = 0,
+        col_end = #header,
+        hl_group = "CodeReviewLogSectionHeader",
+      })
+      section_map[row] = si
+      total = total + 1
+    else
+      local header = string.format("▾ %s", section.title)
+      table.insert(lines, header)
+      table.insert(highlights, {
+        line = row,
+        col_start = 0,
+        col_end = #header,
+        hl_group = "CodeReviewLogSectionHeader",
+      })
+      section_map[row] = si
+      total = total + 1
+
+      for _, content_line in ipairs(section.lines) do
+        if max_lines and total >= max_lines then
+          break
+        end
+        local p = ansi.parse(content_line)
+        local text = "  " .. (p.lines[1] or content_line)
+        table.insert(lines, text)
+        for _, hl in ipairs(p.highlights) do
+          hl.line = #lines
+          hl.col_start = hl.col_start + 2
+          hl.col_end = hl.col_end + 2
+          table.insert(highlights, hl)
+        end
+        total = total + 1
+      end
+    end
+    if max_lines and total >= max_lines then
+      break
+    end
+  end
+
+  return { lines = lines, highlights = highlights, section_map = section_map }
+end
 
 --- Open a log view float for a job trace.
 --- @param job table  normalized pipeline job
