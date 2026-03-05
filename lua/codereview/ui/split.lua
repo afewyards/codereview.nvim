@@ -75,6 +75,9 @@ function M.close(layout)
     vim.api.nvim_set_hl(0, "Visual", M.saved_visual)
     M.saved_visual = nil
   end
+  pcall(function()
+    vim.wo[layout.main_win].winbar = ""
+  end)
   pcall(vim.api.nvim_set_current_win, layout.main_win)
   pcall(vim.api.nvim_win_close, layout.sidebar_win, true)
 end
