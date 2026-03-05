@@ -399,6 +399,11 @@ function M.setup_keymaps(state, layout, active_states)
     detail.open(state.entry or state.review)
   end
 
+  -- Carrier-line cursor state (declared here so quit() can access them)
+  local cursor_hidden = false
+  local saved_guicursor = nil
+  local saved_cursorline = nil
+
   -- Quit: clean up session and close layout
   local function quit()
     local session = require("codereview.review.session")
@@ -413,6 +418,17 @@ function M.setup_keymaps(state, layout, active_states)
     if sess.active then
       session.stop()
       vim.notify("Review session ended — unpublished drafts remain on server", vim.log.levels.WARN)
+    end
+    if cursor_hidden then
+      if saved_guicursor then
+        vim.o.guicursor = saved_guicursor
+      end
+      if saved_cursorline ~= nil then
+        pcall(function()
+          vim.wo[layout.main_win].cursorline = saved_cursorline
+        end)
+      end
+      cursor_hidden = false
     end
     active_states[main_buf] = nil
     local split = require("codereview.ui.split")
@@ -2295,6 +2311,21 @@ function M.setup_keymaps(state, layout, active_states)
       local line_data = state.scroll_mode and state.scroll_line_data
         or (state.line_data_cache[state.current_file] or {})
       local anchor_row = resolve_anchor_row(line_data, cursor_row)
+
+      -- Hide cursor and cursorline on carrier lines (visual separators, not content)
+      local on_carrier = line_data[cursor_row] and line_data[cursor_row].type == "carrier"
+      if on_carrier and not cursor_hidden then
+        saved_guicursor = vim.o.guicursor
+        saved_cursorline = vim.wo[layout.main_win].cursorline
+        vim.o.guicursor = "a:CodeReviewCursorHidden"
+        vim.wo[layout.main_win].cursorline = false
+        cursor_hidden = true
+      elseif not on_carrier and cursor_hidden then
+        vim.o.guicursor = saved_guicursor or ""
+        vim.wo[layout.main_win].cursorline = saved_cursorline
+        cursor_hidden = false
+      end
+
       local row_ai = state.scroll_mode and state.scroll_row_ai or (state.row_ai_cache[state.current_file] or {})
       local ai_at_row = row_ai[anchor_row] or {}
       local row_disc_map = state.scroll_mode and state.scroll_row_disc

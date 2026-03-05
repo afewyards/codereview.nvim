@@ -300,8 +300,7 @@ function M.build(disc, opts)
           sel_start = #virt_lines
           seg_sel_start = #current_segment.virt_lines
         end
-        push({ { pad .. "┃", bdr } })
-        -- Reply header
+        -- Reply header (separator ┃ is rendered by the carrier buffer line)
         local reply_header = {}
         if ri_sel then
           table.insert(reply_header, { "██", status_hl })

@@ -336,16 +336,35 @@ function M.ensure_virt_lines_visible(win, buf, row, focus_offset)
 
   if focus_offset ~= nil then
     -- Center on the selected note's virt_line position.
-    -- ideal_topline puts (row + focus_offset) at the vertical center.
-    -- Requires scrolloff=0 on the diff window to prevent Neovim override.
-    local new_topline = row + focus_offset - half + 1
-    if new_topline < 1 then
-      new_topline = 1
+    -- Walk backward from row counting actual visual heights (buffer line +
+    -- its virt_lines) so that intervening extmark blocks are accounted for.
+    -- We need (half - 1 - focus_offset) visual lines above 'row'.
+    local needed_above = half - 1 - focus_offset
+    local topline = row
+    if needed_above > 0 then
+      local accumulated = 0
+      for r = row - 1, 1, -1 do
+        -- Count virt_lines attached to this buffer row
+        local virt_count = 0
+        for _, ns in ipairs({ DIFF_NS, AIDRAFT_NS }) do
+          local marks = vim.api.nvim_buf_get_extmarks(buf, ns, { r - 1, 0 }, { r - 1, -1 }, { details = true })
+          for _, mark in ipairs(marks) do
+            if mark[4] and mark[4].virt_lines then
+              virt_count = virt_count + #mark[4].virt_lines
+            end
+          end
+        end
+        accumulated = accumulated + 1 + virt_count
+        topline = r
+        if accumulated >= needed_above then
+          break
+        end
+      end
     end
-    if new_topline > row then
-      new_topline = row
+    if topline < 1 then
+      topline = 1
     end
-    vim.fn.winrestview({ topline = new_topline })
+    vim.fn.winrestview({ topline = topline })
   else
     -- No selection info: try to center the entire block
     local virt_count = 0

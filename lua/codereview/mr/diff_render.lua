@@ -877,6 +877,16 @@ function M.render_file_diff(
     end
   end
 
+  -- Carrier lines: overlay with thread border so they don't show as empty rows
+  for i, data in ipairs(line_data) do
+    if data.type == "carrier" then
+      vim.api.nvim_buf_set_extmark(buf, DIFF_NS, i - 1, 0, {
+        virt_text = { { "    \xe2\x94\x83", "CodeReviewCommentBorder" } },
+        virt_text_pos = "overlay",
+      })
+    end
+  end
+
   place_hunk_separators(buf, line_data, false, file_line_count)
 
   local row_discussions = {}
@@ -1258,6 +1268,16 @@ function M.render_all_files(
       end
     end
   end)
+
+  -- Carrier lines: overlay with thread border so they don't show as empty rows
+  for i, data in ipairs(all_line_data) do
+    if data.type == "carrier" then
+      vim.api.nvim_buf_set_extmark(buf, DIFF_NS, i - 1, 0, {
+        virt_text = { { "    \xe2\x94\x83", "CodeReviewCommentBorder" } },
+        virt_text_pos = "overlay",
+      })
+    end
+  end
 
   place_hunk_separators(buf, all_line_data, true)
 
