@@ -90,12 +90,15 @@ local function safe_request(params)
 end
 
 local function safe_async_request(params)
-  local wrap = require("plenary.async").wrap
-  local ok, response = pcall(wrap(curl.request, 2), params)
-  if not ok then
-    return nil, tostring(response)
+  local tx, rx = require("plenary.async.control").channel.oneshot()
+  params.callback = function(response)
+    tx(response)
   end
-  return response
+  local ok, err = pcall(curl.request, params)
+  if not ok then
+    return nil, tostring(err)
+  end
+  return rx()
 end
 
 function M.request(method, base_url, path, opts)
