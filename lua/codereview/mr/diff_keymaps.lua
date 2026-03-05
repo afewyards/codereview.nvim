@@ -323,17 +323,33 @@ function M.setup_keymaps(state, layout, active_states)
     end
   end
 
+  -- When cursor is on a carrier line, walk back to find the anchor code line.
+  local function resolve_anchor_row(line_data, cursor_row)
+    if not line_data or not line_data[cursor_row] or line_data[cursor_row].type ~= "carrier" then
+      return cursor_row
+    end
+    for r = cursor_row - 1, 1, -1 do
+      if not line_data[r] or line_data[r].type ~= "carrier" then
+        return r
+      end
+    end
+    return cursor_row
+  end
+
   -- Get the first discussion at the current cursor line
   local function get_cursor_disc()
     local cursor = vim.api.nvim_win_get_cursor(layout.main_win)
+    local cursor_row = cursor[1]
+    local line_data = state.scroll_mode and state.scroll_line_data or (state.line_data_cache[state.current_file] or {})
+    local anchor_row = resolve_anchor_row(line_data, cursor_row)
     if state.scroll_mode then
-      if state.scroll_row_disc and state.scroll_row_disc[cursor[1]] then
-        return state.scroll_row_disc[cursor[1]][1]
+      if state.scroll_row_disc and state.scroll_row_disc[anchor_row] then
+        return state.scroll_row_disc[anchor_row][1]
       end
     else
       local row_disc = state.row_disc_cache[state.current_file]
-      if row_disc and row_disc[cursor[1]] then
-        return row_disc[cursor[1]][1]
+      if row_disc and row_disc[anchor_row] then
+        return row_disc[anchor_row][1]
       end
     end
   end
@@ -437,19 +453,6 @@ function M.setup_keymaps(state, layout, active_states)
   end
 
   -- ── Main buffer callbacks (all 26 remappable actions) ───────────────────────
-
-  -- When cursor is on a carrier line, walk back to find the anchor code line.
-  local function resolve_anchor_row(line_data, cursor_row)
-    if not line_data or not line_data[cursor_row] or line_data[cursor_row].type ~= "carrier" then
-      return cursor_row
-    end
-    for r = cursor_row - 1, 1, -1 do
-      if not line_data[r] or line_data[r].type ~= "carrier" then
-        return r
-      end
-    end
-    return cursor_row
-  end
 
   local main_callbacks = {
     next_file = function()
@@ -1196,7 +1199,10 @@ function M.setup_keymaps(state, layout, active_states)
         return
       end
       local cursor_row = vim.api.nvim_win_get_cursor(layout.main_win)[1]
-      local sel = state.row_selection[cursor_row]
+      local line_data = state.scroll_mode and state.scroll_line_data
+        or (state.line_data_cache[state.current_file] or {})
+      local anchor_row = resolve_anchor_row(line_data, cursor_row)
+      local sel = state.row_selection[anchor_row]
       local sel_idx = sel and sel.type == "comment" and sel.disc_id == disc.id and sel.note_idx or nil
       if not sel_idx then
         return
@@ -1240,7 +1246,7 @@ function M.setup_keymaps(state, layout, active_states)
         rerender_view()
       end, {
         win_id = layout.main_win,
-        anchor_line = cursor_row,
+        anchor_line = anchor_row,
         spacer_offset = spacer_offset,
         is_reply = sel_idx > 1,
         on_close = function()
@@ -1265,7 +1271,10 @@ function M.setup_keymaps(state, layout, active_states)
         return
       end
       local cursor_row = vim.api.nvim_win_get_cursor(layout.main_win)[1]
-      local sel = state.row_selection[cursor_row]
+      local line_data = state.scroll_mode and state.scroll_line_data
+        or (state.line_data_cache[state.current_file] or {})
+      local anchor_row = resolve_anchor_row(line_data, cursor_row)
+      local sel = state.row_selection[anchor_row]
       local sel_idx = sel and sel.type == "comment" and sel.disc_id == disc.id and sel.note_idx or nil
       if not sel_idx then
         return
@@ -1279,7 +1288,7 @@ function M.setup_keymaps(state, layout, active_states)
       -- Draft comments: use delete_draft path
       if disc.is_draft then
         comment.delete_draft(disc, state.review, function()
-          state.row_selection[cursor_row] = nil
+          state.row_selection[anchor_row] = nil
           for i, d in ipairs(state.discussions) do
             if d == disc then
               table.remove(state.discussions, i)
@@ -1306,7 +1315,7 @@ function M.setup_keymaps(state, layout, active_states)
         return
       end
       comment.delete_note(disc, note, state.review, function(result)
-        state.row_selection[cursor_row] = nil -- clear selection
+        state.row_selection[anchor_row] = nil -- clear selection
         if result and result.removed_disc then
           for i, d in ipairs(state.discussions) do
             if d.id == disc.id then
@@ -2283,22 +2292,39 @@ function M.setup_keymaps(state, layout, active_states)
       end
 
       local cursor_row = vim.api.nvim_win_get_cursor(layout.main_win)[1]
+      local line_data = state.scroll_mode and state.scroll_line_data
+        or (state.line_data_cache[state.current_file] or {})
+      local anchor_row = resolve_anchor_row(line_data, cursor_row)
       local row_ai = state.scroll_mode and state.scroll_row_ai or (state.row_ai_cache[state.current_file] or {})
-      local ai_at_row = row_ai[cursor_row] or {}
+      local ai_at_row = row_ai[anchor_row] or {}
       local row_disc_map = state.scroll_mode and state.scroll_row_disc
         or (state.row_disc_cache[state.current_file] or {})
-      local discs_at_row = row_disc_map[cursor_row] or {}
+      local discs_at_row = row_disc_map[anchor_row] or {}
 
       local items = diff_comments.build_row_items(ai_at_row, discs_at_row)
       if #items > 0 then
-        local prev_sel = state.row_selection[cursor_row]
+        local prev_sel = state.row_selection[anchor_row]
         if not prev_sel then
-          -- Auto-select first item on entering a row with items
+          -- Auto-select: first item, or the note matching the carrier the cursor is on
+          local auto_sel
+          if anchor_row ~= cursor_row then
+            local ld = line_data[cursor_row]
+            local cidx = ld and ld.carrier_idx or 1
+            local n_ai = 0
+            for _, item in ipairs(items) do
+              if item.type == "ai" then
+                n_ai = n_ai + 1
+              end
+            end
+            auto_sel = items[n_ai + cidx + 1] or items[1]
+          else
+            auto_sel = items[1]
+          end
           local old_row = prev_selection_row
-          state.row_selection = { [cursor_row] = items[1] }
-          prev_selection_row = cursor_row
+          state.row_selection = { [anchor_row] = auto_sel }
+          prev_selection_row = anchor_row
           -- Clear old row's indicator, set new row's indicator
-          if old_row and old_row ~= cursor_row then
+          if old_row and old_row ~= anchor_row then
             diff_render.update_selection_at_row(
               main_buf,
               old_row,
@@ -2307,18 +2333,20 @@ function M.setup_keymaps(state, layout, active_states)
               row_disc_map,
               state.current_user,
               state.review,
-              state.editing_note
+              state.editing_note,
+              line_data
             )
           end
           diff_render.update_selection_at_row(
             main_buf,
-            cursor_row,
+            anchor_row,
             state.row_selection,
             row_ai,
             row_disc_map,
             state.current_user,
             state.review,
-            state.editing_note
+            state.editing_note,
+            line_data
           )
         else
           -- Validate prev_sel against current items (may be stale after dismiss/accept)
@@ -2337,15 +2365,15 @@ function M.setup_keymaps(state, layout, active_states)
           end
           if not valid then
             -- Data changed (item dismissed/accepted): full rerender
-            state.row_selection = { [cursor_row] = items[1] }
-            prev_selection_row = cursor_row
+            state.row_selection = { [anchor_row] = items[1] }
+            prev_selection_row = anchor_row
             rerender_view()
-          elseif next(state.row_selection, next(state.row_selection)) or not state.row_selection[cursor_row] then
+          elseif next(state.row_selection, next(state.row_selection)) or not state.row_selection[anchor_row] then
             -- Clear selections on other rows — purely cosmetic
             local old_row = prev_selection_row
-            state.row_selection = { [cursor_row] = state.row_selection[cursor_row] }
-            prev_selection_row = cursor_row
-            if old_row and old_row ~= cursor_row then
+            state.row_selection = { [anchor_row] = state.row_selection[anchor_row] }
+            prev_selection_row = anchor_row
+            if old_row and old_row ~= anchor_row then
               diff_render.update_selection_at_row(
                 main_buf,
                 old_row,
@@ -2354,21 +2382,23 @@ function M.setup_keymaps(state, layout, active_states)
                 row_disc_map,
                 state.current_user,
                 state.review,
-                state.editing_note
+                state.editing_note,
+                line_data
               )
             end
             diff_render.update_selection_at_row(
               main_buf,
-              cursor_row,
+              anchor_row,
               state.row_selection,
               row_ai,
               row_disc_map,
               state.current_user,
               state.review,
-              state.editing_note
+              state.editing_note,
+              line_data
             )
           else
-            prev_selection_row = cursor_row
+            prev_selection_row = anchor_row
           end
         end
       else
@@ -2387,7 +2417,8 @@ function M.setup_keymaps(state, layout, active_states)
               row_disc_map,
               state.current_user,
               state.review,
-              state.editing_note
+              state.editing_note,
+              line_data
             )
           end
         end
@@ -2407,11 +2438,11 @@ function M.setup_keymaps(state, layout, active_states)
       local file_entry = state.files and state.files[track_idx]
       local track_path = file_entry and (file_entry.new_path or file_entry.old_path)
       if track_path then
-        local line_data = state.scroll_mode and state.scroll_line_data or (state.line_data_cache[track_idx] or {})
-        if #line_data > 0 then
+        local track_line_data = state.scroll_mode and state.scroll_line_data or (state.line_data_cache[track_idx] or {})
+        if #track_line_data > 0 then
           if not state.file_review_status[track_path] then
             state.file_review_status[track_path] =
-              tracker.init_file(track_path, line_data, state.scroll_mode and track_idx or nil)
+              tracker.init_file(track_path, track_line_data, state.scroll_mode and track_idx or nil)
           end
           local frs = state.file_review_status[track_path]
           local ok, w0 = pcall(vim.fn.line, "w0")
