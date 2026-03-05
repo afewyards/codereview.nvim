@@ -1,5 +1,4 @@
 local curl = require("plenary.curl")
-local async_util = require("plenary.async.util")
 local log = require("codereview.log")
 local M = {}
 
@@ -91,6 +90,7 @@ local function safe_request(params)
 end
 
 local function safe_async_request(params)
+  local async_util = require("plenary.async.util")
   local ok, response = pcall(async_util.wrap(curl.request, 2), params)
   if not ok then
     return nil, tostring(response)
@@ -182,7 +182,7 @@ function M.async_request(method, base_url, path, opts)
     vim.schedule(function()
       vim.notify(string.format("Rate limited. Retrying in %ds...", retry_after), vim.log.levels.WARN)
     end)
-    async_util.sleep(retry_after * 1000)
+    require("plenary.async.util").sleep(retry_after * 1000)
     local retry_err
     response, retry_err = safe_async_request(params)
     if not response and retry_err then
