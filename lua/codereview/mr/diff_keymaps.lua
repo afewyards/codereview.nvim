@@ -1980,23 +1980,10 @@ function M.setup_keymaps(state, layout, active_states)
     vim.notify("Discarded failed comment", vim.log.levels.INFO)
   end)
 
-  -- Load more context (<CR> on a load_more line); file path jump in summary
+  -- Summary view: <CR> jumps to file path
   map(main_buf, "n", "<CR>", function()
     if state.view_mode == "summary" then
       jump_to_summary_file_path()
-      return
-    end
-    if state.view_mode ~= "diff" then
-      return
-    end
-    local cursor = vim.api.nvim_win_get_cursor(layout.main_win)
-    local row = cursor[1]
-    local line_data = state.line_data_cache[state.current_file]
-    if not line_data or not line_data[row] then
-      return
-    end
-    if line_data[row].type == "load_more" then
-      diff_nav.adjust_context(layout, state, 10)
     end
   end)
 

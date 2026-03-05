@@ -67,7 +67,7 @@ M.apply_word_hl = apply_word_hl
 
 -- ─── Hunk separator placement ─────────────────────────────────────────────────
 
-local function place_hunk_separators(buf, data_list, file_scoped)
+local function place_hunk_separators(buf, data_list, file_scoped, file_line_count)
   vim.api.nvim_buf_clear_namespace(buf, SEPARATOR_NS, 0, -1)
   local cfg = config.get().diff
   if cfg.separator_lines <= 0 or cfg.separator_char == "" then
@@ -157,20 +157,35 @@ local function place_hunk_separators(buf, data_list, file_scoped)
       return full_virt
     end
 
-    -- Top edge: below the "load more above" line
-    if #data_list > 0 and data_list[1].type == "load_more" and data_list[1].direction == "above" then
+    -- Top edge: at the first line if file doesn't start at line 1
+    local starts_at_bof = #data_list > 0
+      and data_list[1].item
+      and data_list[1].item.new_line
+      and data_list[1].item.new_line <= 1
+      and data_list[1].item.old_line
+      and data_list[1].item.old_line <= 1
+    if #data_list > 0 and not starts_at_bof then
       vim.api.nvim_buf_set_extmark(buf, SEPARATOR_NS, 0, 0, {
         virt_lines = { build_edge_hint("▲"), full_virt },
-        virt_lines_above = false,
+        virt_lines_above = true,
       })
     end
 
-    -- Bottom edge: above the "load more below" line
+    -- Bottom edge: at the last line if file doesn't reach EOF
     local n = #data_list
-    if n > 0 and data_list[n].type == "load_more" and data_list[n].direction == "below" then
+    local at_eof = false
+    if file_line_count and n > 0 then
+      for i = n, 1, -1 do
+        if data_list[i].item and data_list[i].item.new_line then
+          at_eof = data_list[i].item.new_line >= file_line_count
+          break
+        end
+      end
+    end
+    if n > 0 and not at_eof then
       vim.api.nvim_buf_set_extmark(buf, SEPARATOR_NS, n - 1, 0, {
         virt_lines = { full_virt, build_edge_hint("▼") },
-        virt_lines_above = true,
+        virt_lines_above = false,
       })
     end
   end
@@ -681,7 +696,7 @@ function M.render_file_diff(
   local hunks, display, file_line_count
 
   if cached then
-    hunks = cached.hunks
+    hunks = cached.hunks -- luacheck: ignore 311
     display = cached.display
     file_line_count = cached.file_line_count
   else
@@ -731,33 +746,11 @@ function M.render_file_diff(
   local lines = {}
   local line_data = {}
 
-  -- "Load more above" — only if first hunk doesn't start at line 1
-  local starts_at_bof = #hunks > 0 and hunks[1].new_start <= 1 and hunks[1].old_start <= 1
-  if #hunks > 0 and not starts_at_bof then
-    table.insert(lines, "  ↑ Press <CR> to load more context above ↑")
-    table.insert(line_data, { type = "load_more", direction = "above" })
-  end
-
   for _, item in ipairs(display) do
     if item.type ~= "hunk_boundary" then
       table.insert(lines, item.text or "")
       table.insert(line_data, { type = item.type, item = item })
     end
-  end
-
-  -- "Load more below" — only if last displayed line doesn't reach EOF
-  local at_eof = false
-  if file_line_count and #display > 0 then
-    for i = #display, 1, -1 do
-      if display[i].new_line then
-        at_eof = display[i].new_line >= file_line_count
-        break
-      end
-    end
-  end
-  if #hunks > 0 and not at_eof then
-    table.insert(lines, "  ↓ Press <CR> to load more context below ↓")
-    table.insert(line_data, { type = "load_more", direction = "below" })
   end
 
   vim.bo[buf].modifiable = true
@@ -802,17 +795,13 @@ function M.render_file_diff(
       apply_line_hl(buf, row, "CodeReviewDiffDelete")
       prev_delete_row = row
       prev_delete_text = data.item.text or ""
-    elseif data.type == "load_more" then
-      apply_line_hl(buf, row, "CodeReviewHidden")
-      prev_delete_row = nil
-      prev_delete_text = nil
     else
       prev_delete_row = nil
       prev_delete_text = nil
     end
   end
 
-  place_hunk_separators(buf, line_data, false)
+  place_hunk_separators(buf, line_data, false, file_line_count)
 
   local row_discussions = {}
   if discussions then
