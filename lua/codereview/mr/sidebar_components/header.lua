@@ -28,10 +28,9 @@ function M.render(state_or_review, width)
   local highlights = {}
   local row_map = {}
 
-  local review, commit_filter
+  local review
   if state_or_review.review then
     review = state_or_review.review
-    commit_filter = state_or_review.commit_filter
   else
     review = state_or_review
   end
@@ -46,23 +45,6 @@ function M.render(state_or_review, width)
   local src = review.source_branch or ""
   local tgt = review.target_branch or "main"
   table.insert(lines, src .. " → " .. tgt)
-
-  -- Optional commit filter banner (full-width background highlight)
-  if commit_filter and commit_filter.label then
-    local icon_label = "🔍 " .. commit_filter.label
-    -- Truncate if wider than sidebar
-    if vim.fn.strdisplaywidth(icon_label) > width - 2 then
-      icon_label = icon_label:sub(1, width - 3) .. "…"
-    end
-    -- Centre-pad with spaces so the background highlight fills the row
-    local pad = width - vim.fn.strdisplaywidth(icon_label)
-    local left_pad = math.floor(pad / 2)
-    local right_pad = pad - left_pad
-    local banner = string.rep(" ", left_pad) .. icon_label .. string.rep(" ", right_pad)
-    table.insert(lines, banner)
-    -- Line highlight covers the full row (use named format)
-    table.insert(highlights, { row = #lines, line_hl = "CodeReviewCommitFilter" })
-  end
 
   -- Line 3: compact status indicators
   local parts = {}
