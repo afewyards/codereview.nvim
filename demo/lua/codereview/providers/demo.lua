@@ -699,9 +699,10 @@ function M.play_job(_client, _ctx, _review, _job_id)
 end
 
 function M.build_commit_matcher(_commits, _versions)
-  return function()
+  local f = function()
     return true
   end
+  return f, f
 end
 
 return M

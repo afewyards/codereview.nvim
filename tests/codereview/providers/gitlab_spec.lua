@@ -767,6 +767,25 @@ describe("build_commit_matcher", function()
     local matcher = gitlab.build_commit_matcher(commits, versions)
     assert.is_false(matcher(nil, "A"))
   end)
+
+  it("returns is_current as second value", function()
+    local _, is_current = gitlab.build_commit_matcher(commits, versions)
+    assert.is_function(is_current)
+    -- Commit "A" is owned by version with head "C"
+    assert.is_true(is_current({ head_sha = "C" }, "A"))
+    -- Commit "A" is NOT owned by version with head "E"
+    assert.is_false(is_current({ head_sha = "E" }, "A"))
+  end)
+
+  it("is_current returns false for nil position", function()
+    local _, is_current = gitlab.build_commit_matcher(commits, versions)
+    assert.is_false(is_current(nil, "A"))
+  end)
+
+  it("is_current returns false when no commits", function()
+    local _, is_current = gitlab.build_commit_matcher({}, versions)
+    assert.is_false(is_current({ head_sha = "C" }, "A"))
+  end)
 end)
 
 describe("pipeline methods", function()

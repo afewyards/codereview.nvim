@@ -1127,12 +1127,21 @@ end
 --- @param commits table unused (kept for interface consistency with GitLab)
 --- @param versions table unused (kept for interface consistency with GitLab)
 function M.build_commit_matcher(commits, versions) -- luacheck: ignore commits versions
-  return function(position, commit_sha)
+  local function matcher(position, commit_sha)
     if not position then
       return false
     end
     return position.original_commit_sha == commit_sha
   end
+
+  local function is_current(position, commit_sha)
+    if not position then
+      return false
+    end
+    return position.original_commit_sha == commit_sha
+  end
+
+  return matcher, is_current
 end
 
 return M

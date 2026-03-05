@@ -740,9 +740,10 @@ end
 --- @return fun(position: table|nil, commit_sha: string): boolean
 function M.build_commit_matcher(commits, versions)
   if #commits == 0 or #versions == 0 then
-    return function()
+    local f = function()
       return false
     end
+    return f, f
   end
 
   -- Sort versions by created_at ascending
@@ -780,7 +781,7 @@ function M.build_commit_matcher(commits, versions)
     end
   end
 
-  return function(position, commit_sha)
+  local function matcher(position, commit_sha)
     if not position then
       return false
     end
@@ -795,6 +796,12 @@ function M.build_commit_matcher(commits, versions)
     end
     return false
   end
+
+  local function is_current(position, commit_sha)
+    return matcher(position, commit_sha)
+  end
+
+  return matcher, is_current
 end
 
 --- Cancel a running job.
