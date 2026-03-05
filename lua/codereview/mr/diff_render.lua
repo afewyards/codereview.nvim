@@ -193,29 +193,33 @@ end
 
 -- ─── Discussion helpers ───────────────────────────────────────────────────────
 
-local function is_outdated(discussion, review)
+local function is_outdated(discussion, review, commit_filter)
   local note = discussion.notes and discussion.notes[1]
-  if not note then
+  if not note or not note.position then
     return false
   end
-  if note.position and note.position.outdated then
+  -- When viewing a specific commit, delegate to the provider's is_current
+  if commit_filter and commit_filter.is_current and commit_filter.is_current(note.position) then
+    return false
+  end
+  if note.position.outdated then
     return true
   end
   if not review or not review.head_sha then
     return false
   end
-  if not note.position or not note.position.head_sha then
+  if not note.position.head_sha then
     return false
   end
   return note.position.head_sha ~= review.head_sha
 end
 
-local function discussion_matches_file(discussion, file_diff, review)
+local function discussion_matches_file(discussion, file_diff, review, commit_filter)
   local note = discussion.notes and discussion.notes[1]
   if not note or not note.position then
     return false
   end
-  if is_outdated(discussion, review) and note.change_position then
+  if is_outdated(discussion, review, commit_filter) and note.change_position then
     local cp = note.change_position
     local path = cp.new_path or cp.old_path
     return path == file_diff.new_path or path == file_diff.old_path
@@ -225,12 +229,12 @@ local function discussion_matches_file(discussion, file_diff, review)
   return path == file_diff.new_path or path == file_diff.old_path
 end
 
-local function discussion_line(discussion, review)
+local function discussion_line(discussion, review, commit_filter)
   local note = discussion.notes and discussion.notes[1]
   if not note or not note.position then
     return nil
   end
-  if is_outdated(discussion, review) then
+  if is_outdated(discussion, review, commit_filter) then
     if note.position.outdated then
       -- GitHub outdated: new_line is already set to the fallback originalLine
       local end_line = tonumber(note.position.new_line) or tonumber(note.position.old_line)
@@ -531,7 +535,8 @@ function M.place_comment_signs(
   current_user,
   review,
   editing_note,
-  line_to_row
+  line_to_row,
+  commit_filter
 )
   -- Remove old signs for this buffer
   pcall(vim.fn.sign_unplace, "CodeReview", { buffer = buf })
@@ -543,8 +548,8 @@ function M.place_comment_signs(
   local carrier_offsets = {}
 
   for _, discussion in ipairs(discussions or {}) do
-    if discussion_matches_file(discussion, file_diff, review) then
-      local target_line, range_start, outdated = discussion_line(discussion, review)
+    if discussion_matches_file(discussion, file_diff, review, commit_filter) then
+      local target_line, range_start, outdated = discussion_line(discussion, review, commit_filter)
       if target_line then
         local sign_name = is_resolved(discussion) and "CodeReviewCommentSign" or "CodeReviewUnresolvedSign"
         -- Place signs on all lines in the range (visual only; navigation uses target_line)
@@ -796,8 +801,8 @@ function M.render_file_diff(
   -- Pre-compute carrier line counts: diff_line -> number of reply notes needing carriers
   local disc_carrier_counts = {}
   for _, disc in ipairs(discussions or {}) do
-    if discussion_matches_file(disc, file_diff, review) then
-      local target_line = discussion_line(disc, review)
+    if discussion_matches_file(disc, file_diff, review, commit_filter) then
+      local target_line = discussion_line(disc, review, commit_filter)
       if target_line then
         local non_system_count = 0
         for _, note in ipairs(disc.notes or {}) do
@@ -899,7 +904,9 @@ function M.render_file_diff(
       row_selection,
       current_user,
       review,
-      editing_note
+      editing_note,
+      nil,
+      commit_filter
     ) or {}
   end
 
@@ -915,7 +922,7 @@ end
 
 --- Build a map of file path -> discussions[] for O(1) lookup.
 --- Handles both current and outdated (change_position) paths.
-local function index_discussions_by_path(discussions, review)
+local function index_discussions_by_path(discussions, review, commit_filter)
   local by_path = {}
   for _, disc in ipairs(discussions or {}) do
     local note = disc.notes and disc.notes[1]
@@ -923,7 +930,7 @@ local function index_discussions_by_path(discussions, review)
       goto continue
     end
     local path
-    if is_outdated(disc, review) and note.change_position then
+    if is_outdated(disc, review, commit_filter) and note.change_position then
       local cp = note.change_position
       path = cp.new_path or cp.old_path
     else
@@ -997,12 +1004,12 @@ function M.render_all_files(
   end
 
   -- Pre-compute carrier line counts for scroll mode: "file_idx:line" -> carrier count
-  local disc_by_path_scroll = index_discussions_by_path(discussions, review)
+  local disc_by_path_scroll = index_discussions_by_path(discussions, review, commit_filter)
   local disc_carrier_counts_scroll = {}
   for fi, fd in ipairs(files) do
     local fpath = fd.new_path or fd.old_path
     for _, disc in ipairs(disc_by_path_scroll[fpath] or {}) do
-      local target_line = discussion_line(disc, review)
+      local target_line = discussion_line(disc, review, commit_filter)
       if target_line then
         local non_system_count = 0
         for _, note in ipairs(disc.notes or {}) do
@@ -1336,13 +1343,13 @@ function M.render_all_files(
 
   -- Place comment signs and inline threads per file section
   local all_row_discussions = {}
-  local disc_by_path = index_discussions_by_path(discussions, review)
+  local disc_by_path = index_discussions_by_path(discussions, review, commit_filter)
   -- Per-anchor carrier offset: tracks how many carrier rows earlier discussions have consumed
   local scroll_carrier_offsets = {}
   for _, section in ipairs(file_sections) do
     local fpath = section.file.new_path or section.file.old_path
     for _, disc in ipairs(disc_by_path[fpath] or {}) do
-      local target_line, range_start, disc_outdated = discussion_line(disc, review)
+      local target_line, range_start, disc_outdated = discussion_line(disc, review, commit_filter)
       if target_line then
         local sign_name = is_resolved(disc) and "CodeReviewCommentSign" or "CodeReviewUnresolvedSign"
         local file_prefix = section.file_idx .. ":"

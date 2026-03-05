@@ -365,5 +365,61 @@ describe("mr.diff_comments", function()
       assert.truthy(found_outdated, "Expected 'Outdated' badge in virt_lines header")
       vim.api.nvim_buf_delete(buf, { force = true })
     end)
+
+    it("GitLab: treats old-version discussion as current when commit_filter.is_current matches", function()
+      local review = { head_sha = "v2_head" }
+      local discussions = {
+        {
+          id = "d_old_version",
+          notes = {
+            {
+              author = "thierry",
+              body = "comment on old version",
+              created_at = "2026-01-01T00:00:00Z",
+              position = { new_path = "a.lua", new_line = 12, head_sha = "v1_head" },
+            },
+          },
+        },
+      }
+      local file_diff = { new_path = "a.lua", old_path = "a.lua" }
+      local commit_filter = {
+        is_current = function(pos)
+          return pos.head_sha == "v1_head"
+        end,
+      }
+
+      local target_line, _, outdated = diff_render.discussion_line(discussions[1], review, commit_filter)
+      assert.equals(12, target_line)
+      assert.is_falsy(outdated)
+      assert.is_true(diff_render.discussion_matches_file(discussions[1], file_diff, review, commit_filter))
+    end)
+
+    it("GitHub: treats outdated discussion as current when commit_filter.is_current matches", function()
+      local review = { head_sha = "current_head" }
+      local discussions = {
+        {
+          id = "d_gh_outdated",
+          notes = {
+            {
+              author = "reviewer",
+              body = "outdated github comment",
+              created_at = "2026-01-01T00:00:00Z",
+              position = { new_path = "a.lua", new_line = 14, original_commit_sha = "abc123", outdated = true },
+            },
+          },
+        },
+      }
+      local file_diff = { new_path = "a.lua", old_path = "a.lua" }
+      local commit_filter = {
+        is_current = function(pos)
+          return pos.original_commit_sha == "abc123"
+        end,
+      }
+
+      local target_line, _, outdated = diff_render.discussion_line(discussions[1], review, commit_filter)
+      assert.equals(14, target_line)
+      assert.is_falsy(outdated)
+      assert.is_true(diff_render.discussion_matches_file(discussions[1], file_diff, review, commit_filter))
+    end)
   end)
 end)
