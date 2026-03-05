@@ -20,14 +20,19 @@ function M.pipeline_icon(status)
   return PIPELINE_ICONS[status] or "[??]"
 end
 
-function M.format_mr_entry(review)
+function M.format_mr_entry(review, unread_ids)
   local icon = M.pipeline_icon(review.pipeline_status)
+  local tvl = require("codereview.mr.thread_virt_lines")
+  local time_str = tvl.format_time_relative(review.updated_at)
+  local unread = unread_ids and unread_ids[review.id] and "*" or " "
   local display = string.format(
-    "%s #%-4d %-50s @%-15s %s",
+    "%s%s #%-4d %-50s @%-15s %-10s %s",
+    unread,
     icon,
     review.id,
     review.title:sub(1, 50),
     review.author,
+    time_str,
     review.source_branch
   )
 
@@ -54,6 +59,12 @@ function M.fetch(opts, callback)
       return prov.list_reviews(async_client, pctx, opts or {})
     end)
 
+    local prov, pctx = providers.detect()
+    local unread_ids = {}
+    if prov and prov.get_unread_mr_ids then
+      unread_ids = prov.get_unread_mr_ids(async_client, pctx) or {}
+    end
+
     vim.schedule(function()
       if not ok then
         callback(nil, tostring(reviews))
@@ -65,7 +76,7 @@ function M.fetch(opts, callback)
       end
       local entries = {}
       for _, review in ipairs(reviews) do
-        table.insert(entries, M.format_mr_entry(review))
+        table.insert(entries, M.format_mr_entry(review, unread_ids))
       end
       callback(entries)
     end)

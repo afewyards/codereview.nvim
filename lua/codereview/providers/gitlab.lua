@@ -63,6 +63,7 @@ function M.normalize_mr(mr)
     approvals_required = mr.approvals_before_merge or 0,
     sha = mr.sha,
     merge_status = mr.merge_status,
+    updated_at = mr.updated_at,
   })
 end
 
@@ -821,6 +822,26 @@ function M.play_job(client, ctx, review, job_id)
   end
   local path = "/api/v4/projects/" .. encoded_project(ctx) .. "/jobs/" .. job_id .. "/play"
   return client.post(ctx.base_url, path, { body = {}, headers = headers })
+end
+
+--- Fetch MR IIDs with pending todos for the current user.
+--- @return table<number, boolean> Set of MR iids with pending todos
+function M.get_unread_mr_ids(client, ctx)
+  local headers, err = get_headers()
+  if not headers then
+    return {}, err
+  end
+  local data = client.paginate_all(ctx.base_url, "/api/v4/todos", {
+    query = { type = "MergeRequest", state = "pending", project_id = encoded_project(ctx) },
+    headers = headers,
+  })
+  local ids = {}
+  for _, todo in ipairs(data or {}) do
+    if todo.target and todo.target.iid then
+      ids[todo.target.iid] = true
+    end
+  end
+  return ids
 end
 
 return M

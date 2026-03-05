@@ -18,6 +18,7 @@ function M.normalize_review(raw)
     approvals_required = raw.approvals_required or 0,
     sha = raw.sha or raw.head_sha,
     merge_status = raw.merge_status,
+    updated_at = raw.updated_at,
   }
 end
 

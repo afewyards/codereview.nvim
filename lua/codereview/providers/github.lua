@@ -87,6 +87,7 @@ function M.normalize_pr(pr)
     description = pr.body or "",
     sha = type(pr.head) == "table" and pr.head.sha or nil,
     merge_status = merge_status,
+    updated_at = pr.updated_at,
   })
 end
 
@@ -1142,6 +1143,33 @@ function M.build_commit_matcher(commits, versions) -- luacheck: ignore commits v
   end
 
   return matcher, is_current
+end
+
+--- Fetch PR numbers with unread notifications for this repo.
+--- @return table<number, boolean> Set of PR numbers with unread notifications
+function M.get_unread_mr_ids(client, ctx)
+  local headers, err = get_headers()
+  if not headers then
+    return {}, err
+  end
+  local owner, repo = parse_owner_repo(ctx)
+  local resp, req_err = client.get(ctx.base_url, string.format("/repos/%s/%s/notifications", owner, repo), {
+    query = { all = "false" },
+    headers = headers,
+  })
+  if not resp then
+    return {}, req_err
+  end
+  local ids = {}
+  for _, n in ipairs(resp.data or {}) do
+    if n.subject and n.subject.type == "PullRequest" and n.subject.url then
+      local pr_number = tonumber(n.subject.url:match("/pulls/(%d+)$"))
+      if pr_number then
+        ids[pr_number] = true
+      end
+    end
+  end
+  return ids
 end
 
 return M
