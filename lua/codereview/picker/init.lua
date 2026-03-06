@@ -40,45 +40,29 @@ function M.get_adapter(name)
   return require(mod_path)
 end
 
-function M.pick_mr(entries, on_select)
+local function dispatch(method, ...)
   local name = M.detect()
   if not name then
     vim.notify("No picker found. Install telescope.nvim, fzf-lua, or snacks.nvim", vim.log.levels.ERROR)
     return
   end
+  M.get_adapter(name)[method](...)
+end
 
-  local adapter = M.get_adapter(name)
-  adapter.pick_mr(entries, on_select)
+function M.pick_mr(entries, on_select)
+  dispatch("pick_mr", entries, on_select)
 end
 
 function M.pick_comments(entries, on_select, opts)
-  local name = M.detect()
-  if not name then
-    vim.notify("No picker found. Install telescope.nvim, fzf-lua, or snacks.nvim", vim.log.levels.ERROR)
-    return
-  end
-  local adapter = M.get_adapter(name)
-  adapter.pick_comments(entries, on_select, opts)
+  dispatch("pick_comments", entries, on_select, opts)
 end
 
 function M.pick_files(entries, on_select)
-  local name = M.detect()
-  if not name then
-    vim.notify("No picker found. Install telescope.nvim, fzf-lua, or snacks.nvim", vim.log.levels.ERROR)
-    return
-  end
-  local adapter = M.get_adapter(name)
-  adapter.pick_files(entries, on_select)
+  dispatch("pick_files", entries, on_select)
 end
 
 function M.pick_commits(entries, on_select, opts)
-  local name = M.detect()
-  if not name then
-    vim.notify("No picker found. Install telescope.nvim, fzf-lua, or snacks.nvim", vim.log.levels.ERROR)
-    return
-  end
-  local adapter = M.get_adapter(name)
-  adapter.pick_commits(entries, on_select, opts)
+  dispatch("pick_commits", entries, on_select, opts)
 end
 
 function M.pick_branches(branches, on_select)

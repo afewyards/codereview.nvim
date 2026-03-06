@@ -6,12 +6,14 @@ Require nvim
 Output demo/ai-review.gif
 
 Set Shell "bash"
+Set FontFamily "JetBrainsMono Nerd Font"
 Set FontSize 16
 Set Theme { "name": "Gruvbox Material", "black": "#32302f", "red": "#ea6962", "green": "#a9b665", "yellow": "#d8a657", "blue": "#7daea3", "magenta": "#d3869b", "cyan": "#89b482", "white": "#d4be98", "brightBlack": "#7c6f64", "brightRed": "#ea6962", "brightGreen": "#a9b665", "brightYellow": "#d8a657", "brightBlue": "#7daea3", "brightMagenta": "#d3869b", "brightCyan": "#89b482", "brightWhite": "#ddc7a1", "background": "#32302f", "foreground": "#d4be98", "selection": "#504945", "cursor": "#d4be98" }
 Set Width 1400
 Set Height 800
 Set Padding 20
 Set WindowBar Colorful
+Set Framerate 24
 Set TypingSpeed 50ms
 
 # Bootstrap deps (hidden, first run only)
@@ -29,7 +31,7 @@ Show
 Type ":CodeReview"
 Enter
 Wait+Screen /Refactor auth/
-Sleep 1s
+Sleep 2s
 
 # Select PR #42 — Refactor auth middleware
 Enter

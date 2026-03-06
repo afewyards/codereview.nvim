@@ -43,15 +43,16 @@ function M.format_mr_entry(review, unread_ids)
 end
 
 function M.format_entries(entries)
-  local max_title, max_author, max_id = 0, 0, 0
+  local max_title, max_author, max_id, max_icon = 0, 0, 0, 0
   for _, e in ipairs(entries) do
     max_title = math.max(max_title, #e.title_display)
     max_author = math.max(max_author, #e.author)
     max_id = math.max(max_id, #tostring(e.id))
+    max_icon = math.max(max_icon, #e.pipeline_icon)
   end
   for _, e in ipairs(entries) do
     e.display = string.format(
-      "%s%s #%-" .. max_id .. "d %-" .. max_title .. "s  @%-" .. max_author .. "s  %s",
+      "%s%-" .. max_icon .. "s #%-" .. max_id .. "d %-" .. max_title .. "s  @%-" .. max_author .. "s  %s",
       e.unread and "*" or " ",
       e.pipeline_icon,
       e.id,

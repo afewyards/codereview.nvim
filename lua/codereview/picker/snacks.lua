@@ -25,16 +25,18 @@ function M.pick_mr(entries, on_select)
     })
   end
 
-  local max_title, max_author, max_id, max_len = 0, 0, 0, 0
+  local max_len = 0
+  local max_title, max_author, max_id, max_icon = 0, 0, 0, 0
   for _, e in ipairs(entries) do
     max_title = math.max(max_title, #e.title_display)
     max_author = math.max(max_author, #e.author)
     max_id = math.max(max_id, #tostring(e.id))
-  end
-  for _, e in ipairs(entries) do
+    max_icon = math.max(max_icon, #e.pipeline_icon)
     max_len = math.max(max_len, vim.api.nvim_strwidth(e.display))
   end
-  local width = math.min(max_len + 3, math.floor(vim.o.columns * 0.9))
+  local title_col = math.max(max_title, 70)
+  local row_width = max_len + (title_col - max_title)
+  local width = math.min((row_width + 4) / vim.o.columns, 0.8)
 
   snacks.picker({
     title = "Code Reviews",
@@ -57,12 +59,12 @@ function M.pick_mr(entries, on_select)
     format = function(item)
       local e = item.data
       local unread = e.unread and "* " or "  "
-      local title_fmt = "%-" .. max_title .. "s"
+      local title_fmt = "%-" .. title_col .. "s"
       local author_fmt = "%-" .. max_author .. "s"
       local id_fmt = "%-" .. max_id .. "d"
       return {
         { unread, e.unread and "DiagnosticWarn" or "" },
-        { e.pipeline_icon .. " ", "Comment" },
+        { string.format("%-" .. max_icon .. "s", e.pipeline_icon) .. " ", "Comment" },
         { "#" .. string.format(id_fmt, e.id) .. " ", "Special" },
         { string.format(title_fmt, e.title_display) .. "  " },
         { "@" .. string.format(author_fmt, e.author) .. "  ", "Comment" },
