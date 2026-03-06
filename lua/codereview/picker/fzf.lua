@@ -118,19 +118,46 @@ function M.pick_commits(entries, on_select, opts)
   local fzf = require("fzf-lua")
   local utils = require("fzf-lua.utils")
 
+  -- Pre-calculate max column widths for alignment
+  local max_title, max_add, max_del, has_stats = 0, 0, 0, false
+  for _, e in ipairs(entries) do
+    if e.type == "commit" then
+      max_title = math.max(max_title, #(e.title_display or e.title or ""))
+      if e.additions then
+        has_stats = true
+        max_add = math.max(max_add, #string.format("+%d", e.additions))
+        max_del = math.max(max_del, #string.format("-%d", e.deletions))
+      end
+    end
+  end
+
   local display_list = {}
+  local title_fmt = "%-" .. max_title .. "s"
   for i, entry in ipairs(entries) do
     local display
-    if entry.type == "commit" and entry.additions then
+    if entry.type == "commit" then
       local short = (entry.sha or ""):sub(1, 8)
-      display = string.format(
-        "  %s  %s  %s %s  (%s)",
-        short,
-        entry.title or "",
-        utils.ansi_codes.green(string.format("+%d", entry.additions)),
-        utils.ansi_codes.red(string.format("-%d", entry.deletions)),
-        entry.author or ""
-      )
+      local title_padded = string.format(title_fmt, entry.title_display or entry.title or "")
+      if has_stats and entry.additions then
+        display = string.format(
+          "  %s  %s  %s %s  (%s)",
+          short,
+          title_padded,
+          utils.ansi_codes.green(string.format("%-" .. max_add .. "s", string.format("+%d", entry.additions))),
+          utils.ansi_codes.red(string.format("%-" .. max_del .. "s", string.format("-%d", entry.deletions))),
+          entry.author or ""
+        )
+      elseif has_stats then
+        display = string.format(
+          "  %s  %s  %s  (%s)",
+          short,
+          title_padded,
+          string.rep(" ", max_add + 1 + max_del),
+          entry.author or ""
+        )
+      else
+        display = string.format("  %s  %s  (%s)", short, title_padded, entry.author or "")
+      end
     else
       display = entry.display
     end
@@ -144,9 +171,19 @@ function M.pick_commits(entries, on_select, opts)
     fzf_extra["--bind"] = string.format("start:pos(%d)", default_idx)
   end
 
+  -- Size picker to content (strip ANSI for accurate width)
+  local max_len = 0
+  for _, d in ipairs(display_list) do
+    local plain = d:gsub("\27%[[%d;]*m", ""):gsub("^%d+\t", "")
+    max_len = math.max(max_len, vim.api.nvim_strwidth(plain))
+  end
+  local max_cols = math.floor(vim.o.columns * 0.9)
+  local width = math.min(max_len + 5, max_cols)
+
   fzf.fzf_exec(display_list, {
     prompt = "Commits> ",
     previewer = false,
+    winopts = { width = width, height = 0.8 },
     fzf_opts = vim.tbl_extend("force", { ["--ansi"] = "", ["--with-nth"] = "2..", ["--delimiter"] = "\t" }, fzf_extra),
     actions = {
       ["default"] = function(selected)

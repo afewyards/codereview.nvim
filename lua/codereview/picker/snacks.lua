@@ -158,10 +158,48 @@ function M.pick_commits(entries, on_select, opts)
 
   local default_idx = opts and opts.default_selection_index or 1
 
+  -- Pre-calculate max column widths for alignment
+  local max_title, max_add, max_del, max_author, has_stats = 0, 0, 0, 0, false
+  for _, e in ipairs(entries) do
+    if e.type == "commit" then
+      max_title = math.max(max_title, #(e.title_display or e.title or ""))
+      max_author = math.max(max_author, #(e.author or ""))
+      if e.additions then
+        has_stats = true
+        max_add = math.max(max_add, #string.format("+%d", e.additions))
+        max_del = math.max(max_del, #string.format("-%d", e.deletions))
+      end
+    end
+  end
+
+  -- Size picker to content: use column widths for formatted commit rows
+  --   "  " + sha + " " + padded_title + "  " + [stats + "  "] + "(" + author + ")"
+  local commit_row_len = 2 + 8 + 1 + max_title + 2 + 1 + max_author + 1
+  if has_stats then
+    commit_row_len = commit_row_len + max_add + 1 + max_del + 2
+  end
+  local max_len = commit_row_len
+  -- Also check non-commit entries (All changes, Since last review)
+  for _, item in ipairs(items) do
+    max_len = math.max(max_len, vim.api.nvim_strwidth(item.text))
+  end
+  local width = math.min((max_len + 6) / vim.o.columns, 0.8)
+
   snacks.picker({
     title = "Commits",
     items = items,
-    layout = { preset = "select", preview = false },
+    layout = {
+      layout = {
+        width = width,
+        height = 0.8,
+        box = "vertical",
+        border = true,
+        title = "{title} {live} {flags}",
+        title_pos = "center",
+        { win = "input", height = 1, border = "bottom" },
+        { win = "list", border = "none" },
+      },
+    },
     on_show = function(picker)
       if default_idx > 1 then
         picker.list:view(default_idx)
@@ -169,17 +207,36 @@ function M.pick_commits(entries, on_select, opts)
     end,
     format = function(item)
       local entry = item.data
-      if entry and entry.type == "commit" and entry.additions then
+      if entry and entry.type == "commit" then
         local short = (entry.sha or ""):sub(1, 8)
-        return {
-          { "  " },
-          { short .. " ", "Special" },
-          { (entry.title or "") .. "  " },
-          { string.format("+%d", entry.additions), "diffAdded" },
-          { " " },
-          { string.format("-%d", entry.deletions), "diffRemoved" },
-          { string.format("  (%s)", entry.author or "") },
-        }
+        local title_fmt = "%-" .. max_title .. "s"
+        local title = entry.title_display or entry.title or ""
+        if has_stats and entry.additions then
+          return {
+            { "  " },
+            { short .. " ", "Special" },
+            { string.format(title_fmt, title) .. "  " },
+            { string.format("%-" .. max_add .. "s", string.format("+%d", entry.additions)), "diffAdded" },
+            { " " },
+            { string.format("%-" .. max_del .. "s", string.format("-%d", entry.deletions)), "diffRemoved" },
+            { string.format("  (%s)", entry.author or "") },
+          }
+        elseif has_stats then
+          return {
+            { "  " },
+            { short .. " ", "Special" },
+            { string.format(title_fmt, title) .. "  " },
+            { string.rep(" ", max_add + 1 + max_del) },
+            { string.format("  (%s)", entry.author or "") },
+          }
+        else
+          return {
+            { "  " },
+            { short .. " ", "Special" },
+            { string.format(title_fmt, title) .. "  " },
+            { string.format("(%s)", entry.author or "") },
+          }
+        end
       end
       return { { item.text } }
     end,

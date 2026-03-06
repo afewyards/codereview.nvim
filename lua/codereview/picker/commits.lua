@@ -38,16 +38,19 @@ function M.build_entries(commits, last_reviewed_sha)
 
   for _, c in ipairs(commits) do
     local short = c.short_sha or (c.sha or ""):sub(1, 8)
+    local title = c.title or ""
+    local title_display = #title > 85 and title:sub(1, 82) .. "..." or title
     local stats = ""
     if c.additions or c.deletions then
       stats = string.format("+%d -%d", c.additions or 0, c.deletions or 0)
     end
-    local display = stats ~= "" and string.format("  %s  %s  %s  (%s)", short, c.title or "", stats, c.author or "")
-      or string.format("  %s  %s  (%s)", short, c.title or "", c.author or "")
+    local display = stats ~= "" and string.format("  %s  %s  %s  (%s)", short, title_display, stats, c.author or "")
+      or string.format("  %s  %s  (%s)", short, title_display, c.author or "")
     table.insert(entries, {
       type = "commit",
       sha = c.sha,
       title = c.title,
+      title_display = title_display,
       author = c.author,
       additions = c.additions,
       deletions = c.deletions,

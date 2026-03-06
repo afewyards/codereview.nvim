@@ -191,20 +191,35 @@ function M.pick_commits(entries, on_select, opts)
     end
   end
 
+  local max_title, max_author = 0, 0
+  for _, e in ipairs(entries) do
+    if e.type == "commit" then
+      max_title = math.max(max_title, #(e.title_display or e.title or ""))
+      max_author = math.max(max_author, #(e.author or ""))
+    end
+  end
+
+  -- Size picker to content: use column widths for formatted commit rows
+  -- displayer: 2 + sep + 8 + sep + title + sep + 7 + sep + 7 + sep + "(" + author + ")"
+  local commit_row_len = 2 + 1 + 8 + 1 + math.min(max_title, 85) + 1 + 1 + max_author + 1
+  if has_stats then
+    commit_row_len = commit_row_len + 7 + 1 + 7 + 1
+  end
+  local max_len = commit_row_len
+  for _, e in ipairs(entries) do
+    max_len = math.max(max_len, vim.api.nvim_strwidth(e.display))
+  end
+  local max_cols = math.floor(vim.o.columns * 0.9)
+  local width = math.min(max_len + 5, max_cols)
+
   local make_entry
   if has_stats then
-    local max_title = 0
-    for _, e in ipairs(entries) do
-      if e.title and #e.title > max_title then
-        max_title = #e.title
-      end
-    end
     local displayer = entry_display.create({
       separator = " ",
       items = {
         { width = 2 },
         { width = 8 },
-        { width = math.min(max_title, 50) },
+        { width = math.min(max_title, 85) },
         { width = 7 },
         { width = 7 },
         { remaining = true },
@@ -221,7 +236,7 @@ function M.pick_commits(entries, on_select, opts)
           return displayer({
             { "  " },
             { (entry.sha or ""):sub(1, 8), "TelescopeResultsIdentifier" },
-            { entry.title or "" },
+            { entry.title_display or entry.title or "" },
             { string.format("+%d", entry.additions), "diffAdded" },
             { string.format("-%d", entry.deletions), "diffRemoved" },
             { string.format("(%s)", entry.author or ""), "TelescopeResultsComment" },
@@ -237,6 +252,8 @@ function M.pick_commits(entries, on_select, opts)
 
   pickers
     .new({}, {
+      layout_strategy = "vertical",
+      layout_config = { width = width, height = 0.8 },
       prompt_title = "Commits",
       default_selection_index = opts and opts.default_selection_index or 1,
       finder = finders.new_table({
