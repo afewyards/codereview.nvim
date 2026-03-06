@@ -15,13 +15,9 @@ function M.pick_mr(entries, on_select)
     })
   end
 
+  local w = entries[1] and entries[1]._col_widths or { title = 70, author = 0, id = 0, icon = 0 }
   local max_len = 0
-  local max_title, max_author, max_id, max_icon = 0, 0, 0, 0
   for _, e in ipairs(entries) do
-    max_title = math.max(max_title, #e.title_display, 70)
-    max_author = math.max(max_author, #e.author)
-    max_id = math.max(max_id, #tostring(e.id))
-    max_icon = math.max(max_icon, #e.pipeline_icon)
     max_len = math.max(max_len, vim.api.nvim_strwidth(e.display))
   end
   local width = math.min((max_len + 6) / vim.o.columns, 0.8)
@@ -47,15 +43,12 @@ function M.pick_mr(entries, on_select)
     format = function(item)
       local e = item.data
       local unread = e.unread and "* " or "  "
-      local title_fmt = "%-" .. max_title .. "s"
-      local author_fmt = "%-" .. max_author .. "s"
-      local id_fmt = "%-" .. max_id .. "d"
       return {
         { unread, e.unread and "DiagnosticWarn" or "" },
-        { string.format("%-" .. max_icon .. "s", e.pipeline_icon) .. " ", "Comment" },
-        { "#" .. string.format(id_fmt, e.id) .. " ", "Special" },
-        { string.format(title_fmt, e.title_display) .. "  " },
-        { "@" .. string.format(author_fmt, e.author) .. "  ", "Comment" },
+        { string.format("%-" .. w.icon .. "s", e.pipeline_icon) .. " ", "Comment" },
+        { "#" .. string.format("%-" .. w.id .. "d", e.id) .. " ", "Special" },
+        { string.format("%-" .. w.title .. "s", e.title_display) .. "  " },
+        { "@" .. string.format("%-" .. w.author .. "s", e.author) .. "  ", "Comment" },
         { e.time_str, "Comment" },
       }
     end,

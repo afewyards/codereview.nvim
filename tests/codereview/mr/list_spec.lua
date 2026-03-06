@@ -34,6 +34,33 @@ describe("mr.list", function()
     end)
   end)
 
+  describe("format_entries returns widths", function()
+    it("returns computed column widths", function()
+      local review1 = {
+        id = 1,
+        title = "Short",
+        author = "ab",
+        source_branch = "a",
+        pipeline_status = "success",
+      }
+      local review2 = {
+        id = 123,
+        title = "Longer title here",
+        author = "alice",
+        source_branch = "b",
+        pipeline_status = "failed",
+      }
+      local e1 = list.format_mr_entry(review1)
+      local e2 = list.format_mr_entry(review2)
+      local widths = list.format_entries({ e1, e2 })
+      assert.is_table(widths)
+      assert.equals(70, widths.title)
+      assert.equals(5, widths.author)
+      assert.equals(3, widths.id)
+      assert.equals(6, widths.icon)
+    end)
+  end)
+
   describe("format_mr_preview", function()
     it("formats preview with title, branch, time, and description", function()
       local entry = {

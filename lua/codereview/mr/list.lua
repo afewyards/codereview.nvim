@@ -64,7 +64,9 @@ function M.format_entries(entries)
     max_id = math.max(max_id, #tostring(e.id))
     max_icon = math.max(max_icon, #e.pipeline_icon)
   end
+  local widths = { title = max_title, author = max_author, id = max_id, icon = max_icon }
   for _, e in ipairs(entries) do
+    e._col_widths = widths
     e.display = string.format(
       "%s%-" .. max_icon .. "s #%-" .. max_id .. "d %-" .. max_title .. "s  @%-" .. max_author .. "s  %s",
       e.unread and "*" or " ",
@@ -75,6 +77,7 @@ function M.format_entries(entries)
       e.time_str
     )
   end
+  return widths
 end
 
 function M.fetch(opts, callback)
