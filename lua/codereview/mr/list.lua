@@ -20,6 +20,20 @@ function M.pipeline_icon(status)
   return PIPELINE_ICONS[status] or "[??]"
 end
 
+function M.format_mr_preview(entry)
+  local desc = entry.review and entry.review.description or ""
+  return "# "
+    .. entry.title
+    .. "\n\n"
+    .. "**Branch:** "
+    .. (entry.source_branch or "")
+    .. "  \n"
+    .. "**Updated:** "
+    .. (entry.time_str or "")
+    .. "\n\n"
+    .. (desc ~= "" and desc or "(no description)")
+end
+
 function M.format_mr_entry(review, unread_ids)
   local icon = M.pipeline_icon(review.pipeline_status)
   local tvl = require("codereview.mr.thread_virt_lines")
@@ -45,7 +59,7 @@ end
 function M.format_entries(entries)
   local max_title, max_author, max_id, max_icon = 0, 0, 0, 0
   for _, e in ipairs(entries) do
-    max_title = math.max(max_title, #e.title_display)
+    max_title = math.max(max_title, #e.title_display, 70)
     max_author = math.max(max_author, #e.author)
     max_id = math.max(max_id, #tostring(e.id))
     max_icon = math.max(max_icon, #e.pipeline_icon)

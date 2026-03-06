@@ -34,6 +34,45 @@ describe("mr.list", function()
     end)
   end)
 
+  describe("format_mr_preview", function()
+    it("formats preview with title, branch, time, and description", function()
+      local entry = {
+        title = "Fix auth bug",
+        source_branch = "fix/auth",
+        time_str = "2h ago",
+        review = { description = "This fixes the auth issue" },
+      }
+      local text = list.format_mr_preview(entry)
+      assert.truthy(text:find("# Fix auth bug"))
+      assert.truthy(text:find("%*%*Branch:%*%*"))
+      assert.truthy(text:find("fix/auth"))
+      assert.truthy(text:find("2h ago"))
+      assert.truthy(text:find("This fixes the auth issue"))
+    end)
+
+    it("shows (no description) when description is empty", function()
+      local entry = {
+        title = "WIP",
+        source_branch = "wip/feature",
+        time_str = "1d ago",
+        review = { description = "" },
+      }
+      local text = list.format_mr_preview(entry)
+      assert.truthy(text:find("%(no description%)"))
+    end)
+
+    it("handles nil review", function()
+      local entry = {
+        title = "Draft",
+        source_branch = "draft/x",
+        time_str = "3h ago",
+        review = nil,
+      }
+      local text = list.format_mr_preview(entry)
+      assert.truthy(text:find("%(no description%)"))
+    end)
+  end)
+
   describe("pipeline_icon", function()
     it("returns check for success", function()
       assert.equals("[ok]", list.pipeline_icon("success"))

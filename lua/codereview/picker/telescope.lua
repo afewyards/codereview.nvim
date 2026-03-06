@@ -33,22 +33,7 @@ function M.pick_mr(entries, on_select)
       previewer = previewers.new_buffer_previewer({
         title = "Description",
         define_preview = function(self, entry)
-          local e = entry.value
-          local title = e.title or ""
-          local desc = e.review and e.review.description or ""
-          if desc == "" then
-            desc = "(no description)"
-          end
-          local text = "# "
-            .. title
-            .. "\n\n"
-            .. "**Branch:** "
-            .. (e.source_branch or "")
-            .. "  \n"
-            .. "**Updated:** "
-            .. (e.time_str or "")
-            .. "\n\n"
-            .. desc
+          local text = require("codereview.mr.list").format_mr_preview(entry.value)
           local lines = vim.split(text, "\n", { plain = true })
           vim.api.nvim_buf_set_lines(self.state.bufnr, 0, -1, false, lines)
           vim.bo[self.state.bufnr].syntax = "markdown"

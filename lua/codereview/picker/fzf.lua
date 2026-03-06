@@ -45,19 +45,7 @@ function M.pick_mr(entries, on_select)
   fzf.fzf_exec(display_list, {
     prompt = "Reviews> ",
     winopts = { width = width, height = 0.8, preview = { layout = "vertical", vertical = "down:70%" } },
-    previewer = make_previewer(display_to_entry, function(entry)
-      local desc = entry.review and entry.review.description or ""
-      return "# "
-        .. entry.title
-        .. "\n\n"
-        .. "**Branch:** "
-        .. (entry.source_branch or "")
-        .. "  \n"
-        .. "**Updated:** "
-        .. (entry.time_str or "")
-        .. "\n\n"
-        .. (desc ~= "" and desc or "(no description)")
-    end, "markdown"),
+    previewer = make_previewer(display_to_entry, require("codereview.mr.list").format_mr_preview, "markdown"),
     actions = {
       ["default"] = function(selected)
         if selected and selected[1] then

@@ -5,21 +5,11 @@ function M.pick_mr(entries, on_select)
 
   local items = {}
   for _, entry in ipairs(entries) do
-    local desc = entry.review and entry.review.description or ""
     table.insert(items, {
       text = entry.display,
       data = entry,
       preview = {
-        text = "# "
-          .. entry.title
-          .. "\n\n"
-          .. "**Branch:** "
-          .. entry.source_branch
-          .. "  \n"
-          .. "**Updated:** "
-          .. entry.time_str
-          .. "\n\n"
-          .. (desc ~= "" and desc or "(no description)"),
+        text = require("codereview.mr.list").format_mr_preview(entry),
         ft = "markdown",
       },
     })
