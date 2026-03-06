@@ -65,6 +65,14 @@ jobs:
           curl -fsSL -o /tmp/ttyd https://github.com/tsl0922/ttyd/releases/latest/download/ttyd.x86_64
           sudo install /tmp/ttyd /usr/local/bin/ttyd
 
+      - name: Install JetBrainsMono Nerd Font
+        run: |
+          mkdir -p ~/.local/share/fonts
+          curl -fsSL -o /tmp/JetBrainsMono.tar.xz \
+            https://github.com/ryanoasis/nerd-fonts/releases/latest/download/JetBrainsMono.tar.xz
+          tar -xf /tmp/JetBrainsMono.tar.xz -C ~/.local/share/fonts
+          fc-cache -fv
+
       - name: Generate demo GIF
         run: vhs demo/${{ matrix.tape }}.tape
 
