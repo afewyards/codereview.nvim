@@ -91,27 +91,55 @@ function M.pick_files(entries, on_select)
   })
 end
 
-function M.pick_comments(entries, on_select, _opts)
+function M.pick_comments(entries, on_select, opts)
   local snacks = require("snacks")
-  local items = {}
-  for _, entry in ipairs(entries) do
-    table.insert(items, {
-      text = entry.display,
-      data = entry,
-      preview = {
-        text = require("codereview.picker.comments").format_preview(entry),
-        ft = "markdown",
-      },
-    })
+  local comments_mod = require("codereview.picker.comments")
+
+  local filters = { "all", "unresolved", "resolved" }
+  local filter_idx = 1
+  local current_entries = entries
+
+  local function make_items(e)
+    local items = {}
+    for _, entry in ipairs(e) do
+      table.insert(items, {
+        text = entry.display,
+        data = entry,
+        preview = {
+          text = comments_mod.format_preview(entry),
+          ft = "markdown",
+        },
+      })
+    end
+    return items
   end
 
   snacks.picker({
-    title = "Comments & Suggestions",
-    items = items,
+    title = "Comments & Suggestions [all]",
+    items = make_items(current_entries),
     preview = "preview",
     format = function(item)
       return { { item.text } }
     end,
+    actions = {
+      cycle_filter = function(picker)
+        filter_idx = (filter_idx % #filters) + 1
+        local filter = filters[filter_idx] == "all" and nil or filters[filter_idx]
+        if opts and opts.rebuild then
+          current_entries = opts.rebuild(filter)
+        end
+        picker.opts.items = make_items(current_entries)
+        picker.title = "Comments & Suggestions [" .. filters[filter_idx] .. "]"
+        picker:find({ refresh = true })
+      end,
+    },
+    win = {
+      input = {
+        keys = {
+          ["<C-r>"] = { "cycle_filter", mode = { "n", "i" }, desc = "Cycle filter" },
+        },
+      },
+    },
     confirm = function(picker, item)
       picker:close()
       if item then
