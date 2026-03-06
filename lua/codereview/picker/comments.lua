@@ -9,6 +9,33 @@ local function find_file_idx(files, path)
   return nil
 end
 
+function M.format_preview(entry)
+  if entry.type == "ai_suggestion" and entry.suggestion then
+    local s = entry.suggestion
+    local lines = { "**[" .. s.severity .. "]** " .. (s.file or "") .. ":" .. (s.line or ""), "" }
+    if s.code then
+      table.insert(lines, "```")
+      table.insert(lines, s.code)
+      table.insert(lines, "```")
+      table.insert(lines, "")
+    end
+    table.insert(lines, s.comment or "")
+    return table.concat(lines, "\n")
+  end
+
+  if entry.type == "discussion" and entry.discussion then
+    local parts = {}
+    for _, note in ipairs(entry.discussion.notes or {}) do
+      table.insert(parts, "**@" .. (note.author or "unknown") .. ":**")
+      table.insert(parts, note.body or "")
+      table.insert(parts, "")
+    end
+    return table.concat(parts, "\n")
+  end
+
+  return "(no preview)"
+end
+
 function M.build_entries(discussions, ai_suggestions, files, filter)
   local entries = {}
 

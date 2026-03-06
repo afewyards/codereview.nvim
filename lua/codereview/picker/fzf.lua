@@ -25,33 +25,6 @@ local function make_previewer(lookup, get_text, ft)
   return Previewer
 end
 
-local function format_comment_preview(entry)
-  if entry.type == "ai_suggestion" and entry.suggestion then
-    local s = entry.suggestion
-    local lines = { "[" .. s.severity .. "] " .. (s.file or "") .. ":" .. (s.line or ""), "" }
-    if s.code then
-      table.insert(lines, "```")
-      table.insert(lines, s.code)
-      table.insert(lines, "```")
-      table.insert(lines, "")
-    end
-    table.insert(lines, s.comment or "")
-    return table.concat(lines, "\n")
-  end
-
-  if entry.type == "discussion" and entry.discussion then
-    local parts = {}
-    for _, note in ipairs(entry.discussion.notes or {}) do
-      table.insert(parts, "@" .. (note.author or "unknown") .. ":")
-      table.insert(parts, note.body or "")
-      table.insert(parts, "")
-    end
-    return table.concat(parts, "\n")
-  end
-
-  return "(no preview)"
-end
-
 function M.pick_mr(entries, on_select)
   local fzf = require("fzf-lua")
 
@@ -67,7 +40,7 @@ function M.pick_mr(entries, on_select)
     max_len = math.max(max_len, vim.api.nvim_strwidth(d))
   end
   local max_cols = math.floor(vim.o.columns * 0.9)
-  local width = math.min(max_len + 13, max_cols)
+  local width = math.min(max_len + 5, max_cols)
 
   fzf.fzf_exec(display_list, {
     prompt = "Reviews> ",
@@ -136,7 +109,7 @@ function M.pick_comments(entries, on_select, _opts)
 
   fzf.fzf_exec(display_list, {
     prompt = "Comments> ",
-    previewer = make_previewer(display_to_entry, format_comment_preview, "markdown"),
+    previewer = make_previewer(display_to_entry, require("codereview.picker.comments").format_preview, "markdown"),
     actions = {
       ["default"] = function(selected)
         if selected and selected[1] then

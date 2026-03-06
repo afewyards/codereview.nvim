@@ -28,15 +28,13 @@ function M.pick_mr(entries, on_select)
   local max_len = 0
   local max_title, max_author, max_id, max_icon = 0, 0, 0, 0
   for _, e in ipairs(entries) do
-    max_title = math.max(max_title, #e.title_display)
+    max_title = math.max(max_title, #e.title_display, 70)
     max_author = math.max(max_author, #e.author)
     max_id = math.max(max_id, #tostring(e.id))
     max_icon = math.max(max_icon, #e.pipeline_icon)
     max_len = math.max(max_len, vim.api.nvim_strwidth(e.display))
   end
-  local title_col = math.max(max_title, 70)
-  local row_width = max_len + (title_col - max_title)
-  local width = math.min((row_width + 4) / vim.o.columns, 0.8)
+  local width = math.min((max_len + 6) / vim.o.columns, 0.8)
 
   snacks.picker({
     title = "Code Reviews",
@@ -59,7 +57,7 @@ function M.pick_mr(entries, on_select)
     format = function(item)
       local e = item.data
       local unread = e.unread and "* " or "  "
-      local title_fmt = "%-" .. title_col .. "s"
+      local title_fmt = "%-" .. max_title .. "s"
       local author_fmt = "%-" .. max_author .. "s"
       local id_fmt = "%-" .. max_id .. "d"
       return {
@@ -110,33 +108,6 @@ function M.pick_files(entries, on_select)
   })
 end
 
-local function format_comment_preview(entry)
-  if entry.type == "ai_suggestion" and entry.suggestion then
-    local s = entry.suggestion
-    local lines = { "**[" .. s.severity .. "]** " .. (s.file or "") .. ":" .. (s.line or ""), "" }
-    if s.code then
-      table.insert(lines, "```")
-      table.insert(lines, s.code)
-      table.insert(lines, "```")
-      table.insert(lines, "")
-    end
-    table.insert(lines, s.comment or "")
-    return table.concat(lines, "\n")
-  end
-
-  if entry.type == "discussion" and entry.discussion then
-    local parts = {}
-    for _, note in ipairs(entry.discussion.notes or {}) do
-      table.insert(parts, "**@" .. (note.author or "unknown") .. ":**")
-      table.insert(parts, note.body or "")
-      table.insert(parts, "")
-    end
-    return table.concat(parts, "\n")
-  end
-
-  return "(no preview)"
-end
-
 function M.pick_comments(entries, on_select, _opts)
   local snacks = require("snacks")
   local items = {}
@@ -145,7 +116,7 @@ function M.pick_comments(entries, on_select, _opts)
       text = entry.display,
       data = entry,
       preview = {
-        text = format_comment_preview(entry),
+        text = require("codereview.picker.comments").format_preview(entry),
         ft = "markdown",
       },
     })

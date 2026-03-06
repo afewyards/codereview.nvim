@@ -13,7 +13,7 @@ function M.pick_mr(entries, on_select)
     max_len = math.max(max_len, vim.api.nvim_strwidth(entry.display))
   end
   local max_cols = math.floor(vim.o.columns * 0.9)
-  local width = math.min(max_len + 13, max_cols)
+  local width = math.min(max_len + 5, max_cols)
 
   pickers
     .new({}, {
@@ -114,33 +114,6 @@ function M.pick_files(entries, on_select)
     :find()
 end
 
-local function format_comment_preview(entry)
-  if entry.type == "ai_suggestion" and entry.suggestion then
-    local s = entry.suggestion
-    local lines = { "[" .. s.severity .. "] " .. (s.file or "") .. ":" .. (s.line or ""), "" }
-    if s.code then
-      table.insert(lines, "```")
-      table.insert(lines, s.code)
-      table.insert(lines, "```")
-      table.insert(lines, "")
-    end
-    table.insert(lines, s.comment or "")
-    return table.concat(lines, "\n")
-  end
-
-  if entry.type == "discussion" and entry.discussion then
-    local parts = {}
-    for _, note in ipairs(entry.discussion.notes or {}) do
-      table.insert(parts, "@" .. (note.author or "unknown") .. ":")
-      table.insert(parts, note.body or "")
-      table.insert(parts, "")
-    end
-    return table.concat(parts, "\n")
-  end
-
-  return "(no preview)"
-end
-
 function M.pick_comments(entries, on_select, opts)
   local pickers = require("telescope.pickers")
   local finders = require("telescope.finders")
@@ -173,7 +146,7 @@ function M.pick_comments(entries, on_select, opts)
       previewer = previewers.new_buffer_previewer({
         title = "Comment",
         define_preview = function(self, entry)
-          local text = format_comment_preview(entry.value)
+          local text = require("codereview.picker.comments").format_preview(entry.value)
           local lines = vim.split(text, "\n", { plain = true })
           vim.api.nvim_buf_set_lines(self.state.bufnr, 0, -1, false, lines)
           vim.bo[self.state.bufnr].syntax = "markdown"

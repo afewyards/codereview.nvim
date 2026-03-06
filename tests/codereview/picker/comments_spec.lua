@@ -87,4 +87,74 @@ describe("picker.comments", function()
       assert.equals(0, #entries)
     end)
   end)
+
+  describe("format_preview", function()
+    it("formats ai_suggestion entry with bold severity and code block", function()
+      local entry = {
+        type = "ai_suggestion",
+        suggestion = {
+          severity = "warning",
+          file = "src/auth.lua",
+          line = 42,
+          code = "local x = 1",
+          comment = "Variable shadowing detected",
+        },
+      }
+      local result = comments_picker.format_preview(entry)
+      assert.truthy(result:find("%*%*%[warning%]%*%*"))
+      assert.truthy(result:find("src/auth%.lua:42"))
+      assert.truthy(result:find("```"))
+      assert.truthy(result:find("local x = 1"))
+      assert.truthy(result:find("Variable shadowing detected"))
+    end)
+
+    it("formats ai_suggestion without code block when no code", function()
+      local entry = {
+        type = "ai_suggestion",
+        suggestion = {
+          severity = "info",
+          file = "src/utils.lua",
+          line = 10,
+          comment = "Consider refactoring",
+        },
+      }
+      local result = comments_picker.format_preview(entry)
+      assert.falsy(result:find("```"))
+      assert.truthy(result:find("Consider refactoring"))
+    end)
+
+    it("formats discussion entry with bold author names", function()
+      local entry = {
+        type = "discussion",
+        discussion = {
+          notes = {
+            { author = "alice", body = "Fix this please" },
+            { author = "bob", body = "Done" },
+          },
+        },
+      }
+      local result = comments_picker.format_preview(entry)
+      assert.truthy(result:find("%*%*@alice:%*%*"))
+      assert.truthy(result:find("Fix this please"))
+      assert.truthy(result:find("%*%*@bob:%*%*"))
+      assert.truthy(result:find("Done"))
+    end)
+
+    it("uses 'unknown' for missing author in discussion", function()
+      local entry = {
+        type = "discussion",
+        discussion = {
+          notes = { { body = "Anonymous comment" } },
+        },
+      }
+      local result = comments_picker.format_preview(entry)
+      assert.truthy(result:find("%*%*@unknown:%*%*"))
+    end)
+
+    it("returns (no preview) for unknown entry type", function()
+      local entry = { type = "other" }
+      local result = comments_picker.format_preview(entry)
+      assert.equals("(no preview)", result)
+    end)
+  end)
 end)
