@@ -178,6 +178,7 @@ function M.open(note, opts)
 
   map("<CR>", function()
     toggle(selected)
+    close()
   end)
 
   map("q", close)
@@ -188,6 +189,7 @@ function M.open(note, opts)
     map(tostring(idx), function()
       selected = idx
       toggle(idx)
+      close()
     end)
   end
 
