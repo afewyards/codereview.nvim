@@ -1373,6 +1373,12 @@ function M.setup_keymaps(state, layout, active_states)
       if not note then
         return
       end
+      -- Restore cursor visibility before opening the float (guicursor is global)
+      if cursor_hidden then
+        vim.o.guicursor = saved_guicursor or ""
+        vim.wo[layout.main_win].cursorline = saved_cursorline
+        cursor_hidden = false
+      end
       local comment = require("codereview.mr.comment")
       comment.react_to_note(disc, note, state.review, rerender_view)
     end,
