@@ -20,38 +20,18 @@ local function parse_reactions(note_reactions)
   return result
 end
 
---- Build the display line and byte-range segments for each emoji slot.
+--- Build virtual text chunks for the emoji row.
 --- @param reactions table[]  Indexed by emoji order
---- @return string line, table[] segments
-local function build_content(reactions)
-  local parts = {}
-  local segments = {}
-  local byte_pos = 2 -- after leading '  '
-
+--- @param selected number    Currently selected index
+--- @return table[] chunks  Array of { text, hl } for virt_text
+--- @return number width    Display width of the line
+local function build_virt_chunks(reactions, selected)
+  local chunks = { { "  ", "" } }
   for i, emoji in ipairs(reactions_mod.EMOJIS) do
     local r = reactions[i]
-    local sep = i == 1 and "" or "  "
-    byte_pos = byte_pos + #sep
-
-    local seg_start = byte_pos
-    local text = emoji.icon
-    if r.count > 1 then
-      text = text .. " " .. tostring(r.count)
+    if i > 1 then
+      table.insert(chunks, { "  ", "" })
     end
-    table.insert(parts, sep .. text)
-    byte_pos = byte_pos + #text
-
-    table.insert(segments, { start_byte = seg_start, end_byte = byte_pos, index = i })
-  end
-
-  return "  " .. table.concat(parts) .. "  ", segments
-end
-
---- Apply extmark highlights to the single content line.
-local function apply_highlights(buf, segments, reactions, selected)
-  vim.api.nvim_buf_clear_namespace(buf, NS, 0, -1)
-  for i, seg in ipairs(segments) do
-    local r = reactions[i]
     local hl
     if i == selected then
       hl = "CodeReviewReactionSelected"
@@ -59,14 +39,31 @@ local function apply_highlights(buf, segments, reactions, selected)
       hl = "CodeReviewReactionOwn"
     elseif r.count > 0 then
       hl = "CodeReviewReaction"
+    else
+      hl = ""
     end
-    if hl then
-      vim.api.nvim_buf_set_extmark(buf, NS, 0, seg.start_byte, {
-        end_col = seg.end_byte,
-        hl_group = hl,
-      })
+    local text = emoji.icon
+    if r.count > 1 then
+      text = text .. " " .. tostring(r.count)
     end
+    table.insert(chunks, { text, hl })
   end
+  table.insert(chunks, { "  ", "" })
+  local width = 0
+  for _, c in ipairs(chunks) do
+    width = width + vim.fn.strdisplaywidth(c[1])
+  end
+  return chunks, width
+end
+
+--- Render virtual text on the empty buffer line.
+local function render(buf, reactions, selected)
+  vim.api.nvim_buf_clear_namespace(buf, NS, 0, -1)
+  local chunks, _ = build_virt_chunks(reactions, selected)
+  vim.api.nvim_buf_set_extmark(buf, NS, 0, 0, {
+    virt_text = chunks,
+    virt_text_pos = "overlay",
+  })
 end
 
 --- Open the reaction picker float.
@@ -84,13 +81,10 @@ function M.open(note, opts)
 
   local buf = vim.api.nvim_create_buf(false, true)
   vim.bo[buf].bufhidden = "wipe"
-
-  local line, segments = build_content(reactions)
-  vim.api.nvim_buf_set_lines(buf, 0, -1, false, { line })
-  apply_highlights(buf, segments, reactions, selected)
   vim.bo[buf].modifiable = false
 
-  local width = vim.fn.strdisplaywidth(line)
+  local _, width = build_virt_chunks(reactions, selected)
+  render(buf, reactions, selected)
   local border_hl = "CodeReviewCommentBorder"
   local win = vim.api.nvim_open_win(buf, true, {
     relative = "cursor",
@@ -127,11 +121,7 @@ function M.open(note, opts)
     if closed then
       return
     end
-    vim.bo[buf].modifiable = true
-    line, segments = build_content(reactions)
-    vim.api.nvim_buf_set_lines(buf, 0, -1, false, { line })
-    apply_highlights(buf, segments, reactions, selected)
-    vim.bo[buf].modifiable = false
+    render(buf, reactions, selected)
   end
 
   local function toggle(idx)
@@ -156,15 +146,20 @@ function M.open(note, opts)
     vim.keymap.set("n", key, fn, { buffer = buf, nowait = true, silent = true })
   end
 
-  map("h", function()
+  local function move_left()
     selected = math.max(1, selected - 1)
     re_render()
-  end)
+  end
 
-  map("l", function()
+  local function move_right()
     selected = math.min(#reactions_mod.EMOJIS, selected + 1)
     re_render()
-  end)
+  end
+
+  map("h", move_left)
+  map("l", move_right)
+  map("<Tab>", move_right)
+  map("<S-Tab>", move_left)
 
   map("<CR>", function()
     toggle(selected)
