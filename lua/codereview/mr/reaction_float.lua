@@ -113,16 +113,18 @@ function M.open(note, opts)
   })
 
   vim.api.nvim_set_option_value("winblend", 0, { win = win })
-  vim.api.nvim_set_option_value("winhighlight", "NormalFloat:Normal,Cursor:CodeReviewReactionSelected", { win = win })
+  vim.api.nvim_set_option_value("winhighlight", "NormalFloat:Normal", { win = win })
 
-  -- Place cursor on the first emoji (skip leading padding)
-  pcall(vim.api.nvim_win_set_cursor, win, { 1, segments[1].start_byte })
+  -- Hide terminal cursor in this float — selection shown via extmark highlights
+  local saved_guicursor = vim.o.guicursor
+  vim.o.guicursor = "a:CodeReviewCursorHidden"
 
   local function close()
     if closed then
       return
     end
     closed = true
+    vim.o.guicursor = saved_guicursor
     pcall(vim.api.nvim_win_close, win, true)
   end
 

@@ -99,9 +99,9 @@ function M.setup()
   vim.api.nvim_set_hl(0, "CodeReviewHunkSeparator", { fg = "#565f89", default = true })
   vim.api.nvim_set_hl(0, "CodeReviewHunkSeparatorHint", { fg = "#828bb8", default = true })
   vim.api.nvim_set_hl(0, "CodeReviewCommitFilter", { bg = "#2a2a3a", fg = "#bb9af7", bold = true, default = true })
-  vim.api.nvim_set_hl(0, "CodeReviewReaction", { fg = "#565f89", default = true })
+  vim.api.nvim_set_hl(0, "CodeReviewReaction", { fg = "#7aa2f7", default = true })
   vim.api.nvim_set_hl(0, "CodeReviewReactionOwn", { fg = "#9ece6a", bold = true, default = true })
-  vim.api.nvim_set_hl(0, "CodeReviewReactionSelected", { bg = "#2a3a4a", default = true })
+  vim.api.nvim_set_hl(0, "CodeReviewReactionSelected", { bg = "#7aa2f7", fg = "#1e2030", bold = true, default = true })
   vim.api.nvim_set_hl(
     0,
     "CodeReviewWinbarIcon",
