@@ -378,9 +378,9 @@ function M.build(disc, opts)
     if disc.is_draft then
       footer_content = "x:delete"
     elseif sel_note and current_user and sel_note.author == current_user then
-      footer_content = "r:reply  gt:un/resolve  e:edit  x:delete"
+      footer_content = "r:reply  gt:un/resolve  e:edit  x:delete  E:react"
     else
-      footer_content = "r:reply  gt:un/resolve"
+      footer_content = "r:reply  gt:un/resolve  E:react"
     end
   end
 
