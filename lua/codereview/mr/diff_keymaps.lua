@@ -831,31 +831,21 @@ function M.setup_keymaps(state, layout, active_states)
       if disc and not disc.is_draft then
         local comment = require("codereview.mr.comment")
         local cursor_row = vim.api.nvim_win_get_cursor(layout.main_win)[1]
-        -- Find last row belonging to this discussion so float opens below the comment block
-        local row_disc = state.scroll_mode and state.scroll_row_disc or state.row_disc_cache[state.current_file]
-        local last_row = cursor_row
-        if row_disc then
-          local total = vim.api.nvim_buf_line_count(vim.api.nvim_win_get_buf(layout.main_win))
-          for r = cursor_row, math.min(cursor_row + 50, total) do
-            local discs = row_disc[r]
-            if discs then
-              local found = false
-              for _, d in ipairs(discs) do
-                if d.id == disc.id then
-                  found = true
-                  break
-                end
-              end
-              if found then
-                last_row = r
-              else
-                break
-              end
-            else
-              break
-            end
+        -- Always resolve to the diff line (not a carrier) for consistent positioning
+        local line_data = state.scroll_mode and state.scroll_line_data
+          or (state.line_data_cache[state.current_file] or {})
+        local anchor_row = resolve_anchor_row(line_data, cursor_row)
+
+        -- Count carrier rows after anchor so reserve space goes at the end of the thread
+        local carrier_count = 0
+        for r = anchor_row + 1, #line_data do
+          if line_data[r] and line_data[r].type == "carrier" then
+            carrier_count = carrier_count + 1
+          else
+            break
           end
         end
+
         -- Calculate how many virtual lines the comment thread occupies
         -- so the reply float can be positioned below them.
         local thread_height = 0
@@ -865,19 +855,30 @@ function M.setup_keymaps(state, layout, active_states)
           thread_height = thread_height + #wrap_text(notes[1].body, config.get().diff.comment_width)
           for i = 2, #notes do
             if not notes[i].system then
-              thread_height = thread_height + 1 -- separator (│)
+              thread_height = thread_height + 1 -- carrier row (buffer line)
               thread_height = thread_height + 1 -- reply header (│  ↪ @author)
               thread_height = thread_height + #wrap_text(notes[i].body, config.get().diff.comment_width - 2)
             end
           end
           thread_height = thread_height + 1 -- footer (└ r:reply...)
         end
+        -- Restore cursor visibility before opening the float (guicursor is global)
+        if cursor_hidden then
+          vim.o.guicursor = saved_guicursor or ""
+          vim.wo[layout.main_win].cursorline = saved_cursorline
+          cursor_hidden = false
+        end
         comment.reply(disc, state.review, {
           add_reply = add_optimistic_reply(disc),
           remove_reply = remove_optimistic_reply,
           mark_reply_failed = mark_reply_failed,
           refresh = refresh_discussions,
-        }, { anchor_line = last_row, win_id = layout.main_win, thread_height = thread_height })
+        }, {
+          anchor_line = anchor_row,
+          win_id = layout.main_win,
+          thread_height = thread_height,
+          carrier_count = carrier_count,
+        })
       end
     end,
 
@@ -1233,6 +1234,13 @@ function M.setup_keymaps(state, layout, active_states)
       if note.author ~= state.current_user then
         vim.notify("Can only edit your own comments", vim.log.levels.WARN)
         return
+      end
+
+      -- Restore cursor visibility before opening the float (guicursor is global)
+      if cursor_hidden then
+        vim.o.guicursor = saved_guicursor or ""
+        vim.wo[layout.main_win].cursorline = saved_cursorline
+        cursor_hidden = false
       end
 
       -- Compute initial popup height from the prefill line count

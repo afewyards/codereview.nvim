@@ -84,12 +84,13 @@ function M.open(title, opts)
     local width = math.min(win_width - 4, max_w)
 
     if not is_edit_overlay then
-      -- Reserve space: when replying to a thread, place the gap on the next
-      -- buffer line (above it) so it appears after the comment's virt_lines.
+      -- Reserve space: place the gap after the thread's last carrier row
+      -- so it appears at the end of the thread, not in the middle.
       handle.reserve_line = anchor_0
       handle.reserve_above = false
       if opts.thread_height and opts.thread_height > 0 then
-        handle.reserve_line = anchor_0 + 1
+        local carriers = opts.carrier_count or 0
+        handle.reserve_line = anchor_0 + carriers + 1
         handle.reserve_above = true
       end
       handle.extmark_id =
