@@ -1352,6 +1352,31 @@ function M.setup_keymaps(state, layout, active_states)
       end)
     end,
 
+    react = function()
+      if state.view_mode ~= "diff" then
+        return
+      end
+      local disc = get_cursor_disc()
+      if not disc then
+        return
+      end
+      local cursor_row = vim.api.nvim_win_get_cursor(layout.main_win)[1]
+      local line_data = state.scroll_mode and state.scroll_line_data
+        or (state.line_data_cache[state.current_file] or {})
+      local anchor_row = resolve_anchor_row(line_data, cursor_row)
+      local sel = state.row_selection[anchor_row]
+      local sel_idx = sel and sel.type == "comment" and sel.disc_id == disc.id and sel.note_idx or nil
+      if not sel_idx then
+        return
+      end
+      local note = disc.notes[sel_idx]
+      if not note then
+        return
+      end
+      local comment = require("codereview.mr.comment")
+      comment.react_to_note(disc, note, state.review, rerender_view)
+    end,
+
     select_next_note = function()
       if state.view_mode ~= "diff" then
         -- In summary: cycle through discussion thread headers first

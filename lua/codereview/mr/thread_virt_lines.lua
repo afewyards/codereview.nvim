@@ -201,6 +201,40 @@ function M.build(disc, opts)
     end
   end
 
+  -- Build a reaction virt-line for a note, or nil if no reactions.
+  local function reaction_virt_line(note, is_sel, prefix_suffix)
+    if not note.reactions or #note.reactions == 0 then
+      return nil
+    end
+    local reactions_mod = require("codereview.reactions")
+    local chunks = {}
+    local prefix = sel_prefix(is_sel, prefix_suffix, bdr)
+    if type(prefix[1]) == "string" then
+      table.insert(chunks, prefix)
+    else
+      vim.list_extend(chunks, prefix)
+    end
+    local first_reaction = true
+    for _, r in ipairs(note.reactions) do
+      if r.count and r.count > 0 then
+        local entry = reactions_mod.by_name(r.name)
+        if entry then
+          if not first_reaction then
+            table.insert(chunks, { "  ", bdr })
+          end
+          local hl = r.reacted and "CodeReviewReactionOwn" or "CodeReviewReaction"
+          local text = r.count == 1 and entry.icon or (entry.icon .. " " .. r.count)
+          table.insert(chunks, { text, hl })
+          first_reaction = false
+        end
+      end
+    end
+    if first_reaction then
+      return nil
+    end
+    return chunks
+  end
+
   -- Header: ┏ @author · 2h ago                       ● Unresolved
   local n1_sel = (sel_idx == 1)
   if n1_sel then
@@ -262,6 +296,10 @@ function M.build(disc, opts)
       local prefix = sel_prefix(n1_sel, "┃ ", bdr)
       push(md_virt_line(prefix, bl, body_hl))
     end
+    local rl = reaction_virt_line(first, n1_sel, "┃ ")
+    if rl then
+      push(rl)
+    end
   end
 
   -- Replies
@@ -315,6 +353,10 @@ function M.build(disc, opts)
         for _, rl in ipairs(wrap_text(reply.body, comment_width - 2)) do
           local prefix = sel_prefix(ri_sel, "┃    ", bdr)
           push(md_virt_line(prefix, rl, body_hl))
+        end
+        local rrl = reaction_virt_line(reply, ri_sel, "┃    ")
+        if rrl then
+          push(rrl)
         end
       end
     end

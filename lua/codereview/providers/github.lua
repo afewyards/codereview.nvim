@@ -99,11 +99,22 @@ function M.normalize_graphql_threads(thread_nodes)
     local comments = type(thread.comments) == "table" and thread.comments.nodes or {}
     if #comments > 0 then
       local notes = {}
+      local reactions_mod = require("codereview.reactions")
       for _, c in ipairs(comments) do
         local line = (c.line ~= vim.NIL) and c.line or nil
         local start_line = (c.startLine ~= vim.NIL) and c.startLine or nil
         local original_line = (c.originalLine ~= vim.NIL) and c.originalLine or nil
         local original_start_line = (c.originalStartLine ~= vim.NIL) and c.originalStartLine or nil
+        local reactions = {}
+        for _, rg in ipairs(type(c.reactionGroups) == "table" and c.reactionGroups or {}) do
+          local count = type(rg.users) == "table" and rg.users.totalCount or 0
+          if count > 0 then
+            local rname = reactions_mod.from_github_graphql(rg.content)
+            if rname then
+              table.insert(reactions, { name = rname, count = count, reacted = rg.viewerHasReacted or false })
+            end
+          end
+        end
         table.insert(notes, {
           id = c.databaseId,
           node_id = c.id,
@@ -113,6 +124,7 @@ function M.normalize_graphql_threads(thread_nodes)
           system = false,
           resolvable = true,
           resolved = thread.isResolved or false,
+          reactions = reactions,
           position = {
             new_path = c.path,
             new_line = line or original_line,
@@ -258,6 +270,7 @@ function M.get_discussions(client, ctx, review)
                 isOutdated
                 comments(first: 100) {
                   nodes {
+                    id
                     databaseId
                     author { login }
                     body
@@ -270,6 +283,11 @@ function M.get_discussions(client, ctx, review)
                     outdated
                     commit { oid }
                     originalCommit { oid }
+                    reactionGroups {
+                      content
+                      users(first: 0) { totalCount }
+                      viewerHasReacted
+                    }
                   }
                 }
               }
@@ -1121,6 +1139,52 @@ end
 --- GitHub does not support triggering manual jobs directly.
 function M.play_job(client, ctx, review, job_id) -- luacheck: ignore ctx review job_id
   return nil, "Manual job trigger not supported on GitHub"
+end
+
+--- Add a reaction to a comment by its GraphQL node ID.
+function M.add_reaction(client, ctx, review, note_node_id, emoji_name) -- luacheck: ignore review
+  local headers, err = get_headers()
+  if not headers then
+    return nil, err
+  end
+  local content = require("codereview.reactions").to_github_graphql(emoji_name)
+  if not content then
+    return nil, "Unknown emoji: " .. emoji_name
+  end
+  local mutation = [[
+    mutation($subjectId: ID!, $content: ReactionContent!) {
+      addReaction(input: { subjectId: $subjectId, content: $content }) {
+        reaction { content }
+      }
+    }
+  ]]
+  return graphql(client, ctx.base_url, headers, mutation, {
+    subjectId = note_node_id,
+    content = content,
+  })
+end
+
+--- Remove a reaction from a comment by its GraphQL node ID.
+function M.remove_reaction(client, ctx, review, note_node_id, emoji_name) -- luacheck: ignore review
+  local headers, err = get_headers()
+  if not headers then
+    return nil, err
+  end
+  local content = require("codereview.reactions").to_github_graphql(emoji_name)
+  if not content then
+    return nil, "Unknown emoji: " .. emoji_name
+  end
+  local mutation = [[
+    mutation($subjectId: ID!, $content: ReactionContent!) {
+      removeReaction(input: { subjectId: $subjectId, content: $content }) {
+        reaction { content }
+      }
+    }
+  ]]
+  return graphql(client, ctx.base_url, headers, mutation, {
+    subjectId = note_node_id,
+    content = content,
+  })
 end
 
 --- Returns a matcher function that checks whether a discussion position was originally placed on commit_sha.

@@ -844,4 +844,86 @@ function M.get_unread_mr_ids(client, ctx)
   return ids
 end
 
+--- Fetch award emojis for a single MR note and return normalized reactions.
+--- @param note_id number|string The note ID
+--- @return table[]|nil reactions, string|nil err
+function M.get_note_reactions(client, ctx, review, note_id)
+  local headers, err = get_headers()
+  if not headers then
+    return nil, err
+  end
+  local reactions_module = require("codereview.reactions")
+  local current_user = M.get_current_user(client, ctx)
+  local path = mr_base(ctx, review.id) .. "/notes/" .. note_id .. "/award_emoji"
+  local awards = client.paginate_all(ctx.base_url, path, { headers = headers })
+  if not awards then
+    return {}, nil
+  end
+
+  local by_name = {}
+  local order = {}
+  for _, award in ipairs(awards) do
+    local normalized = reactions_module.from_gitlab(award.name)
+    if normalized then
+      if not by_name[normalized] then
+        by_name[normalized] = { name = normalized, count = 0, reacted = false, awards = {} }
+        table.insert(order, normalized)
+      end
+      local entry = by_name[normalized]
+      entry.count = entry.count + 1
+      local username = type(award.user) == "table" and award.user.username or nil
+      table.insert(entry.awards, { id = award.id, user = username })
+      if current_user and username == current_user then
+        entry.reacted = true
+      end
+    end
+  end
+
+  local result = {}
+  for _, name in ipairs(order) do
+    table.insert(result, by_name[name])
+  end
+  return result, nil
+end
+
+--- Batch fetch reactions for all notes in a list of discussions. Mutates note.reactions in place.
+--- Skips system notes.
+function M.fetch_all_reactions(client, ctx, review, discussions)
+  for _, disc in ipairs(discussions or {}) do
+    for _, note in ipairs(disc.notes or {}) do
+      if note.id and not note.system then
+        local reactions, _ = M.get_note_reactions(client, ctx, review, note.id)
+        note.reactions = reactions or {}
+      end
+    end
+  end
+end
+
+--- Add an emoji reaction to a note.
+--- @param emoji_name string Normalized emoji name (e.g. "thumbsup")
+function M.add_reaction(client, ctx, review, note_id, emoji_name)
+  local headers, err = get_headers()
+  if not headers then
+    return nil, err
+  end
+  local reactions_module = require("codereview.reactions")
+  local gitlab_name = reactions_module.to_provider(emoji_name, "gitlab")
+  if not gitlab_name then
+    return nil, "Unknown emoji: " .. tostring(emoji_name)
+  end
+  local path = mr_base(ctx, review.id) .. "/notes/" .. note_id .. "/award_emoji"
+  return client.post(ctx.base_url, path, { body = { name = gitlab_name }, headers = headers })
+end
+
+--- Remove an emoji reaction from a note by award ID.
+--- @param award_id number The award emoji ID to delete (from stored awards data)
+function M.remove_reaction(client, ctx, review, note_id, award_id)
+  local headers, err = get_headers()
+  if not headers then
+    return nil, err
+  end
+  local path = mr_base(ctx, review.id) .. "/notes/" .. note_id .. "/award_emoji/" .. award_id
+  return client.delete(ctx.base_url, path, { headers = headers })
+end
+
 return M

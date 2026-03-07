@@ -483,6 +483,72 @@ function M.create_mr_comment(review, provider, ctx, on_success)
   end)
 end
 
+--- React (add/remove) an emoji reaction to a note.
+--- @param note table  the note to react to
+--- @param mr table    the MR/PR object
+--- @param on_success fun()  called after successful reaction (triggers re-render)
+function M.react_to_note(_disc, note, mr, on_success) -- luacheck: ignore _disc
+  require("codereview.mr.reaction_float").open(note, {
+    on_toggle = function(emoji_name, reacted)
+      require("plenary.async").run(function()
+        local async_client = require("codereview.api.async_client")
+        local provider, _, ctx = get_provider()
+        if not provider then
+          return
+        end
+        local _, err
+        if provider.name == "github" then
+          if not note.node_id then
+            vim.schedule(function()
+              vim.notify("Cannot react: note missing node_id (try refreshing)", vim.log.levels.ERROR)
+            end)
+            return
+          end
+          if reacted then
+            _, err = provider.add_reaction(async_client, ctx, mr, note.node_id, emoji_name)
+          else
+            _, err = provider.remove_reaction(async_client, ctx, mr, note.node_id, emoji_name)
+          end
+        elseif provider.name == "gitlab" then
+          if reacted then
+            _, err = provider.add_reaction(async_client, ctx, mr, note.id, emoji_name)
+          else
+            local award_id = nil
+            local current_user = provider.get_current_user(async_client, ctx)
+            for _, reaction in ipairs(note.reactions or {}) do
+              if reaction.name == emoji_name then
+                for _, award in ipairs(reaction.awards or {}) do
+                  if award.user == current_user then
+                    award_id = award.id
+                    break
+                  end
+                end
+                break
+              end
+            end
+            if not award_id then
+              vim.schedule(function()
+                vim.notify("Could not find your reaction to remove", vim.log.levels.ERROR)
+              end)
+              return
+            end
+            _, err = provider.remove_reaction(async_client, ctx, mr, note.id, award_id)
+          end
+        end
+        vim.schedule(function()
+          if err then
+            vim.notify("Reaction failed: " .. tostring(err), vim.log.levels.ERROR)
+            return
+          end
+          if on_success then
+            on_success()
+          end
+        end)
+      end)
+    end,
+  })
+end
+
 function M.post_with_retry(api_fn, on_success, on_failure, opts)
   opts = opts or {}
   local max = opts.max_retries or 3

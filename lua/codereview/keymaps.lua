@@ -28,6 +28,7 @@ local defaults = {
   select_prev_note = { key = "<S-Tab>", mode = "n", desc = "Select prev note" },
   edit_note = { key = "e", mode = "n", desc = "Edit note" },
   delete_note = { key = "x", mode = "n", desc = "Delete note" },
+  react = { key = "E", mode = "n", desc = "React to note" },
   pick_comments = { key = "<leader>fc", mode = "n", desc = "Pick comment/suggestion" },
   pick_files = { key = "<leader>ff", mode = "n", desc = "Pick file" },
   pick_commits = { key = "C", mode = "n", desc = "Pick commit" },
