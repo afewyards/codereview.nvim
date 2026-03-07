@@ -20,18 +20,38 @@ local function parse_reactions(note_reactions)
   return result
 end
 
---- Build virtual text chunks for the emoji row.
+--- Build the display line and byte-range segments for each emoji slot.
 --- @param reactions table[]  Indexed by emoji order
---- @param selected number    Currently selected index
---- @return table[] chunks  Array of { text, hl } for virt_text
---- @return number width    Display width of the line
-local function build_virt_chunks(reactions, selected)
-  local chunks = { { "  ", "" } }
+--- @return string line, table[] segments
+local function build_content(reactions)
+  local parts = {}
+  local segments = {}
+  local byte_pos = 2 -- after leading '  '
+
   for i, emoji in ipairs(reactions_mod.EMOJIS) do
     local r = reactions[i]
-    if i > 1 then
-      table.insert(chunks, { "  ", "" })
+    local sep = i == 1 and "" or "  "
+    byte_pos = byte_pos + #sep
+
+    local seg_start = byte_pos
+    local text = emoji.icon
+    if r.count > 1 then
+      text = text .. " " .. tostring(r.count)
     end
+    table.insert(parts, sep .. text)
+    byte_pos = byte_pos + #text
+
+    table.insert(segments, { start_byte = seg_start, end_byte = byte_pos, index = i })
+  end
+
+  return "  " .. table.concat(parts) .. "  ", segments
+end
+
+--- Apply extmark highlights to the single content line.
+local function apply_highlights(buf, segments, reactions, selected)
+  vim.api.nvim_buf_clear_namespace(buf, NS, 0, -1)
+  for i, seg in ipairs(segments) do
+    local r = reactions[i]
     local hl
     if i == selected then
       hl = "CodeReviewReactionSelected"
@@ -39,31 +59,14 @@ local function build_virt_chunks(reactions, selected)
       hl = "CodeReviewReactionOwn"
     elseif r.count > 0 then
       hl = "CodeReviewReaction"
-    else
-      hl = ""
     end
-    local text = emoji.icon
-    if r.count > 1 then
-      text = text .. " " .. tostring(r.count)
+    if hl then
+      vim.api.nvim_buf_set_extmark(buf, NS, 0, seg.start_byte, {
+        end_col = seg.end_byte,
+        hl_group = hl,
+      })
     end
-    table.insert(chunks, { text, hl })
   end
-  table.insert(chunks, { "  ", "" })
-  local width = 0
-  for _, c in ipairs(chunks) do
-    width = width + vim.fn.strdisplaywidth(c[1])
-  end
-  return chunks, width
-end
-
---- Render virtual text on the empty buffer line.
-local function render(buf, reactions, selected)
-  vim.api.nvim_buf_clear_namespace(buf, NS, 0, -1)
-  local chunks, _ = build_virt_chunks(reactions, selected)
-  vim.api.nvim_buf_set_extmark(buf, NS, 0, 0, {
-    virt_text = chunks,
-    virt_text_pos = "overlay",
-  })
 end
 
 --- Open the reaction picker float.
@@ -81,10 +84,13 @@ function M.open(note, opts)
 
   local buf = vim.api.nvim_create_buf(false, true)
   vim.bo[buf].bufhidden = "wipe"
+
+  local line, segments = build_content(reactions)
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, { line })
+  apply_highlights(buf, segments, reactions, selected)
   vim.bo[buf].modifiable = false
 
-  local _, width = build_virt_chunks(reactions, selected)
-  render(buf, reactions, selected)
+  local width = vim.fn.strdisplaywidth(line)
   local border_hl = "CodeReviewCommentBorder"
   local win = vim.api.nvim_open_win(buf, true, {
     relative = "cursor",
@@ -107,7 +113,10 @@ function M.open(note, opts)
   })
 
   vim.api.nvim_set_option_value("winblend", 0, { win = win })
-  vim.api.nvim_set_option_value("winhighlight", "NormalFloat:Normal", { win = win })
+  vim.api.nvim_set_option_value("winhighlight", "NormalFloat:Normal,Cursor:CodeReviewReactionSelected", { win = win })
+
+  -- Place cursor on the first emoji (skip leading padding)
+  pcall(vim.api.nvim_win_set_cursor, win, { 1, segments[1].start_byte })
 
   local function close()
     if closed then
@@ -121,7 +130,13 @@ function M.open(note, opts)
     if closed then
       return
     end
-    render(buf, reactions, selected)
+    vim.bo[buf].modifiable = true
+    line, segments = build_content(reactions)
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, { line })
+    apply_highlights(buf, segments, reactions, selected)
+    vim.bo[buf].modifiable = false
+    -- Move cursor to selected segment
+    pcall(vim.api.nvim_win_set_cursor, win, { 1, segments[selected].start_byte })
   end
 
   local function toggle(idx)
@@ -175,6 +190,18 @@ function M.open(note, opts)
       toggle(idx)
     end)
   end
+
+  -- Block visual mode and insert mode to prevent text selection/editing
+  local noop = function() end
+  map("v", noop)
+  map("V", noop)
+  map("<C-v>", noop)
+  map("i", noop)
+  map("a", noop)
+  map("o", noop)
+  map("I", noop)
+  map("A", noop)
+  map("O", noop)
 
   vim.api.nvim_create_autocmd("WinClosed", {
     pattern = tostring(win),
