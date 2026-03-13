@@ -2339,6 +2339,17 @@ function M.setup_keymaps(state, layout, active_states)
   -- Sync sidebar highlight with current file as cursor moves in scroll mode;
   -- also manage row_selection when cursor moves.
   local prev_selection_row = nil
+  local cursor_debounce = vim.uv.new_timer()
+  vim.api.nvim_create_autocmd("BufDelete", {
+    buffer = main_buf,
+    once = true,
+    callback = function()
+      if cursor_debounce then
+        cursor_debounce:stop()
+        cursor_debounce:close()
+      end
+    end,
+  })
   vim.api.nvim_create_autocmd("CursorMoved", {
     buffer = main_buf,
     callback = function()
@@ -2349,7 +2360,6 @@ function M.setup_keymaps(state, layout, active_states)
       local cursor_row = vim.api.nvim_win_get_cursor(layout.main_win)[1]
       local line_data = state.scroll_mode and state.scroll_line_data
         or (state.line_data_cache[state.current_file] or {})
-      local anchor_row = resolve_anchor_row(line_data, cursor_row)
 
       -- Hide cursor and cursorline on carrier lines (visual separators, not content)
       local on_carrier = line_data[cursor_row] and line_data[cursor_row].type == "carrier"
@@ -2365,166 +2375,199 @@ function M.setup_keymaps(state, layout, active_states)
         cursor_hidden = false
       end
 
-      local row_ai = state.scroll_mode and state.scroll_row_ai or (state.row_ai_cache[state.current_file] or {})
-      local ai_at_row = row_ai[anchor_row] or {}
-      local row_disc_map = state.scroll_mode and state.scroll_row_disc
-        or (state.row_disc_cache[state.current_file] or {})
-      local discs_at_row = row_disc_map[anchor_row] or {}
+      -- Debounce expensive work: selection updates, sidebar sync, review tracking
+      cursor_debounce:stop()
+      cursor_debounce:start(
+        30,
+        0,
+        vim.schedule_wrap(function()
+          if not vim.api.nvim_win_is_valid(layout.main_win) then
+            return
+          end
+          if not vim.api.nvim_buf_is_valid(main_buf) then
+            return
+          end
+          if state.view_mode ~= "diff" then
+            return
+          end
 
-      local items = diff_comments.build_row_items(ai_at_row, discs_at_row)
-      if #items > 0 then
-        local prev_sel = state.row_selection[anchor_row]
-        if not prev_sel then
-          -- Auto-select: first item, or the note matching the carrier the cursor is on
-          local auto_sel
-          if anchor_row ~= cursor_row then
-            local ld = line_data[cursor_row]
-            local cidx = ld and ld.carrier_idx or 1
-            local n_ai = 0
-            for _, item in ipairs(items) do
-              if item.type == "ai" then
-                n_ai = n_ai + 1
-              end
-            end
-            auto_sel = items[n_ai + cidx + 1] or items[1]
-          else
-            auto_sel = items[1]
+          -- Re-read cursor position (may have moved during debounce delay)
+          local ok, cur = pcall(vim.api.nvim_win_get_cursor, layout.main_win)
+          if not ok then
+            return
           end
-          local old_row = prev_selection_row
-          state.row_selection = { [anchor_row] = auto_sel }
-          prev_selection_row = anchor_row
-          -- Clear old row's indicator, set new row's indicator
-          if old_row and old_row ~= anchor_row then
-            diff_render.update_selection_at_row(
-              main_buf,
-              old_row,
-              state.row_selection,
-              row_ai,
-              row_disc_map,
-              state.current_user,
-              state.review,
-              state.editing_note,
-              line_data
-            )
-          end
-          diff_render.update_selection_at_row(
-            main_buf,
-            anchor_row,
-            state.row_selection,
-            row_ai,
-            row_disc_map,
-            state.current_user,
-            state.review,
-            state.editing_note,
-            line_data
-          )
-        else
-          -- Validate prev_sel against current items (may be stale after dismiss/accept)
-          local valid = false
-          for _, item in ipairs(items) do
-            if item.type == prev_sel.type then
-              if item.type == "ai" and item.index == prev_sel.index then
-                valid = true
-                break
+          local deb_cursor_row = cur[1]
+          local deb_line_data = state.scroll_mode and state.scroll_line_data
+            or (state.line_data_cache[state.current_file] or {})
+          local anchor_row = resolve_anchor_row(deb_line_data, deb_cursor_row)
+
+          local row_ai = state.scroll_mode and state.scroll_row_ai or (state.row_ai_cache[state.current_file] or {})
+          local ai_at_row = row_ai[anchor_row] or {}
+          local row_disc_map = state.scroll_mode and state.scroll_row_disc
+            or (state.row_disc_cache[state.current_file] or {})
+          local discs_at_row = row_disc_map[anchor_row] or {}
+
+          local items = diff_comments.build_row_items(ai_at_row, discs_at_row)
+          if #items > 0 then
+            local prev_sel = state.row_selection[anchor_row]
+            if not prev_sel then
+              -- Auto-select: first item, or the note matching the carrier the cursor is on
+              local auto_sel
+              if anchor_row ~= deb_cursor_row then
+                local ld = deb_line_data[deb_cursor_row]
+                local cidx = ld and ld.carrier_idx or 1
+                local n_ai = 0
+                for _, item in ipairs(items) do
+                  if item.type == "ai" then
+                    n_ai = n_ai + 1
+                  end
+                end
+                auto_sel = items[n_ai + cidx + 1] or items[1]
+              else
+                auto_sel = items[1]
               end
-              if item.type == "comment" and item.disc_id == prev_sel.disc_id and item.note_idx == prev_sel.note_idx then
-                valid = true
-                break
+              local old_row = prev_selection_row
+              state.row_selection = { [anchor_row] = auto_sel }
+              prev_selection_row = anchor_row
+              -- Clear old row's indicator, set new row's indicator
+              if old_row and old_row ~= anchor_row then
+                diff_render.update_selection_at_row(
+                  main_buf,
+                  old_row,
+                  state.row_selection,
+                  row_ai,
+                  row_disc_map,
+                  state.current_user,
+                  state.review,
+                  state.editing_note,
+                  deb_line_data
+                )
               end
-            end
-          end
-          if not valid then
-            -- Data changed (item dismissed/accepted): full rerender
-            state.row_selection = { [anchor_row] = items[1] }
-            prev_selection_row = anchor_row
-            rerender_view()
-          elseif next(state.row_selection, next(state.row_selection)) or not state.row_selection[anchor_row] then
-            -- Clear selections on other rows — purely cosmetic
-            local old_row = prev_selection_row
-            state.row_selection = { [anchor_row] = state.row_selection[anchor_row] }
-            prev_selection_row = anchor_row
-            if old_row and old_row ~= anchor_row then
               diff_render.update_selection_at_row(
                 main_buf,
-                old_row,
+                anchor_row,
                 state.row_selection,
                 row_ai,
                 row_disc_map,
                 state.current_user,
                 state.review,
                 state.editing_note,
-                line_data
+                deb_line_data
               )
+            else
+              -- Validate prev_sel against current items (may be stale after dismiss/accept)
+              local valid = false
+              for _, item in ipairs(items) do
+                if item.type == prev_sel.type then
+                  if item.type == "ai" and item.index == prev_sel.index then
+                    valid = true
+                    break
+                  end
+                  if
+                    item.type == "comment"
+                    and item.disc_id == prev_sel.disc_id
+                    and item.note_idx == prev_sel.note_idx
+                  then
+                    valid = true
+                    break
+                  end
+                end
+              end
+              if not valid then
+                -- Data changed (item dismissed/accepted): full rerender
+                state.row_selection = { [anchor_row] = items[1] }
+                prev_selection_row = anchor_row
+                rerender_view()
+              elseif next(state.row_selection, next(state.row_selection)) or not state.row_selection[anchor_row] then
+                -- Clear selections on other rows — purely cosmetic
+                local old_row = prev_selection_row
+                state.row_selection = { [anchor_row] = state.row_selection[anchor_row] }
+                prev_selection_row = anchor_row
+                if old_row and old_row ~= anchor_row then
+                  diff_render.update_selection_at_row(
+                    main_buf,
+                    old_row,
+                    state.row_selection,
+                    row_ai,
+                    row_disc_map,
+                    state.current_user,
+                    state.review,
+                    state.editing_note,
+                    deb_line_data
+                  )
+                end
+                diff_render.update_selection_at_row(
+                  main_buf,
+                  anchor_row,
+                  state.row_selection,
+                  row_ai,
+                  row_disc_map,
+                  state.current_user,
+                  state.review,
+                  state.editing_note,
+                  deb_line_data
+                )
+              else
+                prev_selection_row = anchor_row
+              end
             end
-            diff_render.update_selection_at_row(
-              main_buf,
-              anchor_row,
-              state.row_selection,
-              row_ai,
-              row_disc_map,
-              state.current_user,
-              state.review,
-              state.editing_note,
-              line_data
-            )
           else
-            prev_selection_row = anchor_row
+            local had = next(state.row_selection) ~= nil
+            local old_row = prev_selection_row
+            state.row_selection = {}
+            prev_selection_row = nil
+            if had then
+              -- Clear old row's indicator only
+              if old_row then
+                diff_render.update_selection_at_row(
+                  main_buf,
+                  old_row,
+                  state.row_selection,
+                  row_ai,
+                  row_disc_map,
+                  state.current_user,
+                  state.review,
+                  state.editing_note,
+                  deb_line_data
+                )
+              end
+            end
           end
-        end
-      else
-        local had = next(state.row_selection) ~= nil
-        local old_row = prev_selection_row
-        state.row_selection = {}
-        prev_selection_row = nil
-        if had then
-          -- Clear old row's indicator only
-          if old_row then
-            diff_render.update_selection_at_row(
-              main_buf,
-              old_row,
-              state.row_selection,
-              row_ai,
-              row_disc_map,
-              state.current_user,
-              state.review,
-              state.editing_note,
-              line_data
-            )
-          end
-        end
-      end
 
-      -- Sync sidebar file highlight in scroll mode
-      if state.scroll_mode and #state.file_sections > 0 then
-        local file_idx = diff_nav.current_file_from_cursor(layout, state)
-        if file_idx ~= state.current_file then
-          state.current_file = file_idx
-          diff_sidebar.render_sidebar(layout.sidebar_buf, state)
-        end
-      end
-
-      -- Review tracking: mark visible hunks as seen, re-render sidebar on change
-      local track_idx = state.current_file or 1
-      local file_entry = state.files and state.files[track_idx]
-      local track_path = file_entry and (file_entry.new_path or file_entry.old_path)
-      if track_path then
-        local track_line_data = state.scroll_mode and state.scroll_line_data or (state.line_data_cache[track_idx] or {})
-        if #track_line_data > 0 then
-          if not state.file_review_status[track_path] then
-            state.file_review_status[track_path] =
-              tracker.init_file(track_path, track_line_data, state.scroll_mode and track_idx or nil)
-          end
-          local frs = state.file_review_status[track_path]
-          local ok, w0 = pcall(vim.fn.line, "w0")
-          if ok then
-            local win_height = vim.api.nvim_win_get_height(layout.main_win)
-            local changed = tracker.mark_visible(frs, w0, w0 + win_height - 1)
-            if changed then
+          -- Sync sidebar file highlight in scroll mode
+          if state.scroll_mode and #state.file_sections > 0 then
+            local file_idx = diff_nav.current_file_from_cursor(layout, state)
+            if file_idx ~= state.current_file then
+              state.current_file = file_idx
               diff_sidebar.render_sidebar(layout.sidebar_buf, state)
             end
           end
-        end
-      end
+
+          -- Review tracking: mark visible hunks as seen, re-render sidebar on change
+          local track_idx = state.current_file or 1
+          local file_entry = state.files and state.files[track_idx]
+          local track_path = file_entry and (file_entry.new_path or file_entry.old_path)
+          if track_path then
+            local track_line_data = state.scroll_mode and state.scroll_line_data
+              or (state.line_data_cache[track_idx] or {})
+            if #track_line_data > 0 then
+              if not state.file_review_status[track_path] then
+                state.file_review_status[track_path] =
+                  tracker.init_file(track_path, track_line_data, state.scroll_mode and track_idx or nil)
+              end
+              local frs = state.file_review_status[track_path]
+              local ok2, w0 = pcall(vim.fn.line, "w0")
+              if ok2 then
+                local win_height = vim.api.nvim_win_get_height(layout.main_win)
+                local changed = tracker.mark_visible(frs, w0, w0 + win_height - 1)
+                if changed then
+                  diff_sidebar.render_sidebar(layout.sidebar_buf, state)
+                end
+              end
+            end
+          end
+        end)
+      )
     end,
   })
 end
