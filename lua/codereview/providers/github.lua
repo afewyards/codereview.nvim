@@ -159,13 +159,10 @@ function M.list_reviews(client, ctx, opts)
     return nil, err
   end
   local owner, repo = parse_owner_repo(ctx)
-  local path_url = string.format("/repos/%s/%s/pulls", owner, repo)
-  local data, err2 = client.paginate_all(ctx.base_url, path_url, {
-    query = { state = opts.state or "open" },
-    headers = headers,
-  })
+  local url = string.format("%s/repos/%s/%s/pulls?state=%s", ctx.base_url, owner, repo, opts.state or "open")
+  local data = client.paginate_all_url(url, { headers = headers })
   if not data then
-    return nil, err2
+    return nil, "Failed to fetch pull requests"
   end
   local reviews = {}
   for _, pr in ipairs(data) do
