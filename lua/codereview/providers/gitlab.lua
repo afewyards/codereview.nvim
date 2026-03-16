@@ -219,6 +219,7 @@ function M.get_discussions(client, ctx, review)
   for _, d in ipairs(raw_discs) do
     table.insert(discussions, M.normalize_discussion(d))
   end
+  M.fetch_all_reactions(client, ctx, review, discussions)
   return discussions
 end
 
