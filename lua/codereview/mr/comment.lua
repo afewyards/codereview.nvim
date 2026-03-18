@@ -460,6 +460,53 @@ function M.create_comment(mr, opts)
   end, popup_opts)
 end
 
+--- Create an inline comment at a specific line.
+--- @param mr table  the MR/PR object
+--- @param old_path string
+--- @param new_path string
+--- @param old_line number|nil
+--- @param new_line number|nil
+--- @param optimistic table|nil  optimistic callbacks {add, remove, mark_failed, refresh}
+--- @param popup_opts table|nil  popup positioning opts
+function M.create_inline(mr, old_path, new_path, old_line, new_line, optimistic, popup_opts)
+  M.create_comment(mr, {
+    title = "Inline Comment",
+    api_fn = function(provider, client, ctx, review, text)
+      return provider.post_comment(client, ctx, review, text, {
+        old_path = old_path,
+        new_path = new_path,
+        old_line = old_line,
+        new_line = new_line,
+      })
+    end,
+    optimistic = optimistic,
+    success_msg = "Comment posted",
+    failure_msg = "Failed to post comment",
+    popup_opts = popup_opts,
+  })
+end
+
+--- Create a range comment over multiple lines.
+--- @param mr table  the MR/PR object
+--- @param old_path string
+--- @param new_path string
+--- @param start_pos table  { old_line, new_line }
+--- @param end_pos table  { old_line, new_line }
+--- @param optimistic table|nil  optimistic callbacks {add, remove, mark_failed, refresh}
+--- @param popup_opts table|nil  popup positioning opts
+function M.create_inline_range(mr, old_path, new_path, start_pos, end_pos, optimistic, popup_opts)
+  M.create_comment(mr, {
+    title = "Range Comment",
+    api_fn = function(provider, client, ctx, review, text)
+      return provider.post_range_comment(client, ctx, review, text, old_path, new_path, start_pos, end_pos)
+    end,
+    optimistic = optimistic,
+    success_msg = "Range comment posted",
+    failure_msg = "Failed to post range comment",
+    popup_opts = popup_opts,
+  })
+end
+
 function M.create_mr_comment(review, provider, ctx, on_success)
   -- No opts: summary view has no line context, always uses fallback centered float
   M.open_input_popup("Comment on MR", function(text)
