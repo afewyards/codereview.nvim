@@ -211,7 +211,10 @@ function M.open(title, opts)
 
   --- Return editable lines from the buffer (skipping header).
   function handle.get_text()
-    local lines = vim.api.nvim_buf_get_lines(buf, header_count, -1, false)
+    local ok, lines = pcall(vim.api.nvim_buf_get_lines, buf, header_count, -1, false)
+    if not ok or not lines then
+      return ""
+    end
     return vim.trim(table.concat(lines, "\n"))
   end
 

@@ -22,7 +22,7 @@ function M.open_input_popup(title, callback, opts)
   local function submit()
     local text = handle.get_text()
     close()
-    if text ~= "" then
+    if text and text ~= "" then
       callback(text)
     end
   end
@@ -42,7 +42,7 @@ function M.open_input_popup(title, callback, opts)
         return true
       end
       local text = handle.get_text()
-      if text ~= "" then
+      if text and text ~= "" then
         local choice = vim.fn.confirm("Discard comment?", "&Discard\n&Submit\n&Cancel", 3)
         if choice == 1 then
           close()
