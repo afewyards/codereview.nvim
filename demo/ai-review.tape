@@ -102,7 +102,7 @@ Sleep 1800ms
 
 # ── Submit review ──────────────────────────────────────────
 # Open submit float — should show AI-generated summary as prefill
-Type "S"
+Ctrl+S
 Sleep 1s
 # Clear the prefill and type custom review body
 Type "ggVGd"
