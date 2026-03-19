@@ -346,6 +346,8 @@ end
 --- Post an inline comment or general comment.
 --- @param position table|nil { old_path, new_path, old_line, new_line } or nil for general comment
 function M.post_comment(client, ctx, review, body, position)
+  local log = require("codereview.log")
+  log.debug(string.format("gitlab.post_comment: body=%q type=%s", tostring(body), type(body)))
   local headers, err = get_headers()
   if not headers then
     return nil, err
@@ -406,6 +408,8 @@ end
 
 --- Reply to an existing discussion thread.
 function M.reply_to_discussion(client, ctx, review, discussion_id, body)
+  local log = require("codereview.log")
+  log.debug(string.format("gitlab.reply_to_discussion: body=%q type=%s", tostring(body), type(body)))
   local headers, err = get_headers()
   if not headers then
     return nil, err

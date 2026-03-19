@@ -46,6 +46,9 @@ local function build_params(method, base_url, path, opts)
 
   if opts.body then
     params.body = vim.json.encode(opts.body)
+    log.debug(string.format("build_params: json_body=%s", params.body))
+  else
+    log.debug("build_params: NO body in opts")
   end
 
   if opts.query then
@@ -90,6 +93,15 @@ local function safe_request(params)
 end
 
 local function safe_async_request(params)
+  log.debug(
+    string.format(
+      "safe_async_request: method=%s body_present=%s body_len=%s body_preview=%s",
+      tostring(params.method),
+      tostring(params.body ~= nil),
+      params.body and tostring(#params.body) or "nil",
+      params.body and string.sub(params.body, 1, 200) or "nil"
+    )
+  )
   local tx, rx = require("plenary.async.control").channel.oneshot()
   params.callback = function(response)
     tx(response)

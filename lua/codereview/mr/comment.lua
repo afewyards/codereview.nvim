@@ -1,6 +1,7 @@
 local markdown = require("codereview.ui.markdown")
 local detail = require("codereview.mr.detail")
 local comment_float = require("codereview.mr.comment_float")
+local log = require("codereview.log")
 local M = {}
 
 --- Open a floating popup for multi-line comment input.
@@ -21,6 +22,7 @@ function M.open_input_popup(title, callback, opts)
 
   local function submit()
     local text = handle.get_text()
+    log.debug(string.format("comment.submit: text=%q type=%s", tostring(text), type(text)))
     close()
     if text and text ~= "" then
       callback(text)
@@ -194,6 +196,7 @@ function M.reply(disc, mr, optimistic, opts)
     opts.context_text = "@" .. (first.author or "?") .. ": " .. snippet
   end
   M.open_input_popup("Reply", function(text)
+    log.debug(string.format("reply callback: text=%q type=%s", tostring(text), type(text)))
     local note
     if optimistic and optimistic.add_reply then
       note = optimistic.add_reply(text)
@@ -208,6 +211,7 @@ function M.reply(disc, mr, optimistic, opts)
         return
       end
       M.post_with_retry(function()
+        log.debug(string.format("reply_to_discussion: disc.id=%s text=%q", tostring(disc.id), tostring(text)))
         return provider.reply_to_discussion(async_client, ctx, mr, disc.id, text)
       end, function()
         vim.notify("Reply posted", vim.log.levels.INFO)
@@ -510,6 +514,7 @@ end
 function M.create_mr_comment(review, provider, ctx, on_success)
   -- No opts: summary view has no line context, always uses fallback centered float
   M.open_input_popup("Comment on MR", function(text)
+    log.debug(string.format("create_mr_comment callback: text=%q type=%s", tostring(text), type(text)))
     if not provider or not ctx then
       return
     end
