@@ -983,12 +983,8 @@ function M.setup_keymaps(state, layout, active_states)
       diff_nav.toggle_scroll_mode(layout, state)
     end,
 
-    -- a: approve (summary mode) or accept AI suggestion at cursor (diff mode)
+    -- a: accept AI suggestion at cursor (diff mode only)
     accept_suggestion = function()
-      if state.view_mode == "summary" then
-        require("codereview.mr.actions").approve(state.review)
-        return
-      end
       if state.view_mode ~= "diff" then
         return
       end
