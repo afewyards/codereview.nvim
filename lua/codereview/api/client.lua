@@ -130,9 +130,6 @@ local function safe_async_request(params)
   return rx()
 end
 
---- Ensure opts has auth headers, using token auth.
---- @return table opts with headers set
---- @return string|nil error if no token found
 local function ensure_auth_headers(opts)
   if opts.headers then
     return opts, nil
@@ -148,7 +145,6 @@ end
 function M.request(method, base_url, path, opts)
   opts = opts or {}
 
-  -- Route through gh transport when available
   if use_gh(base_url) then
     return transport.gh_request(method, base_url, path, opts)
   end
@@ -199,8 +195,6 @@ end
 function M.async_request(method, base_url, path, opts)
   opts = opts or {}
 
-  -- gh transport for async — gh CLI is synchronous, so we run it the same way.
-  -- For async callers this still works because plenary.async yields on io.popen.
   if use_gh(base_url) then
     return transport.gh_request(method, base_url, path, opts)
   end
@@ -287,7 +281,6 @@ end
 function M.get_url(full_url, opts)
   opts = opts or {}
 
-  -- Route full-URL requests through gh when applicable
   if use_gh(full_url) then
     local path = url_to_path(full_url)
     return transport.gh_request("get", full_url, path, opts)
@@ -462,7 +455,6 @@ function M.async_paginate_all_url(start_url, opts)
 end
 
 function M.graphql(url, headers, query, variables)
-  -- Route GraphQL through gh when available
   if use_gh(url) then
     return transport.gh_graphql(query, variables)
   end
@@ -544,13 +536,7 @@ function M.async_graphql(url, headers, query, variables)
   return data.data
 end
 
---- Download text content following redirects.
---- Used by providers for endpoints that return 302 (e.g. job logs).
---- Routes through gh CLI when available, otherwise uses curl -sL.
---- @param url string Full URL to download
---- @param headers table|nil Auth headers (only used for curl transport)
---- @return string|nil text
---- @return string|nil error
+--- Download text content following redirects (e.g. job logs returning 302).
 function M.download_text(url, headers)
   if use_gh(url) then
     local path = url_to_path(url)

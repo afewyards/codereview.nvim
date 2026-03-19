@@ -1065,7 +1065,6 @@ function M.get_job_trace(client, ctx, review, job_id)
   local job_result = client.get(ctx.base_url, job_path, { headers = headers })
   local steps = job_result and job_result.data and job_result.data.steps
   -- Per-job endpoint returns a 302 → plain text (no ZIP).
-  -- Route through client.download_text which handles both gh and curl transports.
   local log_url = string.format("%s/repos/%s/%s/actions/jobs/%s/logs", ctx.base_url, owner, repo, actions_job_id)
   local text, dl_err = client.download_text(log_url, headers)
   if not text then

@@ -16,9 +16,7 @@ local function gh_is_available()
     return false
   end
   local output = handle:read("*a")
-  local _, _, code = handle:close()
-  -- io.popen close returns (true, "exit", 0) on success in Lua 5.1+
-  -- but in LuaJIT the return varies, so check output content
+  handle:close()
   return output:find("Logged in to github.com") ~= nil
 end
 
@@ -67,7 +65,6 @@ function M.gh_request(method, base_url, path, opts)
 
   local args = { "gh", "api", path, "--method", method:upper() }
 
-  -- Add query params
   if opts.query then
     for k, v in pairs(opts.query) do
       table.insert(args, "-f")
@@ -75,15 +72,12 @@ function M.gh_request(method, base_url, path, opts)
     end
   end
 
-  -- Add JSON body fields
   if opts.body then
-    local json_body = vim.json.encode(opts.body)
     table.insert(args, "--input")
     table.insert(args, "-")
-    -- We'll pipe the body via stdin
   end
 
-  -- Add custom headers (skip auth headers since gh handles that)
+  -- Skip auth headers — gh handles authentication
   if opts.headers then
     for k, v in pairs(opts.headers) do
       if k ~= "Authorization" and k ~= "PRIVATE-TOKEN" then
@@ -93,7 +87,6 @@ function M.gh_request(method, base_url, path, opts)
     end
   end
 
-  -- Include response headers for pagination
   table.insert(args, "--include")
 
   log.debug(string.format("GH REQ %s %s", method:upper(), path))
@@ -102,7 +95,6 @@ function M.gh_request(method, base_url, path, opts)
   local result
   if opts.body then
     local json_body = vim.json.encode(opts.body)
-    -- Pipe body via stdin
     local handle = io.popen("echo " .. vim.fn.shellescape(json_body) .. " | " .. cmd .. " 2>&1")
     if not handle then
       return nil, "Failed to execute gh command"
@@ -118,10 +110,8 @@ function M.gh_request(method, base_url, path, opts)
     handle:close()
   end
 
-  -- --include puts HTTP status + headers before a blank line, then body
   local header_block, body = result:match("^(.-)\r?\n\r?\n(.*)$")
   if not header_block then
-    -- No header block — might be an error message
     if result:match("^gh:") or result:match("error") then
       return nil, result
     end
@@ -129,14 +119,12 @@ function M.gh_request(method, base_url, path, opts)
     header_block = ""
   end
 
-  -- Parse status from first line
   local status = 200
   local status_match = header_block:match("HTTP/%S+ (%d+)")
   if status_match then
     status = tonumber(status_match)
   end
 
-  -- Parse headers
   local headers = {}
   for line in header_block:gmatch("[^\r\n]+") do
     local k, v = line:match("^([^:]+):%s*(.+)")
@@ -150,7 +138,6 @@ function M.gh_request(method, base_url, path, opts)
     return nil, string.format("HTTP %d: %s", status, body or "")
   end
 
-  -- Parse JSON body
   local data = nil
   if body and body ~= "" then
     local ok, decoded = pcall(vim.json.decode, body)
@@ -172,7 +159,6 @@ function M.gh_request(method, base_url, path, opts)
   }
 end
 
---- Parse Link header for next URL (same logic as client.lua).
 function M.parse_link_next(link)
   if not link then
     return nil
