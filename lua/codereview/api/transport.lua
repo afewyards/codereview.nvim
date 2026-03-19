@@ -8,21 +8,11 @@ local M = {}
 
 local _detected_transport = nil
 
---- Check if gh CLI is available and authenticated for GitHub.
---- @return boolean
 local function gh_is_available()
-  local handle = io.popen("gh auth status 2>&1")
-  if not handle then
-    return false
-  end
-  local output = handle:read("*a")
-  handle:close()
+  local output = vim.fn.system({ "gh", "auth", "status" })
   return output:find("Logged in to github.com") ~= nil
 end
 
---- Resolve the active transport for a given platform.
---- @param platform string "github" | "gitlab"
---- @return string "gh" | "curl"
 function M.resolve(platform)
   local config = require("codereview.config").get()
   local configured = config.transport
@@ -52,14 +42,6 @@ function M.resolve(platform)
   return _detected_transport
 end
 
---- Execute a request via gh CLI.
---- gh api handles auth, base URL, and JSON parsing automatically.
---- @param method string HTTP method (get, post, put, delete, patch)
---- @param base_url string API base URL (used to extract path for gh)
---- @param path string API path (e.g. "/repos/owner/repo/pulls")
---- @param opts table { body?, query?, headers? }
---- @return table|nil response { data, status, headers, next_page, next_url }
---- @return string|nil error
 function M.gh_request(method, base_url, path, opts)
   opts = opts or {}
 
@@ -91,30 +73,15 @@ function M.gh_request(method, base_url, path, opts)
 
   log.debug(string.format("GH REQ %s %s", method:upper(), path))
 
-  local cmd = table.concat(args, " ")
-  local result
-  if opts.body then
-    local json_body = vim.json.encode(opts.body)
-    local handle = io.popen("echo " .. vim.fn.shellescape(json_body) .. " | " .. cmd .. " 2>&1")
-    if not handle then
-      return nil, "Failed to execute gh command"
-    end
-    result = handle:read("*a")
-    handle:close()
-  else
-    local handle = io.popen(cmd .. " 2>&1")
-    if not handle then
-      return nil, "Failed to execute gh command"
-    end
-    result = handle:read("*a")
-    handle:close()
+  local stdin = opts.body and vim.json.encode(opts.body) or nil
+  local result = vim.fn.system(args, stdin)
+  if vim.v.shell_error ~= 0 and result:match("^gh:") then
+    return nil, result
   end
 
-  local header_block, body = result:match("^(.-)\r?\n\r?\n(.*)$")
+  -- Split headers from body on the first blank line
+  local header_block, body = result:match("^(.-)\n\r?\n(.*)$")
   if not header_block then
-    if result:match("^gh:") or result:match("error") then
-      return nil, result
-    end
     body = result
     header_block = ""
   end
@@ -166,25 +133,15 @@ function M.parse_link_next(link)
   return link:match('<([^>]+)>%s*;%s*rel="next"')
 end
 
---- Execute a GraphQL request via gh CLI.
---- @param query string GraphQL query
---- @param variables table|nil GraphQL variables
---- @return table|nil data
---- @return string|nil error
 function M.gh_graphql(query, variables)
-  local args = { "gh", "api", "graphql" }
-
   local payload = vim.json.encode({ query = query, variables = variables or {} })
 
   log.debug("GH GraphQL request")
 
-  local cmd = table.concat(args, " ") .. " --input -"
-  local handle = io.popen("echo " .. vim.fn.shellescape(payload) .. " | " .. cmd .. " 2>&1")
-  if not handle then
-    return nil, "Failed to execute gh graphql command"
+  local result = vim.fn.system({ "gh", "api", "graphql", "--input", "-" }, payload)
+  if vim.v.shell_error ~= 0 then
+    return nil, "gh graphql failed: " .. result
   end
-  local result = handle:read("*a")
-  handle:close()
 
   local ok, data = pcall(vim.json.decode, result)
   if not ok then
@@ -202,22 +159,15 @@ function M.gh_graphql(query, variables)
   return data.data
 end
 
---- Download text content following redirects via gh CLI.
---- Used for endpoints like GitHub Actions job logs that return 302.
---- @param path string API path
---- @return string|nil text
---- @return string|nil error
 function M.gh_download_text(path)
-  local handle = io.popen("gh api " .. vim.fn.shellescape(path) .. " 2>&1")
-  if not handle then
-    return nil, "Failed to execute gh command"
+  local result = vim.fn.system({ "gh", "api", path })
+  if vim.v.shell_error ~= 0 then
+    return nil, "gh download failed: " .. result
   end
-  local text = handle:read("*a")
-  handle:close()
-  if text == "" then
+  if result == "" then
     return nil, "Empty response from gh"
   end
-  return text
+  return result
 end
 
 function M.reset()
