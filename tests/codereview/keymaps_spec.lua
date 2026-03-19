@@ -20,7 +20,7 @@ describe("keymaps", function()
   end)
 
   describe("defaults", function()
-    it("has all 35 actions", function()
+    it("has all 32 actions", function()
       keymaps.setup()
       local all = keymaps.get_all()
       assert.equals("]f", all.next_file.key)
@@ -28,12 +28,12 @@ describe("keymaps", function()
       assert.equals("[f", all.prev_file.key)
       assert.equals("cc", all.create_comment.key)
       assert.equals("v", all.create_range_comment.mode)
-      assert.equals("Q", all.quit.key)
+      assert.equals("<C-q>", all.quit.key)
       local count = 0
       for _ in pairs(all) do
         count = count + 1
       end
-      assert.equals(35, count)
+      assert.equals(32, count)
     end)
 
     it("has select_next_note default", function()
@@ -121,7 +121,7 @@ describe("keymaps", function()
       config.setup({ keymaps = { next_file = "<Tab>", approve = false } })
       assert.equals("<Tab>", keymaps.get("next_file"))
       assert.is_false(keymaps.get("approve"))
-      assert.equals("Q", keymaps.get("quit"))
+      assert.equals("<C-q>", keymaps.get("quit"))
       config.reset()
     end)
   end)
@@ -161,18 +161,18 @@ describe("keymaps", function()
       }
 
       keymaps.apply(0, {
-        accept_suggestion = function()
-          table.insert(called, "accept")
+        edit_suggestion = function()
+          table.insert(called, "edit_suggestion")
         end,
-        approve = function()
-          table.insert(called, "approve")
+        edit_note = function()
+          table.insert(called, "edit_note")
         end,
       })
 
       assert.is_not_nil(registered_fn)
       registered_fn()
       table.sort(called)
-      assert.same({ "accept", "approve" }, called)
+      assert.same({ "edit_note", "edit_suggestion" }, called)
     end)
 
     it("registers a single callback directly without a wrapper", function()
@@ -189,7 +189,7 @@ describe("keymaps", function()
         quit = orig_fn,
       })
 
-      assert.equals(orig_fn, registered_fns["Q"])
+      assert.equals(orig_fn, registered_fns["<C-q>"])
     end)
   end)
 end)
