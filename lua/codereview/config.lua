@@ -5,6 +5,7 @@ local defaults = {
   base_url = nil, -- API base URL override (auto-detected). Alias: gitlab_url
   project = nil,
   platform = nil, -- "github" | "gitlab" | nil (auto-detect)
+  transport = "auto", -- "auto" | "gh" | "curl" — auto tries gh CLI first, falls back to curl
   github_token = nil,
   gitlab_token = nil,
   picker = nil,
@@ -41,6 +42,10 @@ local function deep_merge(base, override)
 end
 
 local function validate(c)
+  local valid_transports = { auto = true, gh = true, curl = true }
+  if not valid_transports[c.transport] then
+    c.transport = "auto"
+  end
   c.diff.context = math.max(0, math.min(20, c.diff.context))
   local valid_levels = { info = true, suggestion = true, warning = true, error = true }
   if not valid_levels[c.ai.review_level] then

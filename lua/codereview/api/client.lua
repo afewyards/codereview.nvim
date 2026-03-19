@@ -1,6 +1,23 @@
 local curl = require("plenary.curl")
 local log = require("codereview.log")
+local transport = require("codereview.api.transport")
 local M = {}
+
+--- Check if the current request should use gh transport.
+--- Platform is inferred from the base_url (github.com → github).
+local function use_gh(base_url)
+  if not base_url then
+    return false
+  end
+  local platform = base_url:find("github") and "github" or "gitlab"
+  return transport.resolve(platform) == "gh"
+end
+
+--- Extract path from a full URL for gh api calls.
+--- e.g. "https://api.github.com/repos/foo/bar" → "/repos/foo/bar"
+local function url_to_path(full_url)
+  return full_url:match("^https?://[^/]+(/.*)$") or full_url
+end
 
 local function build_headers(token, token_type)
   if token_type == "oauth" then
@@ -113,17 +130,33 @@ local function safe_async_request(params)
   return rx()
 end
 
+--- Ensure opts has auth headers, using token auth.
+--- @return table opts with headers set
+--- @return string|nil error if no token found
+local function ensure_auth_headers(opts)
+  if opts.headers then
+    return opts, nil
+  end
+  local auth = require("codereview.api.auth")
+  local token, token_type = auth.get_token()
+  if not token then
+    return opts, "No authentication token. Run :CodeReviewAuth"
+  end
+  return vim.tbl_extend("keep", opts, { headers = build_headers(token, token_type) }), nil
+end
+
 function M.request(method, base_url, path, opts)
   opts = opts or {}
 
-  -- Fall back to token auth if no headers provided (legacy support)
-  if not opts.headers then
-    local auth = require("codereview.api.auth")
-    local token, token_type = auth.get_token()
-    if not token then
-      return nil, "No authentication token. Run :CodeReviewAuth"
-    end
-    opts = vim.tbl_extend("keep", opts, { headers = build_headers(token, token_type) })
+  -- Route through gh transport when available
+  if use_gh(base_url) then
+    return transport.gh_request(method, base_url, path, opts)
+  end
+
+  local auth_err
+  opts, auth_err = ensure_auth_headers(opts)
+  if auth_err then
+    return nil, auth_err
   end
 
   local params = build_params(method, base_url, path, opts)
@@ -166,14 +199,16 @@ end
 function M.async_request(method, base_url, path, opts)
   opts = opts or {}
 
-  -- Fall back to token auth if no headers provided (legacy support)
-  if not opts.headers then
-    local auth = require("codereview.api.auth")
-    local token, token_type = auth.get_token()
-    if not token then
-      return nil, "No authentication token. Run :CodeReviewAuth"
-    end
-    opts = vim.tbl_extend("keep", opts, { headers = build_headers(token, token_type) })
+  -- gh transport for async — gh CLI is synchronous, so we run it the same way.
+  -- For async callers this still works because plenary.async yields on io.popen.
+  if use_gh(base_url) then
+    return transport.gh_request(method, base_url, path, opts)
+  end
+
+  local auth_err
+  opts, auth_err = ensure_auth_headers(opts)
+  if auth_err then
+    return nil, auth_err
   end
 
   local params = build_params(method, base_url, path, opts)
@@ -252,14 +287,16 @@ end
 function M.get_url(full_url, opts)
   opts = opts or {}
 
-  -- Fall back to token auth if no headers provided (legacy support)
-  if not opts.headers then
-    local auth = require("codereview.api.auth")
-    local token, token_type = auth.get_token()
-    if not token then
-      return nil, "No authentication token. Run :CodeReviewAuth"
-    end
-    opts = vim.tbl_extend("keep", opts, { headers = build_headers(token, token_type) })
+  -- Route full-URL requests through gh when applicable
+  if use_gh(full_url) then
+    local path = url_to_path(full_url)
+    return transport.gh_request("get", full_url, path, opts)
+  end
+
+  local auth_err
+  opts, auth_err = ensure_auth_headers(opts)
+  if auth_err then
+    return nil, auth_err
   end
 
   local params = {
@@ -286,14 +323,15 @@ end
 function M.async_get_url(full_url, opts)
   opts = opts or {}
 
-  -- Fall back to token auth if no headers provided (legacy support)
-  if not opts.headers then
-    local auth = require("codereview.api.auth")
-    local token, token_type = auth.get_token()
-    if not token then
-      return nil, "No authentication token. Run :CodeReviewAuth"
-    end
-    opts = vim.tbl_extend("keep", opts, { headers = build_headers(token, token_type) })
+  if use_gh(full_url) then
+    local path = url_to_path(full_url)
+    return transport.gh_request("get", full_url, path, opts)
+  end
+
+  local auth_err
+  opts, auth_err = ensure_auth_headers(opts)
+  if auth_err then
+    return nil, auth_err
   end
 
   local params = {
@@ -424,6 +462,11 @@ function M.async_paginate_all_url(start_url, opts)
 end
 
 function M.graphql(url, headers, query, variables)
+  -- Route GraphQL through gh when available
+  if use_gh(url) then
+    return transport.gh_graphql(query, variables)
+  end
+
   local payload = { query = query, variables = variables }
   local params = {
     url = url,
@@ -461,6 +504,10 @@ function M.graphql(url, headers, query, variables)
 end
 
 function M.async_graphql(url, headers, query, variables)
+  if use_gh(url) then
+    return transport.gh_graphql(query, variables)
+  end
+
   local payload = { query = query, variables = variables }
   local params = {
     url = url,
@@ -495,6 +542,34 @@ function M.async_graphql(url, headers, query, variables)
   end
 
   return data.data
+end
+
+--- Download text content following redirects.
+--- Used by providers for endpoints that return 302 (e.g. job logs).
+--- Routes through gh CLI when available, otherwise uses curl -sL.
+--- @param url string Full URL to download
+--- @param headers table|nil Auth headers (only used for curl transport)
+--- @return string|nil text
+--- @return string|nil error
+function M.download_text(url, headers)
+  if use_gh(url) then
+    local path = url_to_path(url)
+    return transport.gh_download_text(path)
+  end
+
+  local text = vim.fn.system({
+    "curl",
+    "-sL",
+    "-H",
+    "Authorization: " .. (headers and headers["Authorization"] or ""),
+    "-H",
+    "Accept: application/vnd.github+json",
+    url,
+  })
+  if vim.v.shell_error ~= 0 then
+    return nil, "Failed to download content"
+  end
+  return text
 end
 
 return M

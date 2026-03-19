@@ -101,6 +101,20 @@ function M.get_token(platform)
     return config[config_key], "pat"
   end
 
+  -- 4. gh CLI token (GitHub only)
+  if platform == "github" then
+    local handle = io.popen("gh auth token 2>/dev/null")
+    if handle then
+      local gh_token = handle:read("*a"):match("^%s*(.-)%s*$")
+      handle:close()
+      if gh_token and gh_token ~= "" then
+        log.info("get_token: using gh auth token")
+        cached[platform] = { token = gh_token, type = "pat" }
+        return gh_token, "pat"
+      end
+    end
+  end
+
   log.warn("get_token: no token found for platform=" .. platform)
   return nil, nil
 end
