@@ -895,10 +895,37 @@ function M.setup_keymaps(state, layout, active_states)
         return
       end
       local disc = get_cursor_disc()
-      if disc then
-        local comment = require("codereview.mr.comment")
-        comment.resolve_toggle(disc, state.review, refresh_discussions)
+      if not disc then
+        return
       end
+      -- Failed optimistic comment: retry instead of resolve
+      if disc.is_failed then
+        disc.is_failed = false
+        disc.is_optimistic = true
+        rerender_view()
+        local note = disc.notes and disc.notes[1]
+        if not note then
+          return
+        end
+        local provider, _, ctx = require("codereview.providers").detect()
+        if not provider then
+          return
+        end
+        local async_client = require("codereview.api.async_client")
+        local pos = note.position or {}
+        require("codereview.mr.comment").post_with_retry(function()
+          return provider.post_comment(async_client, ctx, state.review, note.body, pos)
+        end, function()
+          vim.notify("Comment posted", vim.log.levels.INFO)
+          refresh_discussions()
+        end, function(err)
+          vim.notify("Retry failed: " .. err, vim.log.levels.ERROR)
+          mark_optimistic_failed(disc)
+        end)
+        return
+      end
+      local comment = require("codereview.mr.comment")
+      comment.resolve_toggle(disc, state.review, refresh_discussions)
     end,
 
     increase_context = function()
@@ -976,13 +1003,6 @@ function M.setup_keymaps(state, layout, active_states)
       end
     end,
 
-    toggle_scroll_mode = function()
-      if state.view_mode ~= "diff" then
-        return
-      end
-      diff_nav.toggle_scroll_mode(layout, state)
-    end,
-
     -- a: accept AI suggestion at cursor (diff mode only)
     accept_suggestion = function()
       if state.view_mode ~= "diff" then
@@ -1026,11 +1046,7 @@ function M.setup_keymaps(state, layout, active_states)
       end)
     end,
 
-    -- approve shares default key "a" with accept_suggestion; independent remapping supported
     approve = function()
-      if state.view_mode ~= "summary" then
-        return
-      end
       require("codereview.mr.actions").approve(state.review)
     end,
 
@@ -1127,9 +1143,6 @@ function M.setup_keymaps(state, layout, active_states)
     end,
 
     submit = function()
-      if state.view_mode ~= "diff" then
-        return
-      end
       local session = require("codereview.review.session")
       local submit_float = require("codereview.mr.submit_float")
       local submit_mod = require("codereview.review.submit")
@@ -2079,12 +2092,6 @@ function M.setup_keymaps(state, layout, active_states)
       end
       diff_nav.nav_file(layout, state, -1)
     end,
-    toggle_scroll_mode = function()
-      if state.view_mode ~= "diff" then
-        return
-      end
-      diff_nav.toggle_scroll_mode(layout, state)
-    end,
     pick_comments = function()
       require("codereview.picker.comments").pick(state, layout)
     end,
@@ -2100,6 +2107,8 @@ function M.setup_keymaps(state, layout, active_states)
     prev_commit = function()
       nav_commit(1)
     end,
+    approve = main_callbacks.approve,
+    submit = main_callbacks.submit,
     refresh = refresh,
     quit = quit,
   }
@@ -2107,40 +2116,6 @@ function M.setup_keymaps(state, layout, active_states)
   km.apply(sidebar_buf, sidebar_callbacks)
 
   -- ── Non-registry keymaps ─────────────────────────────────────────────────────
-
-  -- R: retry a failed optimistic comment
-  map(main_buf, "n", "R", function()
-    if state.view_mode ~= "diff" then
-      return
-    end
-    local disc = get_cursor_disc()
-    if not disc or not disc.is_failed then
-      return
-    end
-    disc.is_failed = false
-    disc.is_optimistic = true
-    rerender_view()
-    local note = disc.notes and disc.notes[1]
-    if not note then
-      return
-    end
-    local provider, _, ctx = require("codereview.providers").detect()
-    if not provider then
-      return
-    end
-    local async_client = require("codereview.api.async_client")
-    local comment = require("codereview.mr.comment")
-    local pos = note.position or {}
-    comment.post_with_retry(function()
-      return provider.post_comment(async_client, ctx, state.review, note.body, pos)
-    end, function()
-      vim.notify("Comment posted", vim.log.levels.INFO)
-      refresh_discussions()
-    end, function(err)
-      vim.notify("Retry failed: " .. err, vim.log.levels.ERROR)
-      mark_optimistic_failed(disc)
-    end)
-  end)
 
   -- D: discard a failed optimistic comment
   map(main_buf, "n", "D", function()

@@ -16,6 +16,10 @@ local function format_key(key)
     ["<C%-f>"] = "⌃F",
     ["<C%-d>"] = "⌃D",
     ["<C%-e>"] = "⌃E",
+    ["<C%-s>"] = "⌃S",
+    ["<C%-r>"] = "⌃R",
+    ["<C%-q>"] = "⌃Q",
+    ["<C%-m>"] = "⌃M",
   }
 
   for pattern, replacement in pairs(replacements) do
@@ -38,25 +42,39 @@ function M.build_lines()
     navigation = {
       { action = "next_file", desc = "Next file" },
       { action = "prev_file", desc = "Previous file" },
+      { action = "next_commit", desc = "Next commit" },
+      { action = "prev_commit", desc = "Previous commit" },
+      { action = "move_down", desc = "Move down" },
+      { action = "move_up", desc = "Move up" },
+      { action = "select_next_note", desc = "Next note" },
+      { action = "select_prev_note", desc = "Previous note" },
       { action = "toggle_full_file", desc = "Toggle full file" },
-      { action = "toggle_scroll_mode", desc = "Toggle scroll mode" },
     },
     review = {
       { action = "create_comment", desc = "New comment" },
       { action = "create_range_comment", desc = "Range comment" },
       { action = "reply", desc = "Reply" },
+      { action = "edit_note", desc = "Edit note" },
+      { action = "delete_note", desc = "Delete note" },
+      { action = "react", desc = "React to note" },
       { action = "toggle_resolve", desc = "Toggle resolve" },
       { action = "accept_suggestion", desc = "Accept suggestion" },
       { action = "dismiss_suggestion", desc = "Dismiss suggestion" },
+      { action = "dismiss_all_suggestions", desc = "Dismiss all" },
       { action = "submit", desc = "Submit review" },
       { action = "approve", desc = "Approve" },
+      { action = "merge", desc = "Merge" },
     },
     general = {
-      { action = "open_in_browser", desc = "Open in browser" },
       { action = "ai_review", desc = "AI review" },
+      { action = "ai_review_file", desc = "AI review file" },
+      { action = "open_in_browser", desc = "Open in browser" },
+      { action = "show_pipeline", desc = "Pipeline" },
+      { action = "pick_files", desc = "Pick files" },
+      { action = "pick_comments", desc = "Pick comments" },
+      { action = "pick_commits", desc = "Pick commits" },
       { action = "refresh", desc = "Refresh" },
       { action = "quit", desc = "Quit" },
-      { action = "pick_files", desc = "Pick files" },
     },
   }
 
@@ -113,7 +131,7 @@ function M.open()
 
   -- Create floating window configuration
   local width = 60
-  local height = 20
+  local height = math.min(#lines + 2, math.floor((tonumber(vim.o.lines) or 24) * 0.8))
   local screen_lines = tonumber(vim.o.lines) or 24
   local columns = tonumber(vim.o.columns) or 80
   local win_cfg = {

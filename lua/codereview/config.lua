@@ -9,6 +9,7 @@ local defaults = {
   gitlab_token = nil,
   picker = nil,
   debug = false, -- write request/auth logs to .codereview.log
+  open_in_tab = true,
   diff = { context = 8, scroll_threshold = 50, comment_width = 80, separator_char = "╳", separator_lines = 3 },
   pipeline = { poll_interval = 10000, log_max_lines = 5000 },
   ai = {

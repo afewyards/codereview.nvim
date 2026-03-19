@@ -162,4 +162,18 @@ function M.commits()
   end)
 end
 
+function M.toggle_scroll_mode()
+  local buf = vim.api.nvim_get_current_buf()
+  local diff_mod = require("codereview.mr.diff")
+  local active = diff_mod.get_state(buf)
+  if not active then
+    vim.notify("Open a diff view first with :CodeReview", vim.log.levels.WARN)
+    return
+  end
+  if active.state.view_mode ~= "diff" then
+    return
+  end
+  require("codereview.mr.diff_nav").toggle_scroll_mode(active.layout, active.state)
+end
+
 return M

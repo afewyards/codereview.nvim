@@ -369,18 +369,34 @@ function M.build(disc, opts)
 
   -- Footer
   local footer_content
+  local km = require("codereview.keymaps")
   if is_err then
-    footer_content = "R:retry  D:discard"
+    local k_resolve = km.get("toggle_resolve") or "R"
+    footer_content = k_resolve .. ":retry  D:discard"
   elseif is_pending then
     footer_content = "posting…"
   elseif sel_idx and not editing_this then
     local sel_note = notes[sel_idx]
+    local k_reply = km.get("reply") or "r"
+    local k_resolve = km.get("toggle_resolve") or "R"
+    local k_edit = km.get("edit_note") or "e"
+    local k_delete = km.get("delete_note") or "x"
+    local k_react = km.get("react") or "rr"
     if disc.is_draft then
-      footer_content = "x:delete"
+      footer_content = k_delete .. ":delete"
     elseif sel_note and current_user and sel_note.author == current_user then
-      footer_content = "r:reply  gt:un/resolve  e:edit  x:delete  \\e:react"
+      footer_content = k_reply
+        .. ":reply  "
+        .. k_resolve
+        .. ":un/resolve  "
+        .. k_edit
+        .. ":edit  "
+        .. k_delete
+        .. ":delete  "
+        .. k_react
+        .. ":react"
     else
-      footer_content = "r:reply  gt:un/resolve  \\e:react"
+      footer_content = k_reply .. ":reply  " .. k_resolve .. ":un/resolve  " .. k_react .. ":react"
     end
   end
 

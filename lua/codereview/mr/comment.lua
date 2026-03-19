@@ -22,10 +22,20 @@ function M.open_input_popup(title, callback, opts)
 
   local function submit()
     local text = handle.get_text()
-    log.debug(string.format("comment.submit: text=%q type=%s", tostring(text), type(text)))
+    log.debug(
+      string.format(
+        "comment.submit: text=%q type=%s buf_valid=%s closed=%s",
+        tostring(text),
+        type(text),
+        tostring(vim.api.nvim_buf_is_valid(buf)),
+        tostring(handle.closed)
+      )
+    )
     close()
     if text and text ~= "" then
       callback(text)
+    else
+      log.debug("comment.submit: SKIPPED callback — text empty or nil")
     end
   end
 
@@ -40,10 +50,12 @@ function M.open_input_popup(title, callback, opts)
   vim.api.nvim_create_autocmd("WinLeave", {
     buffer = buf,
     callback = function()
+      log.debug(string.format("WinLeave fired: closed=%s", tostring(handle.closed)))
       if handle.closed then
         return true
       end
       local text = handle.get_text()
+      log.debug(string.format("WinLeave: text=%q", tostring(text)))
       if text and text ~= "" then
         local choice = vim.fn.confirm("Discard comment?", "&Discard\n&Submit\n&Cancel", 3)
         if choice == 1 then

@@ -59,6 +59,7 @@
     "CodeReviewPipeline",
     "CodeReviewComments",
     "CodeReviewFiles",
+    "CodeReviewToggleScroll",
   },
   opts = {},
 }
@@ -131,6 +132,9 @@ require("codereview").setup({
 
   -- Debug logging to .codereview.log
   debug = false,
+
+  -- Open review in a new tab (set false to use current window)
+  open_in_tab = true,
 
   -- Diff viewer
   diff = {
@@ -211,7 +215,9 @@ The AI is instructed to skip items below the configured level, saving tokens and
 | Key | Action |
 |-----|--------|
 | `]f` / `[f` | Next / previous file |
-| `Tab` / `S-Tab` | Next / previous annotation (comment or AI suggestion), cycles within row then across rows and files |
+| `]c` / `[c` | Next / previous commit |
+| `j` / `k` | Move down / up (comment-aware) |
+| `<Tab>` / `<S-Tab>` | Next / previous note in thread |
 
 ### Comments & Discussions
 
@@ -220,15 +226,10 @@ The AI is instructed to skip items below the configured level, saving tokens and
 | `cc` | New comment (normal mode) |
 | `cc` | Range comment (visual mode) |
 | `r` | Reply to thread |
-| `gt` | Toggle resolve / unresolve |
-
-### Comments & Notes
-
-| Key | Action |
-|-----|--------|
-| `<Tab>` / `<S-Tab>` | Select next / previous note |
 | `e` | Edit selected note |
 | `x` | Delete selected note |
+| `rr` | React to note |
+| `R` | Toggle resolve / unresolve |
 
 ### AI Suggestions
 
@@ -246,20 +247,18 @@ The AI is instructed to skip items below the configured level, saving tokens and
 | Key | Action |
 |-----|--------|
 | `<C-f>` | Toggle full file view |
-| `<C-a>` | Toggle scroll / per-file mode |
-| `+` / `-` | Increase / decrease context lines |
 
 ### Actions
 
 | Key | Action |
 |-----|--------|
-| `S` | Submit draft comments |
-| `a` | Approve MR/PR |
-| `m` | Merge |
+| `<C-s>` | Submit draft comments |
+| `<C-a>` | Approve MR/PR |
+| `<C-r>` | Refresh |
+| `<C-q>` | Quit |
+| `M` | Merge |
 | `o` | Open in browser |
 | `p` | Show pipeline status |
-| `R` | Refresh |
-| `Q` | Quit |
 
 ### Picker
 
@@ -267,12 +266,7 @@ The AI is instructed to skip items below the configured level, saving tokens and
 |-----|--------|
 | `<leader>fc` | Browse comments / suggestions |
 | `<leader>ff` | Browse changed files |
-
-### Movement
-
-| Key | Action |
-|-----|--------|
-| `j` / `k` | Move down / up (comment-aware) |
+| `C` | Browse commits |
 
 ### Customizing Keymaps
 
@@ -280,13 +274,13 @@ Every keybinding can be remapped to a different key or disabled entirely via the
 
 ```lua
 keymaps = {
-  quit = "q",              -- remap quit from Q to q
+  quit = "q",              -- remap quit from <C-q> to q
   toggle_resolve = false,  -- disable toggle resolve
   ai_review = "<leader>ar", -- remap AI review
 },
 ```
 
-Available action names: `next_file`, `prev_file`, `create_comment`, `create_range_comment`, `reply`, `toggle_resolve`, `increase_context`, `decrease_context`, `toggle_full_file`, `toggle_scroll_mode`, `accept_suggestion`, `dismiss_suggestion`, `edit_suggestion`, `dismiss_all_suggestions`, `submit`, `approve`, `open_in_browser`, `merge`, `show_pipeline`, `ai_review`, `ai_review_file`, `refresh`, `quit`, `select_next_note`, `select_prev_note`, `edit_note`, `delete_note`, `pick_comments`, `pick_files`, `move_down`, `move_up`.
+Available action names: `next_file`, `prev_file`, `next_commit`, `prev_commit`, `move_down`, `move_up`, `select_next_note`, `select_prev_note`, `create_comment`, `create_range_comment`, `accept_suggestion`, `dismiss_suggestion`, `edit_suggestion`, `reply`, `edit_note`, `delete_note`, `react`, `toggle_resolve`, `toggle_full_file`, `dismiss_all_suggestions`, `submit`, `approve`, `refresh`, `quit`, `open_in_browser`, `merge`, `show_pipeline`, `ai_review`, `ai_review_file`, `pick_comments`, `pick_files`, `pick_commits`.
 
 ## Commands
 
@@ -302,6 +296,7 @@ Available action names: `next_file`, `prev_file`, `create_comment`, `create_rang
 | `:CodeReviewPipeline` | Show pipeline status |
 | `:CodeReviewComments` | Browse comments and suggestions |
 | `:CodeReviewFiles` | Browse changed files |
+| `:CodeReviewToggleScroll` | Toggle scroll / per-file mode |
 
 ## Supported Providers
 

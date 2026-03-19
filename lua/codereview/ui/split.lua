@@ -3,6 +3,12 @@ local M = {}
 function M.create(opts)
   opts = opts or {}
   local sidebar_width = opts.sidebar_width or 30
+  local cfg = require("codereview.config").get()
+
+  if cfg.open_in_tab then
+    vim.cmd("tabnew")
+  end
+  local tab = cfg.open_in_tab and vim.api.nvim_get_current_tabpage() or nil
 
   -- Create sidebar buffer
   local sidebar_buf = vim.api.nvim_create_buf(false, true)
@@ -64,6 +70,7 @@ function M.create(opts)
     sidebar_win = sidebar_win,
     main_buf = main_buf,
     main_win = main_win,
+    tab = tab,
   }
 end
 
@@ -78,8 +85,13 @@ function M.close(layout)
   pcall(function()
     vim.wo[layout.main_win].winbar = ""
   end)
-  pcall(vim.api.nvim_set_current_win, layout.main_win)
-  pcall(vim.api.nvim_win_close, layout.sidebar_win, true)
+  if layout.tab and vim.api.nvim_tabpage_is_valid(layout.tab) and #vim.api.nvim_list_tabpages() > 1 then
+    pcall(vim.api.nvim_set_current_tabpage, layout.tab)
+    pcall(vim.cmd, "tabclose")
+  else
+    pcall(vim.api.nvim_set_current_win, layout.main_win)
+    pcall(vim.api.nvim_win_close, layout.sidebar_win, true)
+  end
 end
 
 return M

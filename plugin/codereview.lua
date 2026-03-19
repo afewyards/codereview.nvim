@@ -46,3 +46,7 @@ end, { desc = "Browse changed files" })
 vim.api.nvim_create_user_command("CodeReviewCommits", function()
   require("codereview").commits()
 end, { desc = "Browse commits" })
+
+vim.api.nvim_create_user_command("CodeReviewToggleScroll", function()
+  require("codereview").toggle_scroll_mode()
+end, { desc = "Toggle scroll/per-file mode" })
