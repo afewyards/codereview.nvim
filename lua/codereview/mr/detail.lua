@@ -37,17 +37,19 @@ function M.build_header_lines(review, width)
     title = title:sub(1, title_max - 1) .. "…"
   end
   local gap1 = math.max(1, inner_w - 6 - #id_str - sw(title) - #state_str)
-  local line1 = "│  " .. id_str .. "  " .. title .. string.rep(" ", gap1) .. state_str .. "  │"
+  local line1_prefix = "│  "
+  local line1_postfix = "  │"
+  local line1 = line1_prefix .. id_str .. "  " .. title .. string.rep(" ", gap1) .. state_str .. line1_postfix
   local row1 = #lines
   table.insert(lines, line1)
   table.insert(highlights, { row1, 0, 3, "CodeReviewHeaderCardBorder" })
   table.insert(highlights, { row1, #line1 - 3, #line1, "CodeReviewHeaderCardBorder" })
-  local id_start = 3
+  local id_start = #line1_prefix
   table.insert(highlights, { row1, id_start, id_start + #id_str, "CodeReviewHeaderCardId" })
   local title_start = id_start + #id_str + 2
   table.insert(highlights, { row1, title_start, title_start + #title, "CodeReviewHeaderCardTitle" })
   -- Find state position by searching from end
-  local state_pos = #line1 - 5 - #state_str -- 5 = "  │" (3 bytes for │ + 2 spaces)
+  local state_pos = #line1 - #line1_postfix - #state_str -- 5 = "  │" (3 bytes for │ + 2 spaces)
   local state_hl = ({
     opened = "CodeReviewStateOpened",
     merged = "CodeReviewStateMerged",
@@ -72,15 +74,16 @@ function M.build_header_lines(review, width)
   end
   local right_str = table.concat(right_parts, "   ")
   local gap2 = math.max(1, inner_w - 6 - #author_str - sw(branch_str) - sw(right_str))
-  local line2 = "│  " .. author_str .. "  " .. branch_str .. string.rep(" ", gap2) .. right_str .. "  │"
+  local line2_prefix = "│  "
+  local line2 = line2_prefix .. author_str .. "  " .. branch_str .. string.rep(" ", gap2) .. right_str .. "  │"
   local row2 = #lines
   table.insert(lines, line2)
   table.insert(highlights, { row2, 0, 3, "CodeReviewHeaderCardBorder" })
   table.insert(highlights, { row2, #line2 - 3, #line2, "CodeReviewHeaderCardBorder" })
-  local a_start = 3
+  local a_start = #line2_prefix
   table.insert(highlights, { row2, a_start, a_start + #author_str, "CodeReviewCommentAuthor" })
   local b_start = a_start + #author_str + 2
-  table.insert(highlights, { row2, b_start, b_start + #branch_str + 2, "CodeReviewHeaderBranch" }) -- +2 for → (3 bytes but visually 1 char, offset compensates)
+  table.insert(highlights, { row2, b_start, b_start + #branch_str, "CodeReviewHeaderBranch" })
 
   -- Bottom border
   table.insert(lines, "╰" .. string.rep("─", inner_w) .. "╯")
