@@ -378,6 +378,8 @@ function M.post_range_comment(client, ctx, review, body, old_path, new_path, sta
     return nil, err
   end
   opts = opts or {}
+  local start_type = start_pos.type or (start_pos.new_line and "new" or "old")
+  local end_type = end_pos.type or (end_pos.new_line and "new" or "old")
   local payload = {
     body = body,
     position = {
@@ -391,12 +393,12 @@ function M.post_range_comment(client, ctx, review, body, old_path, new_path, sta
       new_line = end_pos.new_line,
       line_range = {
         start = {
-          type = start_pos.type or "new",
+          type = start_type,
           old_line = start_pos.old_line,
           new_line = start_pos.new_line,
         },
         ["end"] = {
-          type = end_pos.type or "new",
+          type = end_type,
           old_line = end_pos.old_line,
           new_line = end_pos.new_line,
         },
