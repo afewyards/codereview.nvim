@@ -50,6 +50,7 @@ function M.build_header_lines(review, width)
   local state_pos = #line1 - 5 - #state_str -- 5 = "  │" (3 bytes for │ + 2 spaces)
   local state_hl = ({
     opened = "CodeReviewStateOpened",
+    open = "CodeReviewStateOpened",
     merged = "CodeReviewStateMerged",
     closed = "CodeReviewStateClosed",
   })[review.state] or "CodeReviewThreadMeta"
