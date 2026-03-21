@@ -1201,6 +1201,15 @@ function M.setup_keymaps(state, layout, active_states)
       require("codereview.pipeline").open(state)
     end,
 
+    ai_review_file = function()
+      if state.view_mode ~= "diff" then
+        vim.notify("Navigate to a file diff first", vim.log.levels.WARN)
+        return
+      end
+      local review_mod = require("codereview.review")
+      review_mod.start_file(state.review, state, layout)
+    end,
+
     ai_review = function()
       local session = require("codereview.review.session")
       local s = session.get()

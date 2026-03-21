@@ -60,6 +60,7 @@
     "CodeReviewComments",
     "CodeReviewFiles",
     "CodeReviewToggleScroll",
+    "CodeReviewCommits",
   },
   opts = {},
 }
@@ -121,7 +122,7 @@ Token resolution order (first match wins):
 ```lua
 require("codereview").setup({
   -- Provider settings (all auto-detected from git remote)
-  base_url = nil,       -- API base URL override
+  base_url = nil,       -- API base URL override (e.g. "https://gitlab.example.com")
   project  = nil,       -- "owner/repo" override
   platform = nil,       -- "github" | "gitlab" | nil (auto-detect)
   github_token = nil,   -- GitHub personal access token
@@ -143,6 +144,12 @@ require("codereview").setup({
     comment_width    = 80,    -- comment float width
     separator_char   = "╳",   -- hunk separator character
     separator_lines  = 3,     -- lines in hunk separator
+  },
+
+  -- Pipeline
+  pipeline = {
+    poll_interval = 10000,  -- status poll interval (ms)
+    log_max_lines = 5000,   -- max lines in job log viewer
   },
 
   -- AI review
@@ -297,6 +304,7 @@ Available action names: `next_file`, `prev_file`, `next_commit`, `prev_commit`, 
 | `:CodeReviewComments` | Browse comments and suggestions |
 | `:CodeReviewFiles` | Browse changed files |
 | `:CodeReviewToggleScroll` | Toggle scroll / per-file mode |
+| `:CodeReviewCommits` | Browse commits |
 
 ## Supported Providers
 

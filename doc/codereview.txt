@@ -35,7 +35,7 @@ INSTALLATION                                         *codereview-installation*
 lazy.nvim ~
 >lua
   {
-    "codereview-nvim/codereview.nvim",
+    "afewyards/codereview.nvim",
     opts = {},
   }
 <
@@ -43,7 +43,7 @@ lazy.nvim ~
 packer.nvim ~
 >lua
   use {
-    "codereview-nvim/codereview.nvim",
+    "afewyards/codereview.nvim",
     config = function()
       require("codereview").setup()
     end,
@@ -128,6 +128,15 @@ COMMANDS                                               *codereview-commands*
 :CodeReviewFiles
   Open the picker to browse changed files in the current PR/MR.
 
+                                                 *:CodeReviewCommits*
+:CodeReviewCommits
+  Open the picker to browse commits in the current PR/MR.
+
+                                            *:CodeReviewToggleScroll*
+:CodeReviewToggleScroll
+  Toggle between scroll mode (all files in one buffer) and per-file
+  mode (one file at a time).
+
 ==============================================================================
 KEYMAPS                                               *codereview-keymaps*
 
@@ -141,14 +150,13 @@ Navigation ~
   --------     -------------------------------------------------------
   ]f           Next file
   [f           Previous file
+  ]c           Next commit
+  [c           Previous commit
   j            Move down / next comment
   k            Move up / prev comment
   <Tab>        Select next note in thread
   <S-Tab>      Select previous note in thread
   <C-f>        Toggle full file view
-  <C-a>        Toggle scroll / per-file mode
-  +            Increase context lines
-  -            Decrease context lines
 
 ------------------------------------------------------------------------------
 Comments ~
@@ -158,9 +166,10 @@ Comments ~
   cc           normal  Create a new comment on the current line
   cc           visual  Create a range comment over the selected lines
   r            normal  Reply to the currently selected thread
-  gt           normal  Toggle resolve / unresolve the selected thread
+  R            normal  Toggle resolve / unresolve the selected thread
   e            normal  Edit the selected note
   x            normal  Delete the selected note
+  rr           normal  React to note
 
 ------------------------------------------------------------------------------
 AI suggestions ~
@@ -183,13 +192,13 @@ Actions ~
 
   Key          Action
   --------     -------------------------------------------------------
-  S            Submit draft comments
-  a            Approve the PR/MR
-  m            Merge the PR/MR
+  <C-s>        Submit draft comments
+  <C-a>        Approve the PR/MR
+  M            Merge the PR/MR
   o            Open PR/MR in browser
   p            Show pipeline status
-  R            Refresh
-  Q            Quit
+  <C-r>        Refresh
+  <C-q>        Quit
 
 ------------------------------------------------------------------------------
 Picker ~
@@ -198,6 +207,7 @@ Picker ~
   --------     -------------------------------------------------------
   <leader>fc   Browse comments and AI suggestions
   <leader>ff   Browse changed files
+  C            Browse commits
 
 ------------------------------------------------------------------------------
 Remapping keymaps ~                                  *codereview.keymaps*
@@ -216,13 +226,13 @@ string or `false` to disable:
 <
 
 Full list of action names:
-  next_file, prev_file, create_comment, create_range_comment, reply,
-  toggle_resolve, increase_context, decrease_context, toggle_full_file,
-  toggle_scroll_mode, accept_suggestion, dismiss_suggestion, edit_suggestion,
+  next_file, prev_file, next_commit, prev_commit, create_comment,
+  create_range_comment, reply, toggle_resolve, toggle_full_file,
+  accept_suggestion, dismiss_suggestion, edit_suggestion,
   dismiss_all_suggestions, submit, approve, open_in_browser, merge,
-  show_pipeline, ai_review, ai_review_file, refresh, quit,
-  select_next_note, select_prev_note, edit_note, delete_note,
-  pick_comments, pick_files, move_down, move_up
+  show_pipeline, ai_review, ai_review_file, refresh, quit, select_next_note,
+  select_prev_note, edit_note, delete_note, react, pick_comments,
+  pick_files, pick_commits, move_down, move_up
 
 ==============================================================================
 CONFIGURATION                                *codereview-configuration*
@@ -264,6 +274,9 @@ Options for AI review. See |codereview-ai-review|.
     -- boolean  write request/auth debug logs to .codereview.log
     debug = false,
 
+    -- boolean  open review in a new tab (false = use current window)
+    open_in_tab = true,
+
     diff = {
       -- number (0-20)  lines of context around each hunk
       context = 8,
@@ -279,6 +292,14 @@ Options for AI review. See |codereview-ai-review|.
 
       -- number  blank lines inserted in separator blocks
       separator_lines = 3,
+    },
+
+    pipeline = {
+      -- number  poll interval for pipeline status (milliseconds)
+      poll_interval = 10000,
+
+      -- number  max lines shown in job log viewer
+      log_max_lines = 5000,
     },
 
     ai = {
@@ -636,6 +657,40 @@ To override them, use `vim.fn.sign_define()` after setup:
     texthl = "MyCustomHighlight",
   })
 <
+
+------------------------------------------------------------------------------
+Pipeline ~
+
+  CodeReviewPipelineSuccess        Successful pipeline stage
+  CodeReviewPipelineFailed         Failed pipeline stage
+  CodeReviewPipelineRunning        Running pipeline stage
+  CodeReviewPipelinePending        Pending pipeline stage
+  CodeReviewPipelineManual         Manual pipeline stage
+  CodeReviewPipelineCanceled       Canceled pipeline stage
+  CodeReviewPipelineStage          Pipeline stage name
+  CodeReviewPipelineDuration       Pipeline duration text
+
+------------------------------------------------------------------------------
+Reactions ~
+
+  CodeReviewReaction               Reaction emoji text
+  CodeReviewReactionOwn            Your own reaction (highlighted)
+  CodeReviewReactionSelected       Selected reaction in picker
+
+------------------------------------------------------------------------------
+Winbar ~
+
+  CodeReviewWinbarIcon             Winbar icon
+  CodeReviewWinbarSha              Winbar SHA display
+  CodeReviewWinbarTitle            Winbar title text
+
+------------------------------------------------------------------------------
+Misc ~
+
+  CodeReviewCommitFilter           Commit filter indicator
+  CodeReviewLogSectionHeader       Log section header
+  CodeReviewFloatFooter            Float footer text
+  CodeReviewCursorHidden           Hidden cursor on carrier lines
 
 ==============================================================================
 TROUBLESHOOTING                                   *codereview-troubleshooting*
