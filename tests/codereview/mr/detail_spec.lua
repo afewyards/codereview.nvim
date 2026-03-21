@@ -267,6 +267,7 @@ describe("mr.detail", function()
       local discussions = {
         {
           id = "abc",
+          resolvable = true,
           resolved = false,
           notes = {
             {
@@ -283,8 +284,67 @@ describe("mr.detail", function()
       }
       local result = detail.build_activity_lines(discussions)
       local joined = table.concat(result.lines, "\n")
+      print(joined)
       assert.truthy(joined:find("Unresolved"))
       assert.truthy(joined:find("●"))
+    end)
+
+    it("count resolved/unresolved status for resolvables", function()
+      local discussions = {
+        {
+          id = "abc",
+          resolvable = true,
+          resolved = false,
+          notes = {
+            {
+              id = 1,
+              body = "Bug here",
+              author = "alice",
+              created_at = "2026-02-20T10:00:00Z",
+              system = false,
+              resolvable = true,
+              resolved = false,
+            },
+          },
+        },
+        {
+          id = "def",
+          resolvable = true,
+          resolved = true,
+          notes = {
+            {
+              id = 1,
+              body = "Bug here resolved",
+              author = "alice",
+              created_at = "2026-02-20T10:00:00Z",
+              system = false,
+              resolvable = true,
+              resolved = true,
+            },
+          },
+        },
+        {
+          id = "ghi",
+          resolvable = false,
+          resolved = true,
+          notes = {
+            {
+              id = 1,
+              body = "not resolvable here",
+              author = "alice",
+              created_at = "2026-02-20T10:00:00Z",
+              system = false,
+              resolvable = false,
+              resolved = true,
+            },
+          },
+        },
+      }
+      local result = detail.build_activity_lines(discussions)
+      local joined = table.concat(result.lines, "\n")
+      assert.truthy(joined:find("1 unresolved"))
+      assert.truthy(joined:find("○ Resolved"))
+      assert.truthy(joined:find("● Unresolved"))
     end)
 
     it("maps thread rows to discussions in row_map", function()
@@ -423,6 +483,8 @@ describe("mr.detail", function()
       local discussions = {
         {
           id = "s1",
+          resolvable = false,
+          resolved = false,
           notes = {
             {
               id = 1,
@@ -450,6 +512,7 @@ describe("mr.detail", function()
       local discussions = {
         {
           id = "d1",
+          resolvable = true,
           resolved = false,
           notes = {
             {
@@ -478,6 +541,7 @@ describe("mr.detail", function()
       local discussions = {
         {
           id = "d1",
+          resolvable = true,
           resolved = false,
           notes = {
             {
@@ -507,6 +571,7 @@ describe("mr.detail", function()
       local discussions = {
         {
           id = "d1",
+          resolvable = true,
           resolved = false,
           notes = {
             {

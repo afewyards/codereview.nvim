@@ -113,10 +113,20 @@ end
 --- Map a GitLab discussion raw object to a normalized discussion.
 function M.normalize_discussion(raw)
   local notes = {}
+  local resolvable = raw.resolvable or false
+  local resolved = raw.resolved or true
   for _, n in ipairs(raw.notes or {}) do
-    table.insert(notes, normalize_note(n))
+    local note = normalize_note(n)
+    table.insert(notes, note)
+
+    if note.resolvable then
+      resolvable = true
+      if not note.resolved then
+        resolved = false
+      end
+    end
   end
-  return { id = raw.id, resolved = raw.resolved or false, notes = notes }
+  return { id = raw.id, resolved = resolved, resolvable = resolvable, notes = notes }
 end
 
 --- Normalize a GitLab file diff entry.

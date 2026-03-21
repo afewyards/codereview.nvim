@@ -180,7 +180,7 @@ local function render_thread(result, disc, width, reply_key, resolve_key, is_las
   -- Status dot + label: "● Unresolved" or "○ Resolved"
   local status_dot = ""
   local status_label = ""
-  if first_note.resolvable ~= nil or disc.resolved ~= nil then
+  if disc.resolvable then
     status_dot = resolved and "○" or "●"
     status_label = resolved and " Resolved" or " Unresolved"
   end
