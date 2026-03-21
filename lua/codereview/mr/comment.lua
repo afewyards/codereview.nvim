@@ -160,6 +160,7 @@ function M.show_thread(disc, mr)
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, all_lines)
   vim.bo[buf].modifiable = false
   vim.bo[buf].bufhidden = "wipe"
+  vim.bo[buf].filetype = "codereview"
   markdown.set_buf_markdown(buf)
 
   local win = vim.api.nvim_open_win(buf, true, {

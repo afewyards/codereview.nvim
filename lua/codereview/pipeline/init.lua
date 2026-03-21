@@ -50,6 +50,7 @@ function M.open(diff_state)
       -- Create buffer
       local buf = vim.api.nvim_create_buf(false, true)
       vim.bo[buf].bufhidden = "wipe"
+      vim.bo[buf].filetype = "codereview"
       vim.bo[buf].modifiable = true
       vim.api.nvim_buf_set_lines(buf, 0, -1, false, content.lines)
       vim.bo[buf].modifiable = false

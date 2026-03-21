@@ -15,12 +15,14 @@ function M.create(opts)
   vim.bo[sidebar_buf].bufhidden = "hide"
   vim.bo[sidebar_buf].buftype = "nofile"
   vim.bo[sidebar_buf].swapfile = false
+  vim.bo[sidebar_buf].filetype = "codereview"
 
   -- Create main buffer
   local main_buf = vim.api.nvim_create_buf(false, true)
   vim.bo[main_buf].bufhidden = "hide"
   vim.bo[main_buf].buftype = "nofile"
   vim.bo[main_buf].swapfile = false
+  vim.bo[main_buf].filetype = "codereview"
 
   -- Use current window as main
   local main_win = vim.api.nvim_get_current_win()

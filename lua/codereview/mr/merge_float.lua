@@ -88,6 +88,7 @@ function M.open(review, platform, on_merge)
 
   local buf = vim.api.nvim_create_buf(false, true)
   vim.bo[buf].bufhidden = "wipe"
+  vim.bo[buf].filetype = "codereview"
   vim.bo[buf].modifiable = false
 
   -- First item line is at buffer line 2 (1-indexed); last at 2 + #items - 1

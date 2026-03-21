@@ -84,6 +84,7 @@ function M.open(note, opts)
 
   local buf = vim.api.nvim_create_buf(false, true)
   vim.bo[buf].bufhidden = "wipe"
+  vim.bo[buf].filetype = "codereview"
 
   local line, segments = build_content(reactions)
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, { line })
