@@ -141,6 +141,7 @@ function M.normalize_graphql_threads(thread_nodes)
       table.insert(discussions, {
         id = tostring(comments[1].databaseId),
         node_id = thread.id,
+        resolvable = true,
         resolved = thread.isResolved or false,
         notes = notes,
       })
