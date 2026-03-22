@@ -45,6 +45,8 @@
 ### lazy.nvim
 
 ```lua
+---@module "lazy"
+---@type LazySpec
 {
   "afewyards/codereview.nvim",
   dependencies = { "nvim-lua/plenary.nvim" },
@@ -62,6 +64,8 @@
     "CodeReviewToggleScroll",
     "CodeReviewCommits",
   },
+  ---@module "codereview"
+  ---@type codereview.Config
   opts = {},
 }
 ```
