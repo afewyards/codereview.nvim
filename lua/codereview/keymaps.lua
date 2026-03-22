@@ -1,5 +1,41 @@
 local M = {}
 
+---@alias codereview.keymap.Key string|false
+
+---@class codereview.config.Keymap
+---@field next_file? codereview.keymap.Key
+---@field prev_file? codereview.keymap.Key
+---@field next_commit? codereview.keymap.Key
+---@field prev_commit? codereview.keymap.Key
+---@field move_down? codereview.keymap.Key
+---@field move_up? codereview.keymap.Key
+---@field select_next_note? codereview.keymap.Key
+---@field select_prev_note? codereview.keymap.Key
+---@field create_comment? codereview.keymap.Key
+---@field create_range_comment? codereview.keymap.Key
+---@field accept_suggestion? codereview.keymap.Key
+---@field dismiss_suggestion? codereview.keymap.Key
+---@field edit_suggestion? codereview.keymap.Key
+---@field reply? codereview.keymap.Key
+---@field edit_note? codereview.keymap.Key
+---@field delete_note? codereview.keymap.Key
+---@field react? codereview.keymap.Key
+---@field toggle_resolve? codereview.keymap.Key
+---@field toggle_full_file? codereview.keymap.Key
+---@field dismiss_all_suggestions? codereview.keymap.Key
+---@field submit? codereview.keymap.Key
+---@field approve? codereview.keymap.Key
+---@field refresh? codereview.keymap.Key
+---@field quit? codereview.keymap.Key
+---@field open_in_browser? codereview.keymap.Key
+---@field merge? codereview.keymap.Key
+---@field show_pipeline? codereview.keymap.Key
+---@field ai_review? codereview.keymap.Key
+---@field ai_review_file? codereview.keymap.Key
+---@field pick_comments? codereview.keymap.Key
+---@field pick_files? codereview.keymap.Key
+---@field pick_commits? codereview.keymap.Key
+
 local defaults = {
   next_file = { key = "]f", mode = "n", desc = "Next file" },
   prev_file = { key = "[f", mode = "n", desc = "Previous file" },
@@ -49,6 +85,7 @@ end
 
 local resolved = nil
 
+---@param user_opts? codereview.config.Keymap
 function M.setup(user_opts)
   resolved = deep_copy(defaults)
   if not user_opts then
