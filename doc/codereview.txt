@@ -306,7 +306,7 @@ Options for AI review. See |codereview-ai-review|.
       -- boolean  enable AI review features
       enabled = true,
 
-      -- "claude_cli" | "codex_cli" | "gemini_cli" | "qwen_cli" | "anthropic" | "openai" | "ollama" | "custom_cmd"
+      -- "claude_cli" | "codex_cli" | "copilot_cli" | "gemini_cli" | "qwen_cli" | "anthropic" | "openai" | "ollama" | "custom_cmd"
       provider = "claude_cli",
 
       -- "info" | "suggestion" | "warning" | "error"  minimum severity to display
@@ -324,6 +324,11 @@ Options for AI review. See |codereview-ai-review|.
       codex_cli = {
         cmd   = "codex",        -- path or name of the codex binary
         model = nil,            -- optional model override
+      },
+      copilot_cli = {
+        cmd = "copilot",        -- path or name of the copilot binary
+        model = nil,            -- optional model override
+        agent = nil,            -- optional agent override
       },
       gemini_cli = {
         cmd = "gemini",         -- path or name of the gemini binary
@@ -407,6 +412,26 @@ Requirements:
     codex_cli = {
       cmd   = "codex",    -- binary name or full path
       model = "gpt-5.4",  -- optional model override
+    },
+  }
+<
+
+------------------------------------------------------------------------------
+Copilot CLI                                        *codereview-ai-copilot-cli*
+
+Uses the `copilot` command-line interface to prompt non-interactively using
+the currently configured or default model until explicitly specified.
+
+Requirements:
+  - `copilot` binary installed and on PATH
+  - Copilot CLI already authenticated
+>lua
+  ai = {
+    provider = "copilot_cli",
+    copilot_cli = {
+      cmd   = "copilot",           -- binary name or full path
+      model = "claude-opus-4.6",   -- optional model override
+      agent = nil                  -- specify a custom agent to use
     },
   }
 <

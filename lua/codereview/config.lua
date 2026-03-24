@@ -27,11 +27,12 @@
 
 ---@class codereview.config.AI
 ---@field enabled? boolean enable AI Review (default: `true`)
----@field provider? "claude_cli"|"codex_cli"|"gemini_cli"|"qwen_cli"|"anthropic"|"openai"|"ollama"|"custom_cmd" AI Provider to use
+---@field provider? "claude_cli"|"codex_cli"|"copilot_cli"|"gemini_cli"|"qwen_cli"|"anthropic"|"openai"|"ollama"|"custom_cmd" AI Provider to use
 ---@field review_level? "info"|"suggestion"|"warning"|"error" controls the verbosity of AI code reviews (default: `info`)
 ---@field max_file_size? integer skip files larger than N lines (0 = unlimited) (default: 500)
 ---@field claude_cli? codereview.config.ai.ClaudeCli Claude CLI options
 ---@field codex_cli? codereview.config.ai.CodexCLI Codex CLI options
+---@field copilot_cli? codereview.config.ai.CopilotCLI Copilot CLI options
 ---@field gemini_cli? codereview.config.ai.GeminiCLI Gemini CLI options
 ---@field qwen_cli? codereview.config.ai.QwenCLI Qwen CLI options
 ---@field anthropic? codereview.config.ai.Anthropic Anthropic API options
@@ -46,6 +47,11 @@
 ---@class codereview.config.ai.CodexCLI
 ---@field cmd? string Codex CLI command (default: `codex`)
 ---@field model? string Codex model name
+
+---@class codereview.config.ai.CopilotCLI
+---@field cmd? string Copilot CLI command (default: `copilot`)
+---@field model? string Copilot model name
+---@field agent? string specify a custom agent to use
 
 ---@class codereview.config.ai.GeminiCLI
 ---@field cmd? string Gemini CLI command (default: `gemini`)
@@ -93,6 +99,7 @@ local defaults = {
     max_file_size = 500,
     claude_cli = { cmd = "claude", agent = "code-review" },
     codex_cli = { cmd = "codex", model = nil },
+    copilot_cli = { cmd = "copilot", model = nil, agent = nil },
     gemini_cli = { cmd = "gemini", model = nil },
     qwen_cli = { cmd = "qwen", model = nil },
     anthropic = { api_key = nil, model = "claude-sonnet-4-20250514" },
@@ -133,6 +140,7 @@ local function validate(c)
   local valid_providers = {
     claude_cli = true,
     codex_cli = true,
+    copilot_cli = true,
     gemini_cli = true,
     qwen_cli = true,
     anthropic = true,
