@@ -306,7 +306,7 @@ Options for AI review. See |codereview-ai-review|.
       -- boolean  enable AI review features
       enabled = true,
 
-      -- "claude_cli" | "codex_cli" | "copilot_cli" | "gemini_cli" | "qwen_cli" | "anthropic" | "openai" | "ollama" | "custom_cmd"
+      -- "claude_cli" | "codex_cli" | "copilot_cli" | "gemini_cli" | "opencode_cli" | "qwen_cli" | "anthropic" | "openai" | "ollama" | "custom_cmd"
       provider = "claude_cli",
 
       -- "info" | "suggestion" | "warning" | "error"  minimum severity to display
@@ -333,6 +333,12 @@ Options for AI review. See |codereview-ai-review|.
       gemini_cli = {
         cmd = "gemini",         -- path or name of the gemini binary
         model = nil,            -- optional model override
+      },
+      opencode_cli = {
+        cmd = "opencode",       -- path or name of the opencode binary
+        model = nil,            -- optional model override
+        agent = "plan",         -- optional agent override
+        variant = nil,          -- optional model variant (provider-specific)
       },
       qwen_cli = {
         cmd = "qwen",           -- path or name of the qwen binary
@@ -451,6 +457,27 @@ Requirements:
     gemini_cli = {
       cmd   = "gemini",            -- binary name or full path
       model = "gemini-3-pro",      -- optional model override
+    },
+  }
+<
+
+------------------------------------------------------------------------------
+OpenCode CLI                                      *codereview-ai-opencode-cli*
+
+Uses the `opencode run` command-line interface to prompt non-interactively using
+the currently configured or default model until explicitly specified.
+
+Requirements:
+  - `opencode` binary installed and on PATH
+  - OpenCode CLI already authenticated
+>lua
+  ai = {
+    provider = "opencode_cli",
+    opencode_cli = {
+      cmd   = "opencode",                          -- binary name or full path
+      model = "github-copilot/claude-sonnet-4.6",  -- optional provider/model
+      agent = "plan",                              -- optional agent to use
+      variant = nil,                               -- model variant
     },
   }
 <
