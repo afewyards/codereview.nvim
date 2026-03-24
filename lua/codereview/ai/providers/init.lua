@@ -3,6 +3,7 @@ local M = {}
 local valid_providers = {
   claude_cli = "codereview.ai.providers.claude_cli",
   codex_cli = "codereview.ai.providers.codex_cli",
+  copilot_cli = "codereview.ai.providers.copilot_cli",
   gemini_cli = "codereview.ai.providers.gemini_cli",
   qwen_cli = "codereview.ai.providers.qwen_cli",
   anthropic = "codereview.ai.providers.anthropic",
