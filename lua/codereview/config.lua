@@ -42,7 +42,7 @@
 ---@field custom_cmd? codereview.config.ai.CustomCmd Custom command options
 
 ---@class codereview.config.ai.ClaudeCli
----@field cmd? string Claude CLI command (default: `claude_cli`)
+---@field cmd? string Claude CLI command (default: `claude`)
 ---@field agent? string Claude Agent (default: `code-review`)
 
 ---@class codereview.config.ai.CodexCLI
