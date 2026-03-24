@@ -4,6 +4,7 @@ local valid_providers = {
   claude_cli = "codereview.ai.providers.claude_cli",
   codex_cli = "codereview.ai.providers.codex_cli",
   gemini_cli = "codereview.ai.providers.gemini_cli",
+  qwen_cli = "codereview.ai.providers.qwen_cli",
   anthropic = "codereview.ai.providers.anthropic",
   openai = "codereview.ai.providers.openai",
   ollama = "codereview.ai.providers.ollama",
