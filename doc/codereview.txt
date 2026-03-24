@@ -306,7 +306,7 @@ Options for AI review. See |codereview-ai-review|.
       -- boolean  enable AI review features
       enabled = true,
 
-      -- "claude_cli" | "codex_cli" | "anthropic" | "openai" | "ollama" | "custom_cmd"
+      -- "claude_cli" | "codex_cli" | "gemini_cli" | "anthropic" | "openai" | "ollama" | "custom_cmd"
       provider = "claude_cli",
 
       -- "info" | "suggestion" | "warning" | "error"  minimum severity to display
@@ -323,6 +323,10 @@ Options for AI review. See |codereview-ai-review|.
       },
       codex_cli = {
         cmd   = "codex",        -- path or name of the codex binary
+        model = nil,            -- optional model override
+      },
+      gemini_cli = {
+        cmd = "gemini",         -- path or name of the gemini binary
         model = nil,            -- optional model override
       },
       anthropic = {
@@ -399,6 +403,25 @@ Requirements:
     codex_cli = {
       cmd   = "codex",    -- binary name or full path
       model = "gpt-5.4",  -- optional model override
+    },
+  }
+<
+
+------------------------------------------------------------------------------
+Gemini CLI                                          *codereview-ai-gemini-cli*
+
+Uses the `gemini` command-line interface to prompt non-interactively using
+the currently configured or default model until explicitly specified.
+
+Requirements:
+  - `gemini` binary installed and on PATH
+  - Gemini CLI already authenticated
+>lua
+  ai = {
+    provider = "gemini_cli",
+    gemini_cli = {
+      cmd   = "gemini",            -- binary name or full path
+      model = "gemini-3-pro",      -- optional model override
     },
   }
 <
