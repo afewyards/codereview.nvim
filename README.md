@@ -159,13 +159,14 @@ require("codereview").setup({
   -- AI review
   ai = {
     enabled       = true,
-    provider      = "claude_cli",  -- "claude_cli" | "codex_cli" | "gemini_cli" | "anthropic" | "openai" | "ollama" | "custom_cmd"
+    provider      = "claude_cli",  -- "claude_cli" | "codex_cli" | "gemini_cli" | "qwen_cli" | "anthropic" | "openai" | "ollama" | "custom_cmd"
     review_level  = "info",        -- "info" | "suggestion" | "warning" | "error"
     max_file_size = 500,           -- skip files larger than N lines (0 = unlimited)
 
     claude_cli = { cmd = "claude", agent = "code-review" },
     codex_cli = { cmd = "codex", model = nil },
     gemini_cli = { cmd = "gemini", model = nil },
+    qwen_cli = { cmd = "qwen", model = nil },
     anthropic  = { api_key = nil, model = "claude-sonnet-4-20250514" },
     openai     = { api_key = nil, model = "gpt-4o", base_url = nil },
     ollama     = { model = "llama3", base_url = "http://localhost:11434" },
@@ -189,6 +190,7 @@ Set `ai.provider` to choose a backend. Each provider has its own sub-table:
 | Claude CLI | `claude_cli` | [Claude CLI](https://docs.anthropic.com/en/docs/claude-code) installed |
 | Codex CLI | `codex_cli` | [Codex CLI](https://github.com/openai/codex) installed and authenticated |
 | Gemini CLI | `gemini_cli` | [Gemini CLI](https://github.com/google-gemini/gemini-cli) installed and authenticated |
+| Qwen CLI | `qwen_cli` | [Qwen CLI](https://github.com/QwenLM/qwen-code) installed and authenticated |
 | Anthropic API | `anthropic` | `api_key` set |
 | OpenAI | `openai` | `api_key` set |
 | Ollama | `ollama` | Ollama running locally |

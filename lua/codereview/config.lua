@@ -27,12 +27,13 @@
 
 ---@class codereview.config.AI
 ---@field enabled? boolean enable AI Review (default: `true`)
----@field provider? "claude_cli"|"codex_cli"|"gemini_cli"|"anthropic"|"openai"|"ollama"|"custom_cmd" AI Provider to use
+---@field provider? "claude_cli"|"codex_cli"|"gemini_cli"|"qwen_cli"|"anthropic"|"openai"|"ollama"|"custom_cmd" AI Provider to use
 ---@field review_level? "info"|"suggestion"|"warning"|"error" controls the verbosity of AI code reviews (default: `info`)
 ---@field max_file_size? integer skip files larger than N lines (0 = unlimited) (default: 500)
 ---@field claude_cli? codereview.config.ai.ClaudeCli Claude CLI options
 ---@field codex_cli? codereview.config.ai.CodexCLI Codex CLI options
 ---@field gemini_cli? codereview.config.ai.GeminiCLI Gemini CLI options
+---@field qwen_cli? codereview.config.ai.QwenCLI Qwen CLI options
 ---@field anthropic? codereview.config.ai.Anthropic Anthropic API options
 ---@field openai? codereview.config.ai.OpenAI OpenAI API options
 ---@field ollama? codereview.config.ai.Ollama Ollama options
@@ -49,6 +50,10 @@
 ---@class codereview.config.ai.GeminiCLI
 ---@field cmd? string Gemini CLI command (default: `gemini`)
 ---@field model? string Gemini model name
+
+---@class codereview.config.ai.QwenCLI
+---@field cmd? string Qwen CLI command (default: `qwen`)
+---@field model? string Qwen model name
 
 ---@class codereview.config.ai.Anthropic
 ---@field api_key? string Anthropic API key
@@ -89,6 +94,7 @@ local defaults = {
     claude_cli = { cmd = "claude", agent = "code-review" },
     codex_cli = { cmd = "codex", model = nil },
     gemini_cli = { cmd = "gemini", model = nil },
+    qwen_cli = { cmd = "qwen", model = nil },
     anthropic = { api_key = nil, model = "claude-sonnet-4-20250514" },
     openai = { api_key = nil, model = "gpt-4o", base_url = nil },
     ollama = { model = "llama3", base_url = "http://localhost:11434" },
@@ -128,6 +134,7 @@ local function validate(c)
     claude_cli = true,
     codex_cli = true,
     gemini_cli = true,
+    qwen_cli = true,
     anthropic = true,
     openai = true,
     ollama = true,
