@@ -5,6 +5,7 @@ local valid_providers = {
   codex_cli = "codereview.ai.providers.codex_cli",
   copilot_cli = "codereview.ai.providers.copilot_cli",
   gemini_cli = "codereview.ai.providers.gemini_cli",
+  opencode_cli = "codereview.ai.providers.opencode_cli",
   qwen_cli = "codereview.ai.providers.qwen_cli",
   anthropic = "codereview.ai.providers.anthropic",
   openai = "codereview.ai.providers.openai",

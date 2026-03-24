@@ -27,13 +27,14 @@
 
 ---@class codereview.config.AI
 ---@field enabled? boolean enable AI Review (default: `true`)
----@field provider? "claude_cli"|"codex_cli"|"copilot_cli"|"gemini_cli"|"qwen_cli"|"anthropic"|"openai"|"ollama"|"custom_cmd" AI Provider to use
+---@field provider? "claude_cli"|"codex_cli"|"copilot_cli"|"gemini_cli"|"opencode_cli"|"qwen_cli"|"anthropic"|"openai"|"ollama"|"custom_cmd" AI Provider to use
 ---@field review_level? "info"|"suggestion"|"warning"|"error" controls the verbosity of AI code reviews (default: `info`)
 ---@field max_file_size? integer skip files larger than N lines (0 = unlimited) (default: 500)
 ---@field claude_cli? codereview.config.ai.ClaudeCli Claude CLI options
 ---@field codex_cli? codereview.config.ai.CodexCLI Codex CLI options
 ---@field copilot_cli? codereview.config.ai.CopilotCLI Copilot CLI options
 ---@field gemini_cli? codereview.config.ai.GeminiCLI Gemini CLI options
+---@field opencode_cli? codereview.config.ai.OpenCodeCLI OpenCode CLI options
 ---@field qwen_cli? codereview.config.ai.QwenCLI Qwen CLI options
 ---@field anthropic? codereview.config.ai.Anthropic Anthropic API options
 ---@field openai? codereview.config.ai.OpenAI OpenAI API options
@@ -56,6 +57,12 @@
 ---@class codereview.config.ai.GeminiCLI
 ---@field cmd? string Gemini CLI command (default: `gemini`)
 ---@field model? string Gemini model name
+
+---@class codereview.config.ai.OpenCodeCLI
+---@field cmd? string OpenCode CLI command (default: `opencode`)
+---@field model? string model to use in the form of provider/model
+---@field agent? string agent to use (default: `plan`)
+---@field variant? string model variant (provider-specific reasoning effort, e.g., high, max, minimal)
 
 ---@class codereview.config.ai.QwenCLI
 ---@field cmd? string Qwen CLI command (default: `qwen`)
@@ -101,6 +108,7 @@ local defaults = {
     codex_cli = { cmd = "codex", model = nil },
     copilot_cli = { cmd = "copilot", model = nil, agent = nil },
     gemini_cli = { cmd = "gemini", model = nil },
+    opencode_cli = { cmd = "opencode", model = nil, agent = "plan", variant = nil },
     qwen_cli = { cmd = "qwen", model = nil },
     anthropic = { api_key = nil, model = "claude-sonnet-4-20250514" },
     openai = { api_key = nil, model = "gpt-4o", base_url = nil },
@@ -142,6 +150,7 @@ local function validate(c)
     codex_cli = true,
     copilot_cli = true,
     gemini_cli = true,
+    opencode_cli = true,
     qwen_cli = true,
     anthropic = true,
     openai = true,

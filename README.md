@@ -159,7 +159,7 @@ require("codereview").setup({
   -- AI review
   ai = {
     enabled       = true,
-    provider      = "claude_cli",  -- "claude_cli" | "codex_cli" | "copilot_cli" | "gemini_cli" | "qwen_cli" | "anthropic" | "openai" | "ollama" | "custom_cmd"
+    provider      = "claude_cli",  -- "claude_cli" | "codex_cli" | "copilot_cli" | "gemini_cli" | "opencode_cli" | "qwen_cli" | "anthropic" | "openai" | "ollama" | "custom_cmd"
     review_level  = "info",        -- "info" | "suggestion" | "warning" | "error"
     max_file_size = 500,           -- skip files larger than N lines (0 = unlimited)
 
@@ -167,6 +167,7 @@ require("codereview").setup({
     codex_cli = { cmd = "codex", model = nil },
     copilot_cli = { cmd = "copilot", model = nil, agent = nil },
     gemini_cli = { cmd = "gemini", model = nil },
+    opencode_cli = { cmd = "opencode", model = nil, agent = "plan", variant = nil },
     qwen_cli = { cmd = "qwen", model = nil },
     anthropic  = { api_key = nil, model = "claude-sonnet-4-20250514" },
     openai     = { api_key = nil, model = "gpt-4o", base_url = nil },
@@ -192,6 +193,7 @@ Set `ai.provider` to choose a backend. Each provider has its own sub-table:
 | Codex CLI | `codex_cli` | [Codex CLI](https://github.com/openai/codex) installed and authenticated |
 | Copilot CLI | `copilot_cli` | [Copilot CLI](https://docs.github.com/en/copilot/concepts/agents/copilot-cli/about-copilot-cli) installed and authenticated |
 | Gemini CLI | `gemini_cli` | [Gemini CLI](https://github.com/google-gemini/gemini-cli) installed and authenticated |
+| OpenCode CLI | `opencode_cli` | [OpenCode CLI](https://github.com/anomalyco/opencode) installed and authenticated |
 | Qwen CLI | `qwen_cli` | [Qwen CLI](https://github.com/QwenLM/qwen-code) installed and authenticated |
 | Anthropic API | `anthropic` | `api_key` set |
 | OpenAI | `openai` | `api_key` set |
