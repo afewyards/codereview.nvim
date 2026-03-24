@@ -27,10 +27,11 @@
 
 ---@class codereview.config.AI
 ---@field enabled? boolean enable AI Review (default: `true`)
----@field provider? "claude_cli"|"anthropic"|"openai"|"ollama"|"custom_cmd" AI Provider to use
+---@field provider? "claude_cli"|"codex_cli"|"anthropic"|"openai"|"ollama"|"custom_cmd" AI Provider to use
 ---@field review_level? "info"|"suggestion"|"warning"|"error" controls the verbosity of AI code reviews (default: `info`)
 ---@field max_file_size? integer skip files larger than N lines (0 = unlimited) (default: 500)
 ---@field claude_cli? codereview.config.ai.ClaudeCli Claude CLI options
+---@field codex_cli? codereview.config.ai.CodexCLI Codex CLI options
 ---@field anthropic? codereview.config.ai.Anthropic Anthropic API options
 ---@field openai? codereview.config.ai.OpenAI OpenAI API options
 ---@field ollama? codereview.config.ai.Ollama Ollama options
@@ -39,6 +40,10 @@
 ---@class codereview.config.ai.ClaudeCli
 ---@field cmd? string Claude CLI command (default: `claude_cli`)
 ---@field agent? string Claude Agent (default: `code-review`)
+
+---@class codereview.config.ai.CodexCLI
+---@field cmd? string Codex CLI command (default: `codex`)
+---@field model? string Codex model name
 
 ---@class codereview.config.ai.Anthropic
 ---@field api_key? string Anthropic API key
@@ -77,6 +82,7 @@ local defaults = {
     review_level = "info",
     max_file_size = 500,
     claude_cli = { cmd = "claude", agent = "code-review" },
+    codex_cli = { cmd = "codex", model = nil },
     anthropic = { api_key = nil, model = "claude-sonnet-4-20250514" },
     openai = { api_key = nil, model = "gpt-4o", base_url = nil },
     ollama = { model = "llama3", base_url = "http://localhost:11434" },
@@ -112,7 +118,14 @@ local function validate(c)
     c.ai.review_level = "info"
   end
   c.ai.max_file_size = math.max(0, c.ai.max_file_size or 500)
-  local valid_providers = { claude_cli = true, anthropic = true, openai = true, ollama = true, custom_cmd = true }
+  local valid_providers = {
+    claude_cli = true,
+    codex_cli = true,
+    anthropic = true,
+    openai = true,
+    ollama = true,
+    custom_cmd = true,
+  }
   if not valid_providers[c.ai.provider] then
     c.ai.provider = "claude_cli"
   end

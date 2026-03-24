@@ -306,7 +306,7 @@ Options for AI review. See |codereview-ai-review|.
       -- boolean  enable AI review features
       enabled = true,
 
-      -- "claude_cli" | "anthropic" | "openai" | "ollama" | "custom_cmd"
+      -- "claude_cli" | "codex_cli" | "anthropic" | "openai" | "ollama" | "custom_cmd"
       provider = "claude_cli",
 
       -- "info" | "suggestion" | "warning" | "error"  minimum severity to display
@@ -320,6 +320,10 @@ Options for AI review. See |codereview-ai-review|.
       claude_cli = {
         cmd   = "claude",       -- path or name of the claude binary
         agent = "code-review",  -- Claude agent/profile name
+      },
+      codex_cli = {
+        cmd   = "codex",        -- path or name of the codex binary
+        model = nil,            -- optional model override
       },
       anthropic = {
         api_key = nil,                         -- falls back to ANTHROPIC_API_KEY
@@ -376,6 +380,25 @@ Requirements:
     claude_cli = {
       cmd   = "claude",       -- binary name or full path
       agent = "code-review",  -- agent/profile name
+    },
+  }
+<
+
+------------------------------------------------------------------------------
+Codex CLI                                            *codereview-ai-codex-cli*
+
+Uses the `codex exec` command-line interface to prompt non-interactively using
+the currently configured or default model until explicitly specified.
+
+Requirements:
+  - `codex` binary installed and on PATH
+  - Codex CLI already authenticated
+>lua
+  ai = {
+    provider = "codex_cli",
+    codex_cli = {
+      cmd   = "codex",    -- binary name or full path
+      model = "gpt-5.4",  -- optional model override
     },
   }
 <
