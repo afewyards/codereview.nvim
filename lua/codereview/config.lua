@@ -30,7 +30,7 @@
 ---@field provider? "claude_cli"|"codex_cli"|"copilot_cli"|"gemini_cli"|"opencode_cli"|"qwen_cli"|"anthropic"|"openai"|"ollama"|"custom_cmd" AI Provider to use
 ---@field review_level? "info"|"suggestion"|"warning"|"error" controls the verbosity of AI code reviews (default: `info`)
 ---@field max_file_size? integer skip files larger than N lines (0 = unlimited) (default: 500)
----@field claude_cli? codereview.config.ai.ClaudeCli Claude CLI options
+---@field claude_cli? codereview.config.ai.ClaudeCLI Claude CLI options
 ---@field codex_cli? codereview.config.ai.CodexCLI Codex CLI options
 ---@field copilot_cli? codereview.config.ai.CopilotCLI Copilot CLI options
 ---@field gemini_cli? codereview.config.ai.GeminiCLI Gemini CLI options
@@ -41,7 +41,7 @@
 ---@field ollama? codereview.config.ai.Ollama Ollama options
 ---@field custom_cmd? codereview.config.ai.CustomCmd Custom command options
 
----@class codereview.config.ai.ClaudeCli
+---@class codereview.config.ai.ClaudeCLI
 ---@field cmd? string Claude CLI command (default: `claude`)
 ---@field agent? string Claude Agent (default: `code-review`)
 
