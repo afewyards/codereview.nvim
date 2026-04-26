@@ -50,3 +50,7 @@ end, { desc = "Browse commits" })
 vim.api.nvim_create_user_command("CodeReviewToggleScroll", function()
   require("codereview").toggle_scroll_mode()
 end, { desc = "Toggle scroll/per-file mode" })
+
+vim.api.nvim_create_user_command("CodeReviewPlan", function(opts)
+  require("codereview").plan(opts.args ~= "" and opts.args or nil)
+end, { nargs = "?", desc = "Generate implementation plan from current branch" })
