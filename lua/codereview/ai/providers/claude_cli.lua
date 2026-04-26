@@ -2,8 +2,12 @@ local config = require("codereview.config")
 local utils = require("codereview.ai.providers.utils")
 local M = {}
 
-function M.build_cmd(claude_cmd, agent)
+function M.build_cmd(claude_cmd, model, agent)
   local cmd = { claude_cmd, "-p" }
+  if model and model ~= "" then
+    table.insert(cmd, "--model")
+    table.insert(cmd, model)
+  end
   if agent then
     table.insert(cmd, "--agent")
     table.insert(cmd, agent)
@@ -22,7 +26,7 @@ function M.run(prompt, callback, opts)
   local pcfg = cfg.ai.claude_cli or {}
   local claude_cmd = pcfg.cmd or cfg.ai.claude_cmd or "claude"
   local agent = (not opts.skip_agent) and (pcfg.agent or cfg.ai.agent) or nil
-  local cmd = M.build_cmd(claude_cmd, agent)
+  local cmd = M.build_cmd(claude_cmd, pcfg.model, agent)
   return utils.run_cli(prompt, callback, cmd)
 end
 

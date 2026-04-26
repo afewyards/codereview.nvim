@@ -163,7 +163,7 @@ require("codereview").setup({
     review_level  = "info",        -- "info" | "suggestion" | "warning" | "error"
     max_file_size = 500,           -- skip files larger than N lines (0 = unlimited)
 
-    claude_cli = { cmd = "claude", agent = "code-review" },
+    claude_cli = { cmd = "claude", model = nil, agent = "code-review" },
     codex_cli = { cmd = "codex", model = nil },
     copilot_cli = { cmd = "copilot", model = nil, agent = nil },
     gemini_cli = { cmd = "gemini", model = nil },

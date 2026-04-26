@@ -319,6 +319,7 @@ Options for AI review. See |codereview-ai-review|.
 
       claude_cli = {
         cmd   = "claude",       -- path or name of the claude binary
+        model = nil,            -- optional model override
         agent = "code-review",  -- Claude agent/profile name
       },
       codex_cli = {
@@ -398,6 +399,7 @@ Requirements:
     provider = "claude_cli",
     claude_cli = {
       cmd   = "claude",       -- binary name or full path
+      model = "opus",         -- optional model override
       agent = "code-review",  -- agent/profile name
     },
   }

@@ -14,12 +14,22 @@ describe("ai.subprocess", function()
     end)
 
     it("includes agent flag when provided", function()
-      local cmd = subprocess.build_cmd("claude", "code-review")
+      local cmd = subprocess.build_cmd("claude", nil, "code-review")
       assert.same({ "claude", "-p", "--agent", "code-review" }, cmd)
     end)
 
     it("omits agent flag when agent is nil", function()
       local cmd = subprocess.build_cmd("claude", nil)
+      assert.same({ "claude", "-p" }, cmd)
+    end)
+
+    it("includes model flag when provided", function()
+      local cmd = subprocess.build_cmd("claude", "model")
+      assert.same({ "claude", "-p", "--model", "model" }, cmd)
+    end)
+
+    it("omits model flag when model is nil", function()
+      local cmd = subprocess.build_cmd("claude", nil, nil)
       assert.same({ "claude", "-p" }, cmd)
     end)
   end)

@@ -43,6 +43,7 @@
 
 ---@class codereview.config.ai.ClaudeCLI
 ---@field cmd? string Claude CLI command (default: `claude`)
+---@field model? string Claude model name
 ---@field agent? string Claude Agent (default: `code-review`)
 
 ---@class codereview.config.ai.CodexCLI
@@ -104,7 +105,7 @@ local defaults = {
     provider = "claude_cli",
     review_level = "info",
     max_file_size = 500,
-    claude_cli = { cmd = "claude", agent = "code-review" },
+    claude_cli = { cmd = "claude", model = nil, agent = "code-review" },
     codex_cli = { cmd = "codex", model = nil },
     copilot_cli = { cmd = "copilot", model = nil, agent = nil },
     gemini_cli = { cmd = "gemini", model = nil },
