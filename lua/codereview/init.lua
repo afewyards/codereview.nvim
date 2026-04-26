@@ -176,4 +176,8 @@ function M.toggle_scroll_mode()
   require("codereview.mr.diff_nav").toggle_scroll_mode(active.layout, active.state)
 end
 
+function M.plan(base_arg)
+  require("codereview.plan").start(base_arg)
+end
+
 return M
