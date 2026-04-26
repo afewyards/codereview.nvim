@@ -42,3 +42,41 @@ describe("git.detect_project", function()
     config.reset()
   end)
 end)
+
+describe("git.get_current_branch", function()
+  it("returns branch name", function()
+    local branch = git.get_current_branch()
+    assert.is_string(branch)
+    assert.is_true(#branch > 0)
+  end)
+end)
+
+describe("git.branch_exists", function()
+  it("returns true for HEAD", function()
+    assert.is_true(git.branch_exists("HEAD"))
+  end)
+
+  it("returns false for non-existent branch", function()
+    assert.is_false(git.branch_exists("this-branch-does-not-exist-xyz"))
+  end)
+end)
+
+describe("git.get_default_base", function()
+  it("returns main or master if exists", function()
+    local base = git.get_default_base()
+    -- In most repos, one of these exists
+    if base then
+      assert.is_true(base == "main" or base == "master")
+    end
+  end)
+end)
+
+describe("git.sanitize_branch_name", function()
+  it("replaces slashes with dashes", function()
+    assert.equals("feat-auth-login", git.sanitize_branch_name("feat/auth/login"))
+  end)
+
+  it("handles branch without slashes", function()
+    assert.equals("main", git.sanitize_branch_name("main"))
+  end)
+end)

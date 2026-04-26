@@ -69,4 +69,75 @@ function M.detect_project()
   return "https://" .. host, project
 end
 
+function M.get_current_branch()
+  return shell("git rev-parse --abbrev-ref HEAD 2>/dev/null")
+end
+
+function M.branch_exists(name)
+  local result = shell("git rev-parse --verify " .. name .. " 2>/dev/null")
+  return result ~= nil
+end
+
+function M.get_default_base()
+  if M.branch_exists("main") then
+    return "main"
+  elseif M.branch_exists("master") then
+    return "master"
+  end
+  return nil
+end
+
+function M.sanitize_branch_name(name)
+  if not name then
+    return nil
+  end
+  return name:gsub("/", "-")
+end
+
+function M.diff_against_base(base)
+  local diff_output = shell("git diff " .. base .. "..HEAD --no-color 2>/dev/null")
+  if not diff_output or diff_output == "" then
+    return {}
+  end
+
+  local files = {}
+  local current_file = nil
+  local current_diff = {}
+
+  for line in (diff_output .. "\n"):gmatch("(.-)\n") do
+    local new_path = line:match("^%+%+%+ b/(.+)$")
+    local old_path = line:match("^%-%-%- a/(.+)$")
+
+    if line:match("^diff %-%-git") then
+      if current_file then
+        table.insert(files, {
+          new_path = current_file.new_path,
+          old_path = current_file.old_path,
+          diff = table.concat(current_diff, "\n"),
+        })
+      end
+      current_file = {}
+      current_diff = { line }
+    elseif old_path and current_file then
+      current_file.old_path = old_path
+      table.insert(current_diff, line)
+    elseif new_path and current_file then
+      current_file.new_path = new_path
+      table.insert(current_diff, line)
+    elseif current_file then
+      table.insert(current_diff, line)
+    end
+  end
+
+  if current_file then
+    table.insert(files, {
+      new_path = current_file.new_path,
+      old_path = current_file.old_path,
+      diff = table.concat(current_diff, "\n"),
+    })
+  end
+
+  return files
+end
+
 return M
