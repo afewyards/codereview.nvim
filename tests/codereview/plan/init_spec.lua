@@ -1,0 +1,30 @@
+local plan = require("codereview.plan")
+
+describe("plan.resolve_base", function()
+  it("returns provided base if it exists", function()
+    -- HEAD always exists
+    local base, err = plan.resolve_base("HEAD")
+    assert.equals("HEAD", base)
+    assert.is_nil(err)
+  end)
+
+  it("returns error for non-existent branch", function()
+    local base, err = plan.resolve_base("this-branch-does-not-exist-xyz123")
+    assert.is_nil(base)
+    assert.is_string(err)
+    assert.matches("does not exist", err)
+  end)
+end)
+
+describe("plan.get_output_path", function()
+  it("generates path with sanitized branch name", function()
+    local path = plan.get_output_path("feat/auth")
+    assert.matches("docs/plans/", path)
+    assert.matches("feat%-auth%-plan.md", path)
+  end)
+
+  it("includes date in path", function()
+    local path = plan.get_output_path("main")
+    assert.matches("%d%d%d%d%-%d%d%-%d%d", path)
+  end)
+end)
