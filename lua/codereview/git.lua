@@ -116,7 +116,9 @@ function M.diff_against_base(base)
           diff = table.concat(current_diff, "\n"),
         })
       end
-      current_file = {}
+      -- Extract path from "diff --git a/path b/path" as fallback
+      local git_path = line:match("^diff %-%-git a/(.+) b/")
+      current_file = { new_path = git_path, old_path = git_path }
       current_diff = { line }
     elseif old_path and current_file then
       current_file.old_path = old_path

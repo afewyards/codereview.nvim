@@ -69,35 +69,50 @@ function M.start(base_arg)
   end, { skip_agent = true })
 end
 
+local MAX_CONCURRENT = 10
+
 function M._run_phase2(branch, base, diffs, summaries)
   local all_tasks = {}
   local completed = 0
   local total = #diffs
+  local next_idx = 1
+  local active = 0
 
   spinner.set_label(string.format(" Planning 0/%d files… ", total))
 
-  for _, file in ipairs(diffs) do
-    local file_prompt = plan_prompt.build_file_plan_prompt(file, summaries)
+  local function process_next()
+    while active < MAX_CONCURRENT and next_idx <= total do
+      local file = diffs[next_idx]
+      next_idx = next_idx + 1
+      active = active + 1
 
-    ai_providers.get().run(file_prompt, function(output, ai_err)
-      completed = completed + 1
-      spinner.set_label(string.format(" Planning %d/%d files… ", completed, total))
+      local file_prompt = plan_prompt.build_file_plan_prompt(file, summaries)
 
-      if ai_err then
-        local path = file.new_path or file.old_path
-        log.warn("Plan failed for " .. path .. ": " .. ai_err)
-      else
-        local tasks = plan_prompt.parse_file_plan_output(output)
-        for _, t in ipairs(tasks) do
-          table.insert(all_tasks, t)
+      ai_providers.get().run(file_prompt, function(output, ai_err)
+        active = active - 1
+        completed = completed + 1
+        spinner.set_label(string.format(" Planning %d/%d files… ", completed, total))
+
+        if ai_err then
+          local path = file.new_path or file.old_path
+          log.warn("Plan failed for " .. path .. ": " .. ai_err)
+        else
+          local tasks = plan_prompt.parse_file_plan_output(output)
+          for _, t in ipairs(tasks) do
+            table.insert(all_tasks, t)
+          end
         end
-      end
 
-      if completed >= total then
-        M._run_phase3(branch, base, all_tasks)
-      end
-    end, { skip_agent = true })
+        if completed >= total then
+          M._run_phase3(branch, base, all_tasks)
+        else
+          process_next()
+        end
+      end, { skip_agent = true })
+    end
   end
+
+  process_next()
 end
 
 function M._run_phase3(branch, base, tasks)

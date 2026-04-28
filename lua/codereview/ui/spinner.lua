@@ -79,4 +79,15 @@ function M.close()
   current_label = DEFAULT_LABEL
 end
 
+--- Open spinner with optional initial label.
+---@param label? string
+function M.start(label)
+  if label then
+    current_label = label
+  end
+  M.open()
+end
+
+M.stop = M.close
+
 return M

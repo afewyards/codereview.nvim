@@ -439,7 +439,8 @@ function M.build_summary_prompt(review, diffs)
   }
 
   for _, file in ipairs(diffs) do
-    table.insert(parts, "### " .. (file.new_path or file.old_path))
+    local path = file.new_path or file.old_path or "(unknown)"
+    table.insert(parts, "### " .. path)
     table.insert(parts, "```diff")
     table.insert(parts, file.diff or "")
     table.insert(parts, "```")
