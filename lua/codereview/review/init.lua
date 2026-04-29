@@ -2,6 +2,7 @@
 local ai_providers = require("codereview.ai.providers")
 local prompt_mod = require("codereview.ai.prompt")
 local diff_state_mod = require("codereview.mr.diff_state")
+local orchestrator = require("codereview.ai.orchestrator")
 local log = require("codereview.log")
 local M = {}
 
@@ -188,60 +189,61 @@ local function start_multi(review, diff_state, layout)
 
     local summaries = prompt_mod.parse_summary_output(output)
 
-    -- Phase 2: parallel per-file reviews
+    -- Phase 2: parallel per-file reviews via orchestrator
     local total = #diffs
-    local job_ids = {}
 
-    for _, file in ipairs(diffs) do
-      local path = file.new_path or file.old_path
-      local content = fetch_file_content(diff_state, review, path, file.deleted_file)
-      local file_prompt = prompt_mod.build_file_review_prompt(review, file, summaries, content)
-
-      local file_job = ai_providers.get().run(file_prompt, function(file_output, file_err)
-        if file_err then
-          vim.notify("AI review failed for " .. path .. ": " .. file_err, vim.log.levels.WARN)
-        else
-          local suggestions = prompt_mod.parse_review_output(file_output)
-          suggestions = prompt_mod.filter_unchanged_lines(suggestions, { file })
-          if #suggestions > 0 then
-            render_file_suggestions(diff_state, layout, suggestions)
-          end
+    orchestrator.run({
+      diffs = diffs,
+      build_prompt = function(batch)
+        local file = batch[1]
+        local path = file.new_path or file.old_path
+        local content = fetch_file_content(diff_state, review, path, file.deleted_file)
+        return prompt_mod.build_file_review_prompt(review, file, summaries, content)
+      end,
+      parse_output = prompt_mod.parse_review_output,
+      on_result = function() end,
+      on_batch_complete = function(batch, parsed)
+        local file = batch[1]
+        local suggestions = prompt_mod.filter_unchanged_lines(parsed, { file })
+        if #suggestions > 0 then
+          render_file_suggestions(diff_state, layout, suggestions)
         end
-
-        -- Update progress
         local s = session.get()
         spinner.set_label(string.format(" AI reviewing… %d/%d files ", s.ai_completed + 1, s.ai_total))
-
         vim.schedule(function()
           local diff_mod = require("codereview.mr.diff")
           diff_mod.render_sidebar(layout.sidebar_buf, diff_state)
         end)
-
         session.ai_file_done()
-
-        -- All done?
-        if not session.get().ai_pending then
-          local count = #(diff_state.ai_suggestions or {})
-          if count == 0 then
-            vim.schedule(function()
-              vim.notify("AI review: no issues found!", vim.log.levels.INFO)
-            end)
-          else
-            vim.schedule(function()
-              vim.notify(string.format("AI review: %d suggestions found", count), vim.log.levels.INFO)
-            end)
-          end
-          generate_summary_with_callbacks(diff_state, review, diffs)
+      end,
+      on_error = function(err, batch)
+        local path = batch[1].new_path or batch[1].old_path
+        vim.notify("AI review failed for " .. path .. ": " .. err, vim.log.levels.WARN)
+        local s = session.get()
+        spinner.set_label(string.format(" AI reviewing… %d/%d files ", s.ai_completed + 1, s.ai_total))
+        vim.schedule(function()
+          local diff_mod = require("codereview.mr.diff")
+          diff_mod.render_sidebar(layout.sidebar_buf, diff_state)
+        end)
+        session.ai_file_done()
+      end,
+      on_complete = function()
+        local count = #(diff_state.ai_suggestions or {})
+        if count == 0 then
+          vim.schedule(function()
+            vim.notify("AI review: no issues found!", vim.log.levels.INFO)
+          end)
+        else
+          vim.schedule(function()
+            vim.notify(string.format("AI review: %d suggestions found", count), vim.log.levels.INFO)
+          end)
         end
-      end)
+        generate_summary_with_callbacks(diff_state, review, diffs)
+      end,
+    })
 
-      if file_job and file_job > 0 then
-        table.insert(job_ids, file_job)
-      end
-    end
-
-    -- Store all job IDs for cancellation; update session with real counts
-    session.ai_start(job_ids, total)
+    -- Update session with real file count (no individual job IDs with orchestrator)
+    session.ai_start({}, total)
     spinner.set_label(string.format(" AI reviewing… 0/%d files ", total))
   end, { skip_agent = true }) -- no --agent for summary call
 

@@ -1,0 +1,78 @@
+local ai_providers = require("codereview.ai.providers")
+local M = {}
+
+--- Run a parallel-batch AI orchestration loop.
+---
+--- @param spec table
+---   diffs:            list of {new_path, old_path, diff}
+---   build_prompt:     fn(batch, opts) -> string|table
+---   parse_output:     fn(text) -> results array
+---   on_result:        fn(result)?         fires once per parsed item
+---   on_batch_complete fn(batch, parsed)?  fires after each successful batch
+---   on_error:         fn(err, batch)?     fires on per-batch failure
+---   on_complete:      fn(all_results)
+---   provider_opts:    table?              forwarded to provider.run
+---   max_concurrent:   integer? (default 10)
+function M.run(spec)
+  local diffs = spec.diffs or {}
+  local total = #diffs
+  if total == 0 then
+    if spec.on_complete then
+      spec.on_complete({})
+    end
+    return
+  end
+
+  -- Task 0: one file per batch. Task 5 swaps this for batch.build(diffs, ...).
+  local batches = {}
+  for _, f in ipairs(diffs) do
+    table.insert(batches, { f })
+  end
+
+  local results = {}
+  local completed, next_idx, active = 0, 1, 0
+  local max_concurrent = spec.max_concurrent or 10
+
+  local function process_next()
+    while active < max_concurrent and next_idx <= #batches do
+      local batch = batches[next_idx]
+      next_idx = next_idx + 1
+      active = active + 1
+
+      local prompt = spec.build_prompt(batch, {})
+      ai_providers.get().run(prompt, function(output, err)
+        active = active - 1
+        completed = completed + 1
+
+        if err then
+          if spec.on_error then
+            spec.on_error(err, batch)
+          end
+        else
+          local parsed = spec.parse_output(output) or {}
+          for _, r in ipairs(parsed) do
+            table.insert(results, r)
+            if spec.on_result then
+              spec.on_result(r)
+            end
+          end
+          if spec.on_batch_complete then
+            spec.on_batch_complete(batch, parsed)
+          end
+        end
+
+        if completed >= #batches then
+          if spec.on_complete then
+            spec.on_complete(results)
+          end
+        else
+          process_next()
+        end
+      end, spec.provider_opts)
+    end
+  end
+
+  process_next()
+end
+
+return M
