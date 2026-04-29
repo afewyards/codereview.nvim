@@ -1,6 +1,16 @@
 local ai_providers = require("codereview.ai.providers")
 local M = {}
 
+--- CLI providers support progress-file reporting; HTTP providers do not.
+local CLI_PROVIDERS = {
+  claude_cli = true,
+  codex_cli = true,
+  copilot_cli = true,
+  gemini_cli = true,
+  opencode_cli = true,
+  qwen_cli = true,
+}
+
 --- Run a parallel-batch AI orchestration loop.
 ---
 --- @param spec table
@@ -11,6 +21,7 @@ local M = {}
 ---   on_batch_complete fn(batch, parsed)?  fires after each successful batch
 ---   on_error:         fn(err, batch)?     fires on per-batch failure
 ---   on_complete:      fn(all_results)
+---   on_progress:      fn(done, total)?    fires every 250ms for CLI providers
 ---   provider_opts:    table?              forwarded to provider.run
 ---   max_concurrent:   integer? (default 10)
 function M.run(spec)
@@ -23,6 +34,7 @@ function M.run(spec)
     vim.notify(string.format("Skipped %d file(s) (lockfiles/generated/binary)", skipped), vim.log.levels.INFO)
   end
 
+  local provider_name = (cfg.ai or {}).provider
   local diffs = spec.diffs
   local total = #diffs
   if total == 0 then
@@ -31,6 +43,18 @@ function M.run(spec)
     end
     return
   end
+
+  -- Create a progress tracker for CLI providers when the caller wants progress callbacks.
+  -- HTTP providers (anthropic, openai, ollama) rely on the per-batch on_batch_complete counter instead.
+  local prog = nil
+  if CLI_PROVIDERS[provider_name] and spec.on_progress then
+    prog = require("codereview.ai.progress").new()
+    prog:watch(function(n)
+      spec.on_progress(n, total)
+    end)
+  end
+
+  local prompt_opts = { progress_path = prog and prog.path or nil }
 
   -- Task 0: one file per batch. Task 5 swaps this for batch.build(diffs, ...).
   local batches = {}
@@ -48,9 +72,8 @@ function M.run(spec)
       next_idx = next_idx + 1
       active = active + 1
 
-      local prompt_str = spec.build_prompt(batch, {})
-      if spec.cacheable then
-        local provider_name = (require("codereview.config").get().ai or {}).provider
+      local prompt_str = spec.build_prompt(batch, prompt_opts)
+      if spec.cacheable and type(prompt_str) == "string" then
         if provider_name == "anthropic" then
           local split = prompt_str:find("\n## Files?\n", 1, false) or prompt_str:find("\n## File:", 1, true)
           if split then
@@ -82,6 +105,9 @@ function M.run(spec)
         if completed >= #batches then
           if spec.on_complete then
             spec.on_complete(results)
+          end
+          if prog then
+            prog:cleanup()
           end
         else
           process_next()

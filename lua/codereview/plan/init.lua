@@ -66,11 +66,14 @@ function M._run_phase2(branch, base, diffs)
   orchestrator.run({
     diffs = diffs,
     cacheable = true,
-    build_prompt = function(batch)
-      return plan_prompt.build_file_plan_prompt(batch[1])
+    build_prompt = function(batch, opts)
+      return plan_prompt.build_file_plan_prompt(batch[1], opts)
     end,
     parse_output = plan_prompt.parse_file_plan_output,
     on_result = function() end,
+    on_progress = function(done, t)
+      spinner.set_label(string.format(" Planning %d/%d files… ", done, t))
+    end,
     on_batch_complete = function()
       completed_count = completed_count + 1
       spinner.set_label(string.format(" Planning %d/%d files… ", completed_count, total))

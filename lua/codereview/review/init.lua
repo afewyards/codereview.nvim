@@ -183,14 +183,17 @@ local function start_multi(review, diff_state, layout)
   orchestrator.run({
     diffs = diffs,
     cacheable = true,
-    build_prompt = function(batch)
+    build_prompt = function(batch, opts)
       local file = batch[1]
       local path = file.new_path or file.old_path
       local content = fetch_file_content(diff_state, review, path, file.deleted_file)
-      return prompt_mod.build_file_review_prompt(review, file, content)
+      return prompt_mod.build_file_review_prompt(review, file, content, opts)
     end,
     parse_output = prompt_mod.parse_review_output,
     on_result = function() end,
+    on_progress = function(done, t)
+      spinner.set_label(string.format(" AI reviewing… %d/%d files ", done, t))
+    end,
     on_batch_complete = function(batch, parsed)
       local file = batch[1]
       local suggestions = prompt_mod.filter_unchanged_lines(parsed, { file })
