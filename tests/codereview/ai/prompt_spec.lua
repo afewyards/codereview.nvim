@@ -311,6 +311,13 @@ describe("ai.prompt", function()
       assert.equals(0, #suggestions)
     end)
 
+    it("ignores bare JSON array not wrapped in a code fence", function()
+      -- Without the greedy fallback, unfenced arrays must return {}
+      local output = '[{"file":"a.lua","line":1,"severity":"info","comment":"test"}]'
+      local suggestions = prompt.parse_review_output(output)
+      assert.equals(0, #suggestions)
+    end)
+
     it("handles malformed JSON gracefully", function()
       local suggestions = prompt.parse_review_output("```json\n{broken\n```")
       assert.equals(0, #suggestions)

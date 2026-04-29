@@ -66,9 +66,6 @@ function M.parse_file_plan_output(output)
 
   local json_str = output:match("```json%s*\n(.+)\n```")
   if not json_str then
-    json_str = output:match("%[.+%]")
-  end
-  if not json_str then
     return {}
   end
 

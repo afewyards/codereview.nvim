@@ -247,10 +247,6 @@ function M.parse_review_output(output)
   -- Use greedy match (.+) to capture the full JSON block (handles nested fences/brackets)
   local json_str = output:match("```json%s*\n(.+)\n```")
   if not json_str then
-    -- Fallback: greedy match for a JSON array (handles ] inside strings)
-    json_str = output:match("%[.+%]")
-  end
-  if not json_str then
     log.debug("AI parse: no JSON block found in output (length=" .. #output .. ")")
     return {}
   end

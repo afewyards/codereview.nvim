@@ -140,6 +140,55 @@ describe("review.init routing", function()
   end)
 end)
 
+describe("review.start_multi filtered-file count", function()
+  local orig_ai_start, orig_filter
+
+  before_each(function()
+    captured_calls = {}
+    orig_ai_start = package.loaded["codereview.review.session"].ai_start
+    orig_filter = package.loaded["codereview.ai.file_filter"]
+  end)
+
+  after_each(function()
+    package.loaded["codereview.review.session"].ai_start = orig_ai_start
+    package.loaded["codereview.ai.file_filter"] = orig_filter
+  end)
+
+  it("ai_start total uses post-filter count when file_filter drops files", function()
+    local ai_start_calls = {}
+    package.loaded["codereview.review.session"].ai_start = function(ids, total)
+      table.insert(ai_start_calls, { ids = ids, total = total })
+    end
+
+    -- Filter that keeps only the first file
+    package.loaded["codereview.ai.file_filter"] = {
+      apply = function(diffs, _)
+        return { diffs[1] }
+      end,
+    }
+
+    local review = { title = "Multi", description = "desc" }
+    local diff_state = {
+      files = {
+        { new_path = "a.lua", diff = "diff-a" },
+        { new_path = "package-lock.json", diff = "diff-lock" },
+      },
+      discussions = {},
+      ai_suggestions = {},
+      view_mode = "diff",
+      current_file = 1,
+      scroll_mode = false,
+      line_data_cache = {},
+      row_disc_cache = {},
+      row_ai_cache = {},
+    }
+    review_mod.start(review, diff_state, { main_buf = 0, sidebar_buf = 0, main_win = 0 })
+
+    assert.equals(1, #ai_start_calls, "ai_start should be called once")
+    assert.equals(1, ai_start_calls[1].total, "ai_start total should equal filtered count (1), not original (2)")
+  end)
+end)
+
 describe("render_file_suggestions focus guard", function()
   local orig_run, orig_get_current_win, orig_set_current_win, orig_schedule
 

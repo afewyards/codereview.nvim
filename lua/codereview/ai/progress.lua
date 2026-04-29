@@ -40,6 +40,9 @@ function Progress:watch(on_change)
     250,
     250,
     vim.schedule_wrap(function()
+      if self._stopped then
+        return
+      end
       on_change(self:count())
     end)
   )
@@ -47,6 +50,7 @@ end
 
 --- Stop the poll timer and delete the tmp file.
 function Progress:cleanup()
+  self._stopped = true
   if self._timer then
     self._timer:stop()
     self._timer:close()

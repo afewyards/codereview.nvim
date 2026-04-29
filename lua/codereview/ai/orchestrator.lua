@@ -74,7 +74,7 @@ function M.run(spec)
       local prompt_str = spec.build_prompt(batch, prompt_opts)
       if spec.cacheable and type(prompt_str) == "string" then
         if provider_name == "anthropic" then
-          local split = prompt_str:find("\n## Files?\n", 1, false) or prompt_str:find("\n## File:", 1, true)
+          local split = prompt_str:find("\n## Files?\n", 1, false)
           if split then
             prompt_str = { system = prompt_str:sub(1, split - 1), user = prompt_str:sub(split + 1) }
           end

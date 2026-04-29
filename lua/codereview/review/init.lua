@@ -178,10 +178,15 @@ local function start_multi(review, diff_state, layout)
     diff_state.current_file = diff_state.current_file or 1
   end
 
-  local total = #diffs
+  -- Pre-apply file filter so session.ai_start receives the correct post-filter total.
+  -- The orchestrator's own filter pass is then a no-op on already-filtered input.
+  local cfg = require("codereview.config").get()
+  local file_filter = require("codereview.ai.file_filter")
+  local filtered_diffs = file_filter.apply(diffs, (cfg.ai or {}).skip_patterns)
+  local total = #filtered_diffs
 
   orchestrator.run({
-    diffs = diffs,
+    diffs = filtered_diffs,
     cacheable = true,
     -- File content is much larger than diffs: use a tighter budget per batch.
     batch_char_budget = 40000,
