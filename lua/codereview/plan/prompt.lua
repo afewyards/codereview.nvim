@@ -1,26 +1,12 @@
 local M = {}
 local ai_prompt = require("codereview.ai.prompt")
 
-function M.build_file_plan_prompt(file, summaries)
+function M.build_file_plan_prompt(file)
   local path = file.new_path or file.old_path
   local parts = {
     "You are creating an implementation plan for changes in a file.",
     "",
   }
-
-  local others = {}
-  for fpath, summary in pairs(summaries or {}) do
-    if fpath ~= path then
-      table.insert(others, string.format("- `%s`: %s", fpath, summary))
-    end
-  end
-  if #others > 0 then
-    table.insert(parts, "## Branch Context (Other Changed Files)")
-    for _, line in ipairs(others) do
-      table.insert(parts, line)
-    end
-    table.insert(parts, "")
-  end
 
   table.insert(parts, "## File: " .. path)
   table.insert(parts, "```diff")

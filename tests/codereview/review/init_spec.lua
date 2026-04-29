@@ -91,7 +91,7 @@ describe("review.init routing", function()
     captured_calls = {}
   end)
 
-  it("uses summary prompt then per-file prompts for multi-file MRs", function()
+  it("uses per-file prompts for multi-file MRs", function()
     local review = { title = "Multi", description = "desc" }
     local diff_state = {
       files = {
@@ -108,15 +108,10 @@ describe("review.init routing", function()
       row_ai_cache = {},
     }
     review_mod.start(review, diff_state, { main_buf = 0, sidebar_buf = 0, main_win = 0 })
-    -- Phase 1: summary call with skip_agent
-    assert.truthy(#captured_calls >= 1, "should have at least one subprocess call")
-    local first = captured_calls[1]
-    assert.truthy(first.opts and first.opts.skip_agent, "summary call should skip agent")
-    assert.truthy(first.prompt:find("summariz"), "first prompt should be summary prompt")
-    -- Phase 2: per-file calls (one per file)
-    assert.truthy(#captured_calls >= 3, "should have summary + 2 file calls")
+    -- Per-file calls (one per file, no summary pre-pass)
+    assert.truthy(#captured_calls >= 2, "should have 2 per-file calls")
     assert.truthy(
-      captured_calls[2].prompt:find("a.lua") or captured_calls[3].prompt:find("a.lua"),
+      captured_calls[1].prompt:find("a.lua") or captured_calls[2].prompt:find("a.lua"),
       "per-file prompts should reference file paths"
     )
   end)
@@ -235,7 +230,7 @@ describe("review.start_file", function()
     vim.schedule = orig_schedule_sf
   end)
 
-  it("runs summary then single-file review with cross-file context", function()
+  it("reviews single target file without a summary pre-pass", function()
     local review = { title = "MR", description = "desc" }
     local diff_state = {
       files = {
@@ -256,14 +251,9 @@ describe("review.start_file", function()
 
     review_mod.start_file(review, diff_state, layout)
 
-    -- Phase 1: summary call
-    assert.truthy(#captured_calls >= 1)
-    assert.truthy(captured_calls[1].opts and captured_calls[1].opts.skip_agent)
-    assert.truthy(captured_calls[1].prompt:find("summariz"))
-
-    -- Phase 2: single file review (NOT 3 per-file calls)
-    assert.equals(2, #captured_calls, "should be exactly 2 calls: summary + 1 file")
-    assert.truthy(captured_calls[2].prompt:find("b.lua"), "should review the target file b.lua")
+    -- Single file review only (no summary pre-pass)
+    assert.equals(1, #captured_calls, "should be exactly 1 call: the file review")
+    assert.truthy(captured_calls[1].prompt:find("b.lua"), "should review the target file b.lua")
   end)
 
   it("replaces only the target file's suggestions", function()
@@ -286,14 +276,8 @@ describe("review.start_file", function()
     }
 
     local orig_run = package.loaded["codereview.ai.subprocess"].run
-    local call_count = 0
     package.loaded["codereview.ai.subprocess"].run = function(prompt, callback, opts)
-      call_count = call_count + 1
-      if call_count == 1 then
-        callback('```json\n[{"file":"a.lua","summary":"does a"},{"file":"b.lua","summary":"does b"}]\n```')
-      else
-        callback('```json\n[{"file":"a.lua","line":10,"severity":"warning","comment":"new a"}]\n```')
-      end
+      callback('```json\n[{"file":"a.lua","line":10,"severity":"warning","comment":"new a"}]\n```')
       return 1
     end
 
@@ -346,9 +330,9 @@ describe("file content in per-file review", function()
 
     -- Should have fetched content for both files
     assert.equals(2, #content_fetch_calls)
-    -- Per-file prompts (calls 2 and 3) should contain full file content
+    -- Per-file prompts (calls 1 and 2) should contain full file content
     assert.truthy(
-      captured_calls[2].prompt:find("Full File Content") or captured_calls[3].prompt:find("Full File Content"),
+      captured_calls[1].prompt:find("Full File Content") or captured_calls[2].prompt:find("Full File Content"),
       "per-file prompts should include full file content"
     )
   end)
@@ -421,7 +405,7 @@ describe("file content in per-file review", function()
     assert.equals(2, #content_fetch_calls)
     -- But the per-file prompts should NOT have Full File Content for big files
     -- (both files return 501 lines which exceeds default 500)
-    for i = 2, #captured_calls do
+    for i = 1, #captured_calls do
       assert.falsy(
         captured_calls[i].prompt:find("Full File Content"),
         "per-file prompt should not include full file content for files exceeding max_file_size"

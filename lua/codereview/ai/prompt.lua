@@ -342,7 +342,7 @@ function M.parse_mr_draft(output)
   return vim.trim(title), vim.trim(description)
 end
 
-function M.build_file_review_prompt(review, file, summaries, content)
+function M.build_file_review_prompt(review, file, content)
   local path = file.new_path or file.old_path
   local parts = {
     "You are reviewing a single file in a merge request.",
@@ -354,21 +354,6 @@ function M.build_file_review_prompt(review, file, summaries, content)
     review.description or "(no description)",
     "",
   }
-
-  -- Other changed files with summaries
-  local others = {}
-  for fpath, summary in pairs(summaries or {}) do
-    if fpath ~= path then
-      table.insert(others, string.format("- `%s`: %s", fpath, summary))
-    end
-  end
-  if #others > 0 then
-    table.insert(parts, "## Other Changed Files in This MR")
-    for _, line in ipairs(others) do
-      table.insert(parts, line)
-    end
-    table.insert(parts, "")
-  end
 
   if content and content ~= "" then
     table.insert(parts, "## Full File Content: " .. path)
@@ -422,59 +407,6 @@ function M.build_file_review_prompt(review, file, summaries, content)
   )
 
   return table.concat(parts, "\n")
-end
-
-function M.build_summary_prompt(review, diffs)
-  local parts = {
-    "You are summarizing changes in a merge request for context.",
-    "",
-    "## MR Title",
-    review.title or "",
-    "",
-    "## MR Description",
-    review.description or "(no description)",
-    "",
-    "## Changed Files",
-    "",
-  }
-
-  for _, file in ipairs(diffs) do
-    local path = file.new_path or file.old_path or "(unknown)"
-    table.insert(parts, "### " .. path)
-    table.insert(parts, "```diff")
-    table.insert(parts, file.diff or "")
-    table.insert(parts, "```")
-    table.insert(parts, "")
-  end
-
-  table.insert(parts, "## Instructions")
-  table.insert(parts, "")
-  table.insert(parts, "For each file, write a one-sentence summary of what changed.")
-  table.insert(parts, "Output a JSON object in a ```json code block:")
-  table.insert(parts, '{"path/to/file.lua": "Summary of changes", ...}')
-
-  return table.concat(parts, "\n")
-end
-
-function M.parse_summary_output(output)
-  if not output or output == "" then
-    return {}
-  end
-
-  local json_str = output:match("```json%s*\n(.+)\n```")
-  if not json_str then
-    json_str = output:match("%{.+%}")
-  end
-  if not json_str then
-    return {}
-  end
-
-  local ok, data = pcall(vim.json.decode, json_str)
-  if not ok or type(data) ~= "table" then
-    return {}
-  end
-
-  return data
 end
 
 return M

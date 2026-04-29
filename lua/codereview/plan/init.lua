@@ -1,7 +1,6 @@
 local M = {}
 local git = require("codereview.git")
 local ai_providers = require("codereview.ai.providers")
-local ai_prompt = require("codereview.ai.prompt")
 local plan_prompt = require("codereview.plan.prompt")
 local orchestrator = require("codereview.ai.orchestrator")
 local spinner = require("codereview.ui.spinner")
@@ -54,23 +53,12 @@ function M.start(base_arg)
   end
 
   vim.notify(string.format("Generating plan: %s → %s (%d files)", base, branch, #diffs), vim.log.levels.INFO)
-  spinner.start(" Summarizing files… ")
+  spinner.start(" Planning files… ")
 
-  -- Phase 1: Summary
-  local summary_prompt = ai_prompt.build_summary_prompt({ title = branch, description = "" }, diffs)
-  ai_providers.get().run(summary_prompt, function(output, ai_err)
-    if ai_err then
-      spinner.stop()
-      vim.notify("Summary failed: " .. ai_err, vim.log.levels.ERROR)
-      return
-    end
-
-    local summaries = ai_prompt.parse_summary_output(output)
-    M._run_phase2(branch, base, diffs, summaries)
-  end, { skip_agent = true })
+  M._run_phase2(branch, base, diffs)
 end
 
-function M._run_phase2(branch, base, diffs, summaries)
+function M._run_phase2(branch, base, diffs)
   local total = #diffs
   local completed_count = 0
   spinner.set_label(string.format(" Planning 0/%d files… ", total))
@@ -78,7 +66,7 @@ function M._run_phase2(branch, base, diffs, summaries)
   orchestrator.run({
     diffs = diffs,
     build_prompt = function(batch)
-      return plan_prompt.build_file_plan_prompt(batch[1], summaries)
+      return plan_prompt.build_file_plan_prompt(batch[1])
     end,
     parse_output = plan_prompt.parse_file_plan_output,
     on_result = function() end,

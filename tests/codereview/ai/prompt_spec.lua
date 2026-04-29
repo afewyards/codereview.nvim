@@ -345,20 +345,13 @@ describe("ai.prompt", function()
   end)
 
   describe("build_file_review_prompt", function()
-    it("includes MR context, other file summaries, and target file diff", function()
+    it("includes MR context and target file diff", function()
       local review = { title = "Fix auth", description = "Token fix" }
       local file = { new_path = "src/auth.lua", diff = "@@ -1,2 +1,3 @@\n-old\n+new\n" }
-      local summaries = {
-        ["src/auth.lua"] = "Fixed token refresh",
-        ["src/config.lua"] = "Added timeout setting",
-      }
-      local result = prompt.build_file_review_prompt(review, file, summaries)
+      local result = prompt.build_file_review_prompt(review, file)
       -- Contains MR context
       assert.truthy(result:find("Fix auth"))
       assert.truthy(result:find("Token fix"))
-      -- Contains other file summaries (not the target file itself)
-      assert.truthy(result:find("src/config.lua"))
-      assert.truthy(result:find("Added timeout setting"))
       -- Contains the file's diff
       assert.truthy(result:find("%-old"))
       assert.truthy(result:find("%+new"))
@@ -367,39 +360,17 @@ describe("ai.prompt", function()
       assert.truthy(result:find("severity"))
     end)
 
-    it("excludes target file from other files section", function()
-      local review = { title = "T", description = "D" }
-      local file = { new_path = "a.lua", diff = "diff" }
-      local summaries = {
-        ["a.lua"] = "Summary A",
-        ["b.lua"] = "Summary B",
-      }
-      local result = prompt.build_file_review_prompt(review, file, summaries)
-      -- Should contain b.lua summary but not a.lua in the "Other" section
-      assert.truthy(result:find("b.lua"))
-      assert.truthy(result:find("Summary B"))
-      -- The "Other Changed Files" section should not contain a.lua
-      local other_section = result:match("## Other Changed Files in This MR\n(.-)\n## File Under Review")
-      if other_section then
-        assert.falsy(other_section:find("a%.lua"), "Other files section should not contain the target file")
-      end
-    end)
-
-    it("handles empty summaries", function()
-      local review = { title = "T", description = "D" }
-      local file = { new_path = "a.lua", diff = "diff" }
-      local result = prompt.build_file_review_prompt(review, file, {})
-      assert.truthy(result:find("a.lua"))
-      -- Should still work, just no other files section
-      assert.truthy(result:find("JSON"))
-      -- Should NOT have "Other Changed Files" header
-      assert.falsy(result:find("Other Changed Files"))
+    it("review prompt has no Branch Context", function()
+      local review = { title = "t" }
+      local p = prompt.build_file_review_prompt(review, { new_path = "a", diff = "" }, "")
+      assert.is_nil(p:find("Branch Context"))
+      assert.is_nil(p:find("Other Changed Files"))
     end)
 
     it("annotates diff lines with line numbers in the file review prompt", function()
       local review = { title = "T", description = "D" }
       local file = { new_path = "src/foo.lua", diff = "@@ -3,2 +3,3 @@\n context\n-old\n+new\n+extra\n" }
-      local result = prompt.build_file_review_prompt(review, file, {})
+      local result = prompt.build_file_review_prompt(review, file)
       -- Annotated context line at new line 3
       assert.truthy(result:match("L%s*3:"), "prompt should contain L3 annotation")
       -- First added line at new line 4
@@ -411,7 +382,7 @@ describe("ai.prompt", function()
       config.setup({ ai = { review_level = "error" } })
       local review = { title = "T", description = "D" }
       local file = { new_path = "f.lua", diff = "@@ -1,1 +1,1 @@\n-old\n+new\n" }
-      local result = prompt.build_file_review_prompt(review, file, {})
+      local result = prompt.build_file_review_prompt(review, file)
       assert.truthy(result:find("Only report"), "should contain severity filter instruction")
       assert.truthy(result:find("error"), "should mention error level")
       config.reset()
@@ -420,7 +391,7 @@ describe("ai.prompt", function()
     it("includes full file content section when content is provided", function()
       local review = { title = "T", description = "D" }
       local file = { new_path = "src/foo.lua", diff = "@@ -1,2 +1,3 @@\n-old\n+new\n" }
-      local result = prompt.build_file_review_prompt(review, file, {}, "local M = {}\nfunction M.foo()\nend\nreturn M")
+      local result = prompt.build_file_review_prompt(review, file, "local M = {}\nfunction M.foo()\nend\nreturn M")
       assert.truthy(result:find("## Full File Content"))
       assert.truthy(result:find("local M = {}"))
       assert.truthy(result:find("function M.foo"))
@@ -430,14 +401,14 @@ describe("ai.prompt", function()
     it("omits full file content section when content is nil", function()
       local review = { title = "T", description = "D" }
       local file = { new_path = "src/foo.lua", diff = "@@ -1,2 +1,3 @@\n-old\n+new\n" }
-      local result = prompt.build_file_review_prompt(review, file, {}, nil)
+      local result = prompt.build_file_review_prompt(review, file, nil)
       assert.falsy(result:find("## Full File Content"))
     end)
 
     it("places full file content before the diff section", function()
       local review = { title = "T", description = "D" }
       local file = { new_path = "src/foo.lua", diff = "@@ -1,1 +1,1 @@\n-old\n+new\n" }
-      local result = prompt.build_file_review_prompt(review, file, {}, "full content here")
+      local result = prompt.build_file_review_prompt(review, file, "full content here")
       local content_pos = result:find("## Full File Content")
       local diff_pos = result:find("## File Under Review")
       assert.truthy(content_pos)
@@ -468,42 +439,6 @@ describe("ai.prompt", function()
       local title, desc = prompt.parse_mr_draft(output)
       assert.equals("Fix auth token refresh", title)
       assert.equals("Fixes the bug.", desc)
-    end)
-  end)
-
-  describe("build_summary_prompt", function()
-    it("includes MR context and all file diffs", function()
-      local review = { title = "Fix auth", description = "Token fix" }
-      local diffs = {
-        { new_path = "src/auth.lua", diff = "@@ -1,2 +1,3 @@\n-old\n+new\n" },
-        { new_path = "src/config.lua", diff = "@@ -5,1 +5,2 @@\n+added\n" },
-      }
-      local result = prompt.build_summary_prompt(review, diffs)
-      assert.truthy(result:find("Fix auth"))
-      assert.truthy(result:find("src/auth.lua"))
-      assert.truthy(result:find("src/config.lua"))
-      assert.truthy(result:find("JSON"))
-      assert.truthy(result:find("one%-sentence summary"))
-    end)
-  end)
-
-  describe("parse_summary_output", function()
-    it("extracts file-to-summary map from JSON block", function()
-      local output =
-        '```json\n{"src/auth.lua": "Fixed token refresh logic", "src/config.lua": "Added timeout setting"}\n```'
-      local summaries = prompt.parse_summary_output(output)
-      assert.equals("Fixed token refresh logic", summaries["src/auth.lua"])
-      assert.equals("Added timeout setting", summaries["src/config.lua"])
-    end)
-
-    it("returns empty table on missing JSON", function()
-      local summaries = prompt.parse_summary_output("no json here")
-      assert.same({}, summaries)
-    end)
-
-    it("returns empty table on nil input", function()
-      local summaries = prompt.parse_summary_output(nil)
-      assert.same({}, summaries)
     end)
   end)
 end)

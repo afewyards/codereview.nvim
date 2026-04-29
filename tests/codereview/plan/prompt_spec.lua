@@ -6,18 +6,15 @@ describe("plan.prompt.build_file_plan_prompt", function()
       new_path = "lua/test.lua",
       diff = "+local x = 1",
     }
-    local result = prompt.build_file_plan_prompt(file, {})
+    local result = prompt.build_file_plan_prompt(file)
     assert.is_string(result)
     assert.matches("lua/test.lua", result)
     assert.matches("local x = 1", result)
   end)
 
-  it("includes other file summaries", function()
-    local file = { new_path = "a.lua", diff = "+x" }
-    local summaries = { ["b.lua"] = "Added helper function" }
-    local result = prompt.build_file_plan_prompt(file, summaries)
-    assert.matches("b.lua", result)
-    assert.matches("Added helper function", result)
+  it("plan prompt has no Branch Context", function()
+    local p = prompt.build_file_plan_prompt({ new_path = "a", diff = "" })
+    assert.is_nil(p:find("Branch Context"))
   end)
 end)
 
