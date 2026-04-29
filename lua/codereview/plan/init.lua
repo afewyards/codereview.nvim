@@ -3,6 +3,7 @@ local git = require("codereview.git")
 local ai_providers = require("codereview.ai.providers")
 local ai_prompt = require("codereview.ai.prompt")
 local plan_prompt = require("codereview.plan.prompt")
+local orchestrator = require("codereview.ai.orchestrator")
 local spinner = require("codereview.ui.spinner")
 local log = require("codereview.log")
 
@@ -69,50 +70,33 @@ function M.start(base_arg)
   end, { skip_agent = true })
 end
 
-local MAX_CONCURRENT = 10
-
 function M._run_phase2(branch, base, diffs, summaries)
-  local all_tasks = {}
-  local completed = 0
   local total = #diffs
-  local next_idx = 1
-  local active = 0
-
+  local completed_count = 0
   spinner.set_label(string.format(" Planning 0/%d files… ", total))
 
-  local function process_next()
-    while active < MAX_CONCURRENT and next_idx <= total do
-      local file = diffs[next_idx]
-      next_idx = next_idx + 1
-      active = active + 1
-
-      local file_prompt = plan_prompt.build_file_plan_prompt(file, summaries)
-
-      ai_providers.get().run(file_prompt, function(output, ai_err)
-        active = active - 1
-        completed = completed + 1
-        spinner.set_label(string.format(" Planning %d/%d files… ", completed, total))
-
-        if ai_err then
-          local path = file.new_path or file.old_path
-          log.warn("Plan failed for " .. path .. ": " .. ai_err)
-        else
-          local tasks = plan_prompt.parse_file_plan_output(output)
-          for _, t in ipairs(tasks) do
-            table.insert(all_tasks, t)
-          end
-        end
-
-        if completed >= total then
-          M._run_phase3(branch, base, all_tasks)
-        else
-          process_next()
-        end
-      end, { skip_agent = true })
-    end
-  end
-
-  process_next()
+  orchestrator.run({
+    diffs = diffs,
+    build_prompt = function(batch)
+      return plan_prompt.build_file_plan_prompt(batch[1], summaries)
+    end,
+    parse_output = plan_prompt.parse_file_plan_output,
+    on_result = function() end,
+    on_batch_complete = function()
+      completed_count = completed_count + 1
+      spinner.set_label(string.format(" Planning %d/%d files… ", completed_count, total))
+    end,
+    on_error = function(err, batch)
+      local p = batch[1].new_path or batch[1].old_path
+      log.warn("Plan failed for " .. (p or "?") .. ": " .. err)
+      completed_count = completed_count + 1
+      spinner.set_label(string.format(" Planning %d/%d files… ", completed_count, total))
+    end,
+    on_complete = function(all_tasks)
+      M._run_phase3(branch, base, all_tasks)
+    end,
+    provider_opts = { skip_agent = true },
+  })
 end
 
 function M._run_phase3(branch, base, tasks)
