@@ -30,6 +30,7 @@
 ---@field provider? "claude_cli"|"codex_cli"|"copilot_cli"|"gemini_cli"|"opencode_cli"|"qwen_cli"|"anthropic"|"openai"|"ollama"|"custom_cmd" AI Provider to use
 ---@field review_level? "info"|"suggestion"|"warning"|"error" controls the verbosity of AI code reviews (default: `info`)
 ---@field max_file_size? integer skip files larger than N lines (0 = unlimited) (default: 500)
+---@field skip_patterns? string[] additional glob patterns to skip (additive to defaults)
 ---@field claude_cli? codereview.config.ai.ClaudeCLI Claude CLI options
 ---@field codex_cli? codereview.config.ai.CodexCLI Codex CLI options
 ---@field copilot_cli? codereview.config.ai.CopilotCLI Copilot CLI options
@@ -115,6 +116,7 @@ local defaults = {
     openai = { api_key = nil, model = "gpt-4o", base_url = nil },
     ollama = { model = "llama3", base_url = "http://localhost:11434" },
     custom_cmd = { cmd = nil, args = {} },
+    skip_patterns = {},
   },
   keymaps = {},
 }
