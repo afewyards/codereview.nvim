@@ -67,21 +67,21 @@ function M._run_phase2(branch, base, diffs)
     diffs = diffs,
     cacheable = true,
     build_prompt = function(batch, opts)
-      return plan_prompt.build_file_plan_prompt(batch[1], opts)
+      return plan_prompt.build_batch_plan_prompt(batch, opts)
     end,
     parse_output = plan_prompt.parse_file_plan_output,
     on_result = function() end,
     on_progress = function(done, t)
       spinner.set_label(string.format(" Planning %d/%d files… ", done, t))
     end,
-    on_batch_complete = function()
-      completed_count = completed_count + 1
+    on_batch_complete = function(batch)
+      completed_count = completed_count + #batch
       spinner.set_label(string.format(" Planning %d/%d files… ", completed_count, total))
     end,
     on_error = function(err, batch)
       local p = batch[1].new_path or batch[1].old_path
       log.warn("Plan failed for " .. (p or "?") .. ": " .. err)
-      completed_count = completed_count + 1
+      completed_count = completed_count + #batch
       spinner.set_label(string.format(" Planning %d/%d files… ", completed_count, total))
     end,
     on_complete = function(all_tasks)

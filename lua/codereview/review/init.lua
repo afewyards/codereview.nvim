@@ -183,11 +183,19 @@ local function start_multi(review, diff_state, layout)
   orchestrator.run({
     diffs = diffs,
     cacheable = true,
+    -- File content is much larger than diffs: use a tighter budget per batch.
+    batch_char_budget = 40000,
+    batch_max_files = 8,
     build_prompt = function(batch, opts)
-      local file = batch[1]
-      local path = file.new_path or file.old_path
-      local content = fetch_file_content(diff_state, review, path, file.deleted_file)
-      return prompt_mod.build_file_review_prompt(review, file, content, opts)
+      local contents_by_path = {}
+      for _, file in ipairs(batch) do
+        local path = file.new_path or file.old_path
+        local content = fetch_file_content(diff_state, review, path, file.deleted_file)
+        if content then
+          contents_by_path[path] = content
+        end
+      end
+      return prompt_mod.build_batch_review_prompt(review, batch, contents_by_path, opts)
     end,
     parse_output = prompt_mod.parse_review_output,
     on_result = function() end,
@@ -195,29 +203,34 @@ local function start_multi(review, diff_state, layout)
       spinner.set_label(string.format(" AI reviewing… %d/%d files ", done, t))
     end,
     on_batch_complete = function(batch, parsed)
-      local file = batch[1]
-      local suggestions = prompt_mod.filter_unchanged_lines(parsed, { file })
+      local suggestions = prompt_mod.filter_unchanged_lines(parsed, batch)
       if #suggestions > 0 then
         render_file_suggestions(diff_state, layout, suggestions)
       end
+      local batch_size = #batch
       local s = session.get()
-      spinner.set_label(string.format(" AI reviewing… %d/%d files ", s.ai_completed + 1, s.ai_total))
+      spinner.set_label(string.format(" AI reviewing… %d/%d files ", s.ai_completed + batch_size, s.ai_total))
       vim.schedule(function()
         local diff_mod = require("codereview.mr.diff")
         diff_mod.render_sidebar(layout.sidebar_buf, diff_state)
       end)
-      session.ai_file_done()
+      for _ = 1, batch_size do
+        session.ai_file_done()
+      end
     end,
     on_error = function(err, batch)
       local path = batch[1].new_path or batch[1].old_path
       vim.notify("AI review failed for " .. path .. ": " .. err, vim.log.levels.WARN)
+      local batch_size = #batch
       local s = session.get()
-      spinner.set_label(string.format(" AI reviewing… %d/%d files ", s.ai_completed + 1, s.ai_total))
+      spinner.set_label(string.format(" AI reviewing… %d/%d files ", s.ai_completed + batch_size, s.ai_total))
       vim.schedule(function()
         local diff_mod = require("codereview.mr.diff")
         diff_mod.render_sidebar(layout.sidebar_buf, diff_state)
       end)
-      session.ai_file_done()
+      for _ = 1, batch_size do
+        session.ai_file_done()
+      end
     end,
     on_complete = function()
       local count = #(diff_state.ai_suggestions or {})

@@ -51,7 +51,7 @@ end
 describe("orchestrator", function()
   local orchestrator = require("codereview.ai.orchestrator")
 
-  it("calls build_prompt once per file (batch size 1) and parses output", function()
+  it("calls build_prompt once per batch and parses output", function()
     local prompts, results = {}, {}
     local fake_provider = {
       run = function(p, cb)
@@ -70,6 +70,8 @@ describe("orchestrator", function()
     local done = false
     orchestrator.run({
       diffs = { { new_path = "a", diff = "" }, { new_path = "b", diff = "" } },
+      -- Force 1 file per batch so we get 2 prompts (one per file)
+      batch_max_files = 1,
       build_prompt = function(batch)
         return "P:" .. batch[1].new_path
       end,
@@ -86,6 +88,51 @@ describe("orchestrator", function()
     })
     assert.are.equal(2, #prompts)
     assert.are.equal(2, #results)
+    assert.is_true(done)
+  end)
+
+  it("packs multiple files into one batch within budget", function()
+    local prompts = {}
+    local fake_provider = {
+      run = function(p, cb)
+        table.insert(prompts, p)
+        cb("[]")
+      end,
+    }
+    package.loaded["codereview.ai.providers"] = {
+      get = function()
+        return fake_provider
+      end,
+    }
+    package.loaded["codereview.ai.orchestrator"] = nil
+    orchestrator = require("codereview.ai.orchestrator")
+
+    local done = false
+    orchestrator.run({
+      diffs = {
+        { new_path = "a", diff = string.rep("x", 10) },
+        { new_path = "b", diff = string.rep("x", 10) },
+        { new_path = "c", diff = string.rep("x", 10) },
+      },
+      -- Budget large enough to fit all 3 → 1 AI call
+      batch_char_budget = 80000,
+      batch_max_files = 15,
+      build_prompt = function(batch)
+        local paths = {}
+        for _, f in ipairs(batch) do
+          table.insert(paths, f.new_path)
+        end
+        return table.concat(paths, ",")
+      end,
+      parse_output = function()
+        return {}
+      end,
+      on_result = function() end,
+      on_complete = function()
+        done = true
+      end,
+    })
+    assert.are.equal(1, #prompts)
     assert.is_true(done)
   end)
 
@@ -141,6 +188,8 @@ describe("orchestrator", function()
 
     orchestrator.run({
       diffs = { { new_path = "a", diff = "" }, { new_path = "b", diff = "" } },
+      -- Force 1 file per batch so we get 2 on_batch_complete calls
+      batch_max_files = 1,
       build_prompt = function(batch)
         return batch[1].new_path
       end,

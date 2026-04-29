@@ -24,6 +24,41 @@ function M.build_file_plan_prompt(file, opts)
   return table.concat(parts, "\n") .. ai_prompt.progress_suffix(opts and opts.progress_path)
 end
 
+--- Build a prompt for a batch of files (multiple diffs in one AI call).
+--- Stable instructions first (cache-friendly); per-file diffs after "## Files".
+---
+--- @param files table[]  List of {new_path, old_path, diff}
+--- @param opts  table?   {progress_path?: string}
+--- @return string
+function M.build_batch_plan_prompt(files, opts)
+  local parts = {
+    "You are creating an implementation plan for changes in files.",
+    "",
+    "## Instructions",
+    "",
+    "Analyze the diffs below and create tasks to complete or improve these implementations.",
+    "Output a JSON array in a ```json code block:",
+    '[{"file": "<path>", "line": <number>, "task": "<what to do>", "reason": "<why>"}]',
+    "",
+    "Focus on: incomplete implementations, missing error handling, TODOs, edge cases, missing tests.",
+    "If the code looks complete, output `[]`.",
+  }
+
+  table.insert(parts, "")
+  table.insert(parts, "## Files")
+
+  for _, file in ipairs(files) do
+    local path = file.new_path or file.old_path
+    table.insert(parts, "")
+    table.insert(parts, "### " .. path)
+    table.insert(parts, "```diff")
+    table.insert(parts, ai_prompt.annotate_diff_with_lines(file.diff or ""))
+    table.insert(parts, "```")
+  end
+
+  return table.concat(parts, "\n") .. ai_prompt.progress_suffix(opts and opts.progress_path)
+end
+
 function M.parse_file_plan_output(output)
   if not output or output == "" then
     return {}

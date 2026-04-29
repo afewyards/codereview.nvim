@@ -305,6 +305,74 @@ function M.parse_review_output(output)
   return suggestions
 end
 
+--- Build a review prompt for a batch of files (multiple diffs in one AI call).
+--- Stable instructions first (cache-friendly); per-file content/diffs after "## Files".
+---
+--- @param review           table              MR review object {title, description}
+--- @param files            table[]            List of {new_path, old_path, diff}
+--- @param contents_by_path table<string,string>  Full file content keyed by path (may be nil)
+--- @param opts             table?             {progress_path?: string}
+--- @return string
+function M.build_batch_review_prompt(review, files, contents_by_path, opts)
+  local parts = {
+    "You are reviewing files in a merge request.",
+    "",
+    "## MR Title",
+    review.title or "",
+    "",
+    "## MR Description",
+    review.description or "(no description)",
+    "",
+    "## Instructions",
+    "",
+    "Each diff line is prefixed with its line number (e.g., L38:). Use the EXACT number from the L-prefix for the line field.",
+    "Review the files below. Output a JSON array in a ```json code block.",
+    'Each item: {"file": "<path>", "line": <number from L-prefix>, "code": "<exact content of that line>", "severity": "error"|"warning"|"info"|"suggestion", "comment": "text"}',
+    'The "code" field must contain the trimmed source code from the line you are commenting on (without the diff +/- prefix).',
+    'Use \\n inside "comment" strings for line breaks.',
+    "If no issues, output `[]`.",
+    "ONLY comment on lines that are actual changes: lines prefixed with + (added) or - (removed) in the diff. Context lines (no +/- prefix) are for understanding only — NEVER comment on them.",
+    "Focus on: bugs, security, error handling, edge cases, naming, clarity.",
+    "Do NOT comment on style or formatting.",
+  }
+
+  local sev_instr = severity_instruction()
+  if sev_instr then
+    table.insert(parts, sev_instr)
+  end
+
+  table.insert(
+    parts,
+    "IMPORTANT: Find the L-prefix on the exact code line your comment applies to and use that number. Do NOT guess or count lines yourself."
+  )
+
+  table.insert(parts, "")
+  table.insert(parts, "## Files")
+
+  for _, file in ipairs(files) do
+    local path = file.new_path or file.old_path
+    table.insert(parts, "")
+
+    local content = contents_by_path and contents_by_path[path]
+    if content and content ~= "" then
+      local ext = path and path:match("%.([^%.]+)$") or ""
+      table.insert(parts, "### Full File Content: " .. path)
+      table.insert(parts, "```" .. ext)
+      table.insert(parts, content)
+      table.insert(parts, "```")
+      table.insert(parts, "The full file content is provided above for understanding only.")
+      table.insert(parts, "")
+    end
+
+    table.insert(parts, "### File: " .. path)
+    table.insert(parts, "```diff")
+    table.insert(parts, M.annotate_diff_with_lines(file.diff or ""))
+    table.insert(parts, "```")
+  end
+
+  return table.concat(parts, "\n") .. M.progress_suffix(opts and opts.progress_path)
+end
+
 function M.build_mr_prompt(branch, diff)
   return table.concat({
     "I'm creating a merge request for branch: " .. branch,

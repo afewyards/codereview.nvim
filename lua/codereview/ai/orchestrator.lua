@@ -56,11 +56,10 @@ function M.run(spec)
 
   local prompt_opts = { progress_path = prog and prog.path or nil }
 
-  -- Task 0: one file per batch. Task 5 swaps this for batch.build(diffs, ...).
-  local batches = {}
-  for _, f in ipairs(diffs) do
-    table.insert(batches, { f })
-  end
+  local batches = require("codereview.ai.batch").build(diffs, {
+    char_budget = spec.batch_char_budget or (cfg.ai and cfg.ai.batch_char_budget),
+    max_files = spec.batch_max_files or (cfg.ai and cfg.ai.batch_max_files),
+  })
 
   local results = {}
   local completed, next_idx, active = 0, 1, 0

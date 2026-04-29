@@ -31,6 +31,8 @@
 ---@field review_level? "info"|"suggestion"|"warning"|"error" controls the verbosity of AI code reviews (default: `info`)
 ---@field max_file_size? integer skip files larger than N lines (0 = unlimited) (default: 500)
 ---@field skip_patterns? string[] additional glob patterns to skip (additive to defaults)
+---@field batch_char_budget? integer max diff chars per AI call (default: 80000)
+---@field batch_max_files? integer max files per AI call (default: 15)
 ---@field claude_cli? codereview.config.ai.ClaudeCLI Claude CLI options
 ---@field codex_cli? codereview.config.ai.CodexCLI Codex CLI options
 ---@field copilot_cli? codereview.config.ai.CopilotCLI Copilot CLI options
@@ -117,6 +119,8 @@ local defaults = {
     ollama = { model = "llama3", base_url = "http://localhost:11434" },
     custom_cmd = { cmd = nil, args = {} },
     skip_patterns = {},
+    batch_char_budget = 80000,
+    batch_max_files = 15,
   },
   keymaps = {},
 }
