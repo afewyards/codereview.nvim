@@ -1,7 +1,7 @@
 local M = {}
 local ai_prompt = require("codereview.ai.prompt")
 
-function M.build_file_plan_prompt(file)
+function M.build_file_plan_prompt(file, opts)
   local path = file.new_path or file.old_path
   local parts = {
     "You are creating an implementation plan for changes in a file.",
@@ -21,7 +21,7 @@ function M.build_file_plan_prompt(file)
     "```",
   }
 
-  return table.concat(parts, "\n")
+  return table.concat(parts, "\n") .. ai_prompt.progress_suffix(opts and opts.progress_path)
 end
 
 function M.parse_file_plan_output(output)

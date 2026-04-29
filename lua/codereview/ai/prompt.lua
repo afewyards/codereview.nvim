@@ -342,7 +342,21 @@ function M.parse_mr_draft(output)
   return vim.trim(title), vim.trim(description)
 end
 
-function M.build_file_review_prompt(review, file, content)
+--- Return a prompt suffix that instructs a CLI agent to append a line to the
+--- progress file after each file it analyzes. Returns "" when path is absent.
+--- @param path string|nil  Absolute path of the progress tmp file
+--- @return string
+function M.progress_suffix(path)
+  if not path or path == "" then
+    return ""
+  end
+  return string.format(
+    "\n\n## Progress reporting\nAfter analyzing each file, append exactly one line with its path to the progress file:\n```\nprintf '%%s\\n' '<path>' >> %q\n```",
+    path
+  )
+end
+
+function M.build_file_review_prompt(review, file, content, opts)
   local path = file.new_path or file.old_path
   local parts = {
     "You are reviewing a single file in a merge request.",
@@ -392,7 +406,7 @@ function M.build_file_review_prompt(review, file, content)
   table.insert(parts, M.annotate_diff_with_lines(file.diff or ""))
   table.insert(parts, "```")
 
-  return table.concat(parts, "\n")
+  return table.concat(parts, "\n") .. M.progress_suffix(opts and opts.progress_path)
 end
 
 return M
