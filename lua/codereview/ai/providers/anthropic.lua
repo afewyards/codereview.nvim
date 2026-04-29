@@ -24,10 +24,14 @@ function M.run(prompt, callback, opts)
   local body = {
     model = pcfg.model or "claude-sonnet-4-20250514",
     max_tokens = 8192,
-    messages = {
-      { role = "user", content = prompt },
-    },
   }
+
+  if type(prompt) == "table" then
+    body.system = { { type = "text", text = prompt.system, cache_control = { type = "ephemeral" } } }
+    body.messages = { { role = "user", content = prompt.user } }
+  else
+    body.messages = { { role = "user", content = prompt } }
+  end
 
   log.debug("AI anthropic: sending request, model=" .. body.model)
   return http.post_json(url, headers, body, function(response, err)

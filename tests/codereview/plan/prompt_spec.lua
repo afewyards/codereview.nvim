@@ -16,6 +16,13 @@ describe("plan.prompt.build_file_plan_prompt", function()
     local p = prompt.build_file_plan_prompt({ new_path = "a", diff = "" })
     assert.is_nil(p:find("Branch Context"))
   end)
+
+  it("plan prompt: instructions before diff", function()
+    local p = prompt.build_file_plan_prompt({ new_path = "a", diff = "@@\n+UNIQUE_TOKEN_XYZ" })
+    local i_instr = p:find("Instructions") or 0
+    local i_diff = p:find("UNIQUE_TOKEN_XYZ") or 0
+    assert.is_true(i_instr > 0 and i_diff > i_instr)
+  end)
 end)
 
 describe("plan.prompt.parse_file_plan_output", function()

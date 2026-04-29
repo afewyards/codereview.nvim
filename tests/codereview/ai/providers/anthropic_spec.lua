@@ -86,4 +86,49 @@ describe("ai.providers.anthropic", function()
     assert.is_nil(result)
     assert.truthy(err:find("api_key"))
   end)
+
+  it("sets cache_control on system when prompt is structured table", function()
+    package.loaded["codereview.config"].get = function()
+      return {
+        ai = {
+          enabled = true,
+          provider = "anthropic",
+          anthropic = { api_key = "sk-test", model = "claude-sonnet-4-20250514" },
+        },
+      }
+    end
+    local result, err
+    anthropic.run({ system = "You are an expert.", user = "Review this diff." }, function(o, e)
+      result = o
+      err = e
+    end)
+    assert.is_nil(err)
+    assert.equals("AI response", result)
+    assert.equals(1, #http_calls)
+    assert.not_nil(http_calls[1].body.system)
+    assert.equals("ephemeral", http_calls[1].body.system[1].cache_control.type)
+    assert.equals("You are an expert.", http_calls[1].body.system[1].text)
+  end)
+
+  it("string prompt: no system field, backward compat", function()
+    package.loaded["codereview.config"].get = function()
+      return {
+        ai = {
+          enabled = true,
+          provider = "anthropic",
+          anthropic = { api_key = "sk-test", model = "claude-sonnet-4-20250514" },
+        },
+      }
+    end
+    local result, err
+    anthropic.run("plain string prompt", function(o, e)
+      result = o
+      err = e
+    end)
+    assert.is_nil(err)
+    assert.equals("AI response", result)
+    assert.equals(1, #http_calls)
+    assert.is_nil(http_calls[1].body.system)
+    assert.equals("plain string prompt", http_calls[1].body.messages[1].content)
+  end)
 end)

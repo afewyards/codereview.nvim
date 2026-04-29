@@ -182,6 +182,7 @@ local function start_multi(review, diff_state, layout)
 
   orchestrator.run({
     diffs = diffs,
+    cacheable = true,
     build_prompt = function(batch)
       local file = batch[1]
       local path = file.new_path or file.old_path

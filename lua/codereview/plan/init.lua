@@ -65,6 +65,7 @@ function M._run_phase2(branch, base, diffs)
 
   orchestrator.run({
     diffs = diffs,
+    cacheable = true,
     build_prompt = function(batch)
       return plan_prompt.build_file_plan_prompt(batch[1])
     end,

@@ -6,21 +6,20 @@ function M.build_file_plan_prompt(file)
   local parts = {
     "You are creating an implementation plan for changes in a file.",
     "",
+    "## Instructions",
+    "",
+    "Analyze the diff below and create tasks to complete or improve this implementation.",
+    "Output a JSON array in a ```json code block:",
+    '[{"file": "<path>", "line": <number>, "task": "<what to do>", "reason": "<why>"}]',
+    "",
+    "Focus on: incomplete implementations, missing error handling, TODOs, edge cases, missing tests.",
+    "If the code looks complete, output `[]`.",
+    "",
+    "## File: " .. path,
+    "```diff",
+    ai_prompt.annotate_diff_with_lines(file.diff or ""),
+    "```",
   }
-
-  table.insert(parts, "## File: " .. path)
-  table.insert(parts, "```diff")
-  table.insert(parts, ai_prompt.annotate_diff_with_lines(file.diff or ""))
-  table.insert(parts, "```")
-  table.insert(parts, "")
-  table.insert(parts, "## Instructions")
-  table.insert(parts, "")
-  table.insert(parts, "Analyze this diff and create tasks to complete or improve this implementation.")
-  table.insert(parts, "Output a JSON array in a ```json code block:")
-  table.insert(parts, '[{"file": "' .. path .. '", "line": <number>, "task": "<what to do>", "reason": "<why>"}]')
-  table.insert(parts, "")
-  table.insert(parts, "Focus on: incomplete implementations, missing error handling, TODOs, edge cases, missing tests.")
-  table.insert(parts, "If the code looks complete, output `[]`.")
 
   return table.concat(parts, "\n")
 end

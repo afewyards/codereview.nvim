@@ -353,7 +353,29 @@ function M.build_file_review_prompt(review, file, content)
     "## MR Description",
     review.description or "(no description)",
     "",
+    "## Instructions",
+    "",
+    "Each diff line is prefixed with its line number (e.g., L38:). Use the EXACT number from the L-prefix for the line field.",
+    "Review the file below. Output a JSON array in a ```json code block.",
+    'Each item: {"file": "<path>", "line": <number from L-prefix>, "code": "<exact content of that line>", "severity": "error"|"warning"|"info"|"suggestion", "comment": "text"}',
+    'The "code" field must contain the trimmed source code from the line you are commenting on (without the diff +/- prefix).',
+    'Use \\n inside "comment" strings for line breaks.',
+    "If no issues, output `[]`.",
+    "ONLY comment on lines that are actual changes: lines prefixed with + (added) or - (removed) in the diff. Context lines (no +/- prefix) are for understanding only — NEVER comment on them.",
+    "Focus on: bugs, security, error handling, edge cases, naming, clarity.",
+    "Do NOT comment on style or formatting.",
   }
+
+  local sev_instr = severity_instruction()
+  if sev_instr then
+    table.insert(parts, sev_instr)
+  end
+
+  table.insert(
+    parts,
+    "IMPORTANT: Find the L-prefix on the exact code line your comment applies to and use that number. Do NOT guess or count lines yourself."
+  )
+  table.insert(parts, "")
 
   if content and content ~= "" then
     table.insert(parts, "## Full File Content: " .. path)
@@ -361,50 +383,14 @@ function M.build_file_review_prompt(review, file, content)
     table.insert(parts, "```" .. ext)
     table.insert(parts, content)
     table.insert(parts, "```")
+    table.insert(parts, "The full file content is provided above for understanding only.")
     table.insert(parts, "")
   end
 
-  table.insert(parts, "## File Under Review: " .. path)
+  table.insert(parts, "## File: " .. path)
   table.insert(parts, "```diff")
   table.insert(parts, M.annotate_diff_with_lines(file.diff or ""))
   table.insert(parts, "```")
-  table.insert(parts, "")
-  table.insert(parts, "## Instructions")
-  table.insert(parts, "")
-  table.insert(
-    parts,
-    "Each diff line is prefixed with its line number (e.g., L38:). Use the EXACT number from the L-prefix for the line field."
-  )
-  table.insert(parts, "Review this file. Output a JSON array in a ```json code block.")
-  table.insert(
-    parts,
-    'Each item: {"file": "'
-      .. path
-      .. '", "line": <number from L-prefix>, "code": "<exact content of that line>", "severity": "error"|"warning"|"info"|"suggestion", "comment": "text"}'
-  )
-  table.insert(
-    parts,
-    'The "code" field must contain the trimmed source code from the line you are commenting on (without the diff +/- prefix).'
-  )
-  table.insert(parts, 'Use \\n inside "comment" strings for line breaks.')
-  table.insert(parts, "If no issues, output `[]`.")
-  if content and content ~= "" then
-    table.insert(parts, "The full file content is provided above for understanding only.")
-  end
-  table.insert(
-    parts,
-    "ONLY comment on lines that are actual changes: lines prefixed with + (added) or - (removed) in the diff. Context lines (no +/- prefix) are for understanding only — NEVER comment on them."
-  )
-  table.insert(parts, "Focus on: bugs, security, error handling, edge cases, naming, clarity.")
-  table.insert(parts, "Do NOT comment on style or formatting.")
-  local sev_instr = severity_instruction()
-  if sev_instr then
-    table.insert(parts, sev_instr)
-  end
-  table.insert(
-    parts,
-    "IMPORTANT: Find the L-prefix on the exact code line your comment applies to and use that number. Do NOT guess or count lines yourself."
-  )
 
   return table.concat(parts, "\n")
 end

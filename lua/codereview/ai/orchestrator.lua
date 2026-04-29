@@ -48,8 +48,17 @@ function M.run(spec)
       next_idx = next_idx + 1
       active = active + 1
 
-      local prompt = spec.build_prompt(batch, {})
-      ai_providers.get().run(prompt, function(output, err)
+      local prompt_str = spec.build_prompt(batch, {})
+      if spec.cacheable then
+        local provider_name = (require("codereview.config").get().ai or {}).provider
+        if provider_name == "anthropic" then
+          local split = prompt_str:find("\n## Files?\n", 1, false) or prompt_str:find("\n## File:", 1, true)
+          if split then
+            prompt_str = { system = prompt_str:sub(1, split - 1), user = prompt_str:sub(split + 1) }
+          end
+        end
+      end
+      ai_providers.get().run(prompt_str, function(output, err)
         active = active - 1
         completed = completed + 1
 

@@ -410,7 +410,7 @@ describe("ai.prompt", function()
       local file = { new_path = "src/foo.lua", diff = "@@ -1,1 +1,1 @@\n-old\n+new\n" }
       local result = prompt.build_file_review_prompt(review, file, "full content here")
       local content_pos = result:find("## Full File Content")
-      local diff_pos = result:find("## File Under Review")
+      local diff_pos = result:find("## File: ")
       assert.truthy(content_pos)
       assert.truthy(diff_pos)
       assert.truthy(content_pos < diff_pos, "Full file content should appear before diff section")
