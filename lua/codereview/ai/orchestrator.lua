@@ -14,7 +14,16 @@ local M = {}
 ---   provider_opts:    table?              forwarded to provider.run
 ---   max_concurrent:   integer? (default 10)
 function M.run(spec)
-  local diffs = spec.diffs or {}
+  local cfg = require("codereview.config").get()
+  local file_filter = require("codereview.ai.file_filter")
+  local before = #(spec.diffs or {})
+  spec.diffs = file_filter.apply(spec.diffs or {}, (cfg.ai or {}).skip_patterns)
+  local skipped = before - #spec.diffs
+  if skipped > 0 then
+    vim.notify(string.format("Skipped %d file(s) (lockfiles/generated/binary)", skipped), vim.log.levels.INFO)
+  end
+
+  local diffs = spec.diffs
   local total = #diffs
   if total == 0 then
     if spec.on_complete then
