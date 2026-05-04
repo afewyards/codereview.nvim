@@ -28,7 +28,17 @@ function M.run(spec)
   local cfg = require("codereview.config").get()
   local file_filter = require("codereview.ai.file_filter")
   local before = #(spec.diffs or {})
-  spec.diffs = file_filter.apply(spec.diffs or {}, (cfg.ai or {}).skip_patterns)
+  local auth = require("codereview.api.auth")
+  local lua_patterns = (cfg.ai or {}).skip_patterns or {}
+  local dotfile_patterns = auth.get_ai_skip_patterns()
+  local merged = {}
+  for _, p in ipairs(lua_patterns) do
+    table.insert(merged, p)
+  end
+  for _, p in ipairs(dotfile_patterns) do
+    table.insert(merged, p)
+  end
+  spec.diffs = file_filter.apply(spec.diffs or {}, merged)
   local skipped = before - #spec.diffs
   if skipped > 0 then
     vim.notify(string.format("Skipped %d file(s) (lockfiles/generated/binary)", skipped), vim.log.levels.INFO)
