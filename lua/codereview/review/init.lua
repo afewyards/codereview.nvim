@@ -182,7 +182,17 @@ local function start_multi(review, diff_state, layout)
   -- The orchestrator's own filter pass is then a no-op on already-filtered input.
   local cfg = require("codereview.config").get()
   local file_filter = require("codereview.ai.file_filter")
-  local filtered_diffs = file_filter.apply(diffs, (cfg.ai or {}).skip_patterns)
+  local auth = require("codereview.api.auth")
+  local lua_patterns = (cfg.ai or {}).skip_patterns or {}
+  local dotfile_patterns = auth.get_ai_skip_patterns()
+  local merged = {}
+  for _, p in ipairs(lua_patterns) do
+    table.insert(merged, p)
+  end
+  for _, p in ipairs(dotfile_patterns) do
+    table.insert(merged, p)
+  end
+  local filtered_diffs = file_filter.apply(diffs, merged)
   local total = #filtered_diffs
 
   orchestrator.run({
