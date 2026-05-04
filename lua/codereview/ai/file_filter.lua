@@ -32,7 +32,7 @@ M.DEFAULT_PATTERNS = {
 ---@return string
 local function glob_to_pat(glob)
   local pat = glob:gsub("([%%%.%(%)%[%]%+%-%^%$])", "%%%1")
-  pat = pat:gsub("%*%*", "\0DBL\0"):gsub("%*", "[^/]*"):gsub("%?", "[^/]"):gsub("\0DBL\0", ".*")
+  pat = pat:gsub("%*%*", "<<<DBL>>>"):gsub("%*", "[^/]*"):gsub("%?", "[^/]"):gsub("<<<DBL>>>", ".*")
   return "^" .. pat .. "$"
 end
 

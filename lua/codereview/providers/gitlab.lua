@@ -3,8 +3,14 @@ local M = {}
 
 M.name = "gitlab"
 
+local function url_encode(str)
+  return str:gsub("([^%w%-._~])", function(c)
+    return string.format("%%%02X", string.byte(c))
+  end)
+end
+
 local function encoded_project(ctx)
-  return ctx.project:gsub("/", "%%2F")
+  return url_encode(ctx.project)
 end
 
 local function mr_base(ctx, iid)
@@ -199,7 +205,7 @@ function M.get_file_content(client, ctx, ref, path)
   if not headers then
     return nil, err
   end
-  local encoded_path = path:gsub("/", "%%2F")
+  local encoded_path = url_encode(path)
   local api_path = string.format("/api/v4/projects/%s/repository/files/%s/raw", encoded_project(ctx), encoded_path)
   local result, req_err = client.get(ctx.base_url, api_path, {
     headers = headers,
