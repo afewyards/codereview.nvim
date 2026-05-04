@@ -111,9 +111,33 @@ function M.refresh(platform)
   return nil, nil
 end
 
+local function parse_skip_patterns(value)
+  if not value or value == "" then
+    return {}
+  end
+  local patterns = {}
+  for pat in value:gmatch("[^,]+") do
+    local trimmed = pat:match("^%s*(.-)%s*$")
+    if trimmed ~= "" then
+      table.insert(patterns, trimmed)
+    end
+  end
+  return patterns
+end
+
+function M.get_ai_skip_patterns()
+  local file_config = read_config_file()
+  if not file_config or not file_config.ai_skip_patterns then
+    return {}
+  end
+  return parse_skip_patterns(file_config.ai_skip_patterns)
+end
+
 -- Exposed for testing only
 M._read_config_file_for_test = function()
   return read_config_file()
 end
+
+M._parse_skip_patterns_for_test = parse_skip_patterns
 
 return M
