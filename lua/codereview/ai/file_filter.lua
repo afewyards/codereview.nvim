@@ -79,4 +79,19 @@ function M.apply(diffs, user_patterns)
   return out
 end
 
+function M.get_all_skip_patterns()
+  local config = require("codereview.config").get()
+  local auth = require("codereview.api.auth")
+  local lua_patterns = (config.ai or {}).skip_patterns or {}
+  local dotfile_patterns = auth.get_ai_skip_patterns()
+  local merged = {}
+  for _, p in ipairs(lua_patterns) do
+    table.insert(merged, p)
+  end
+  for _, p in ipairs(dotfile_patterns) do
+    table.insert(merged, p)
+  end
+  return merged
+end
+
 return M

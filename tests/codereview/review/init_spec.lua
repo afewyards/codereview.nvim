@@ -162,6 +162,9 @@ describe("review.start_multi filtered-file count", function()
 
     -- Filter that keeps only the first file
     package.loaded["codereview.ai.file_filter"] = {
+      get_all_skip_patterns = function()
+        return {}
+      end,
       apply = function(diffs, _)
         return { diffs[1] }
       end,
