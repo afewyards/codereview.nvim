@@ -110,6 +110,7 @@ Lines starting with `#` are comments. Keys and values are trimmed of whitespace.
 | `project` | `owner/repo` (auto-detected from git remote if omitted) |
 | `base_url` | API URL override (e.g., self-hosted GitLab instance) |
 | `token` | Auth token for this project |
+| `ai_skip_patterns` | Comma-separated glob patterns — files matching any pattern are excluded from AI review |
 
 > **Security:** Add `.codereview.nvim` to your `.gitignore` if it contains a token.
 
@@ -228,6 +229,16 @@ The `ai.review_level` option controls the verbosity of AI code reviews. Higher l
 | `"error"` | Errors only |
 
 The AI is instructed to skip items below the configured level, saving tokens and reducing noise. To see lower-severity items again, change the level and re-run the AI review.
+
+### AI Skip Patterns
+
+Skip specific files from AI review by adding patterns to `.codereview.nvim`:
+
+```
+ai_skip_patterns=*.test.ts,docs/**,*.snap,fixtures/**
+```
+
+Patterns are comma-separated globs, merged with plugin config `ai.skip_patterns` and built-in defaults (lockfiles, minified files, generated code, vendor directories).
 
 ## Default Keymaps
 
