@@ -67,7 +67,7 @@ end
 local function process_response(response)
   local body = nil
   if response.body and response.body ~= "" then
-    local ok, decoded = pcall(vim.json.decode, response.body)
+    local ok, decoded = pcall(vim.json.decode, response.body, { luanil = { object = true, array = true } })
     if ok then
       body = decoded
     else
@@ -444,7 +444,7 @@ function M.graphql(url, headers, query, variables)
     return nil, string.format("HTTP %d: %s", response.status, response.body or "")
   end
 
-  local ok, data = pcall(vim.json.decode, response.body)
+  local ok, data = pcall(vim.json.decode, response.body, { luanil = { object = true, array = true } })
   if not ok then
     return nil, "Failed to decode GraphQL response: " .. tostring(data)
   end
@@ -481,7 +481,7 @@ function M.async_graphql(url, headers, query, variables)
     return nil, string.format("HTTP %d: %s", response.status, response.body or "")
   end
 
-  local ok, data = pcall(vim.json.decode, response.body)
+  local ok, data = pcall(vim.json.decode, response.body, { luanil = { object = true, array = true } })
   if not ok then
     return nil, "Failed to decode GraphQL response: " .. tostring(data)
   end
