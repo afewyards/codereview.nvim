@@ -1,18 +1,3 @@
-```
- ██████╗ ██████╗ ██████╗ ███████╗
-██╔════╝██╔═══██╗██╔══██╗██╔════╝
-██║     ██║   ██║██║  ██║█████╗
-██║     ██║   ██║██║  ██║██╔══╝
-╚██████╗╚██████╔╝██████╔╝███████╗
- ╚═════╝ ╚═════╝ ╚═════╝ ╚══════╝
-██████╗ ███████╗██╗   ██╗██╗███████╗██╗    ██╗
-██╔══██╗██╔════╝██║   ██║██║██╔════╝██║    ██║
-██████╔╝█████╗  ██║   ██║██║█████╗  ██║ █╗ ██║
-██╔══██╗██╔══╝  ╚██╗ ██╔╝██║██╔══╝  ██║███╗██║
-██║  ██║███████╗ ╚████╔╝ ██║███████╗╚███╔███╔╝
-╚═╝  ╚═╝╚══════╝  ╚═══╝  ╚═╝╚══════╝ ╚══╝╚══╝
-```
-
 # codereview.nvim
 
 ## Review pull requests and merge requests without leaving Neovim
@@ -104,12 +89,12 @@ token = ghp_xxxxxxxxxxxx
 
 Lines starting with `#` are comments. Keys and values are trimmed of whitespace.
 
-| Key | Description |
-|-----|-------------|
-| `platform` | `github` or `gitlab` (auto-detected from git remote if omitted) |
-| `project` | `owner/repo` (auto-detected from git remote if omitted) |
-| `base_url` | API URL override (e.g., self-hosted GitLab instance) |
-| `token` | Auth token for this project |
+| Key                | Description                                                                            |
+| ------------------ | -------------------------------------------------------------------------------------- |
+| `platform`         | `github` or `gitlab` (auto-detected from git remote if omitted)                        |
+| `project`          | `owner/repo` (auto-detected from git remote if omitted)                                |
+| `base_url`         | API URL override (e.g., self-hosted GitLab instance)                                   |
+| `token`            | Auth token for this project                                                            |
 | `ai_skip_patterns` | Comma-separated glob patterns — files matching any pattern are excluded from AI review |
 
 > **Security:** Add `.codereview.nvim` to your `.gitignore` if it contains a token.
@@ -188,20 +173,21 @@ require("codereview").setup({
 
 Set `ai.provider` to choose a backend. Each provider has its own sub-table:
 
-| Provider | Config key | Requirements |
-|----------|-----------|--------------|
-| Claude CLI | `claude_cli` | [Claude CLI](https://docs.anthropic.com/en/docs/claude-code) installed |
-| Codex CLI | `codex_cli` | [Codex CLI](https://github.com/openai/codex) installed and authenticated |
-| Copilot CLI | `copilot_cli` | [Copilot CLI](https://docs.github.com/en/copilot/concepts/agents/copilot-cli/about-copilot-cli) installed and authenticated |
-| Gemini CLI | `gemini_cli` | [Gemini CLI](https://github.com/google-gemini/gemini-cli) installed and authenticated |
-| OpenCode CLI | `opencode_cli` | [OpenCode CLI](https://github.com/anomalyco/opencode) installed and authenticated |
-| Qwen CLI | `qwen_cli` | [Qwen CLI](https://github.com/QwenLM/qwen-code) installed and authenticated |
-| Anthropic API | `anthropic` | `api_key` set |
-| OpenAI | `openai` | `api_key` set |
-| Ollama | `ollama` | Ollama running locally |
-| Custom command | `custom_cmd` | `cmd` set |
+| Provider       | Config key     | Requirements                                                                                                                |
+| -------------- | -------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| Claude CLI     | `claude_cli`   | [Claude CLI](https://docs.anthropic.com/en/docs/claude-code) installed                                                      |
+| Codex CLI      | `codex_cli`    | [Codex CLI](https://github.com/openai/codex) installed and authenticated                                                    |
+| Copilot CLI    | `copilot_cli`  | [Copilot CLI](https://docs.github.com/en/copilot/concepts/agents/copilot-cli/about-copilot-cli) installed and authenticated |
+| Gemini CLI     | `gemini_cli`   | [Gemini CLI](https://github.com/google-gemini/gemini-cli) installed and authenticated                                       |
+| OpenCode CLI   | `opencode_cli` | [OpenCode CLI](https://github.com/anomalyco/opencode) installed and authenticated                                           |
+| Qwen CLI       | `qwen_cli`     | [Qwen CLI](https://github.com/QwenLM/qwen-code) installed and authenticated                                                 |
+| Anthropic API  | `anthropic`    | `api_key` set                                                                                                               |
+| OpenAI         | `openai`       | `api_key` set                                                                                                               |
+| Ollama         | `ollama`       | Ollama running locally                                                                                                      |
+| Custom command | `custom_cmd`   | `cmd` set                                                                                                                   |
 
 **Example — Anthropic API:**
+
 ```lua
 ai = {
   provider = "anthropic",
@@ -210,6 +196,7 @@ ai = {
 ```
 
 **Example — Ollama (local):**
+
 ```lua
 ai = {
   provider = "ollama",
@@ -221,12 +208,12 @@ ai = {
 
 The `ai.review_level` option controls the verbosity of AI code reviews. Higher levels filter out lower-severity comments:
 
-| Level | Shows |
-|-------|-------|
-| `"info"` | Everything (default) |
+| Level          | Shows                             |
+| -------------- | --------------------------------- |
+| `"info"`       | Everything (default)              |
 | `"suggestion"` | Suggestions, warnings, and errors |
-| `"warning"` | Warnings and errors only |
-| `"error"` | Errors only |
+| `"warning"`    | Warnings and errors only          |
+| `"error"`      | Errors only                       |
 
 The AI is instructed to skip items below the configured level, saving tokens and reducing noise. To see lower-severity items again, change the level and re-run the AI review.
 
@@ -244,61 +231,61 @@ Patterns are comma-separated globs, merged with plugin config `ai.skip_patterns`
 
 ### Navigation
 
-| Key | Action |
-|-----|--------|
-| `]f` / `[f` | Next / previous file |
-| `]c` / `[c` | Next / previous commit |
-| `j` / `k` | Move down / up (comment-aware) |
+| Key                 | Action                         |
+| ------------------- | ------------------------------ |
+| `]f` / `[f`         | Next / previous file           |
+| `]c` / `[c`         | Next / previous commit         |
+| `j` / `k`           | Move down / up (comment-aware) |
 | `<Tab>` / `<S-Tab>` | Next / previous note in thread |
 
 ### Comments & Discussions
 
-| Key | Action |
-|-----|--------|
-| `cc` | New comment (normal mode) |
+| Key  | Action                      |
+| ---- | --------------------------- |
+| `cc` | New comment (normal mode)   |
 | `cc` | Range comment (visual mode) |
-| `r` | Reply to thread |
-| `e` | Edit selected note |
-| `x` | Delete selected note |
-| `rr` | React to note |
-| `R` | Toggle resolve / unresolve |
+| `r`  | Reply to thread             |
+| `e`  | Edit selected note          |
+| `x`  | Delete selected note        |
+| `rr` | React to note               |
+| `R`  | Toggle resolve / unresolve  |
 
 ### AI Suggestions
 
-| Key | Action |
-|-----|--------|
-| `A` | Start / cancel AI review |
-| `af` | AI review current file |
-| `a` | Accept suggestion |
-| `x` | Dismiss suggestion |
-| `e` | Edit suggestion |
-| `ds` | Dismiss all suggestions |
+| Key  | Action                   |
+| ---- | ------------------------ |
+| `A`  | Start / cancel AI review |
+| `af` | AI review current file   |
+| `a`  | Accept suggestion        |
+| `x`  | Dismiss suggestion       |
+| `e`  | Edit suggestion          |
+| `ds` | Dismiss all suggestions  |
 
 ### View Controls
 
-| Key | Action |
-|-----|--------|
+| Key     | Action                |
+| ------- | --------------------- |
 | `<C-f>` | Toggle full file view |
 
 ### Actions
 
-| Key | Action |
-|-----|--------|
+| Key     | Action                |
+| ------- | --------------------- |
 | `<C-s>` | Submit draft comments |
-| `<C-a>` | Approve MR/PR |
-| `<C-r>` | Refresh |
-| `<C-q>` | Quit |
-| `M` | Merge |
-| `o` | Open in browser |
-| `p` | Show pipeline status |
+| `<C-a>` | Approve MR/PR         |
+| `<C-r>` | Refresh               |
+| `<C-q>` | Quit                  |
+| `M`     | Merge                 |
+| `o`     | Open in browser       |
+| `p`     | Show pipeline status  |
 
 ### Picker
 
-| Key | Action |
-|-----|--------|
+| Key          | Action                        |
+| ------------ | ----------------------------- |
 | `<leader>fc` | Browse comments / suggestions |
-| `<leader>ff` | Browse changed files |
-| `C` | Browse commits |
+| `<leader>ff` | Browse changed files          |
+| `C`          | Browse commits                |
 
 ### Customizing Keymaps
 
@@ -316,27 +303,27 @@ Available action names: `next_file`, `prev_file`, `next_commit`, `prev_commit`, 
 
 ## Commands
 
-| Command | Description |
-|---------|-------------|
-| `:CodeReview` | Open review picker |
-| `:CodeReviewAI` | Run AI review on entire diff |
-| `:CodeReviewAIFile` | Run AI review on current file |
-| `:CodeReviewStart` | Start manual review session (comments become drafts) |
-| `:CodeReviewSubmit` | Submit draft comments |
-| `:CodeReviewApprove` | Approve current MR/PR |
-| `:CodeReviewOpen` | Create new MR/PR |
-| `:CodeReviewPipeline` | Show pipeline status |
-| `:CodeReviewComments` | Browse comments and suggestions |
-| `:CodeReviewFiles` | Browse changed files |
-| `:CodeReviewToggleScroll` | Toggle scroll / per-file mode |
-| `:CodeReviewCommits` | Browse commits |
+| Command                   | Description                                          |
+| ------------------------- | ---------------------------------------------------- |
+| `:CodeReview`             | Open review picker                                   |
+| `:CodeReviewAI`           | Run AI review on entire diff                         |
+| `:CodeReviewAIFile`       | Run AI review on current file                        |
+| `:CodeReviewStart`        | Start manual review session (comments become drafts) |
+| `:CodeReviewSubmit`       | Submit draft comments                                |
+| `:CodeReviewApprove`      | Approve current MR/PR                                |
+| `:CodeReviewOpen`         | Create new MR/PR                                     |
+| `:CodeReviewPipeline`     | Show pipeline status                                 |
+| `:CodeReviewComments`     | Browse comments and suggestions                      |
+| `:CodeReviewFiles`        | Browse changed files                                 |
+| `:CodeReviewToggleScroll` | Toggle scroll / per-file mode                        |
+| `:CodeReviewCommits`      | Browse commits                                       |
 
 ## Supported Providers
 
 | Provider | Reviews | Comments | Resolve | AI Review | Create MR/PR |
-|----------|---------|----------|---------|-----------|-------------|
-| GitLab | Yes | Yes | Yes | Yes | Yes |
-| GitHub | Yes | Yes | Yes | Yes | Yes |
+| -------- | ------- | -------- | ------- | --------- | ------------ |
+| GitLab   | Yes     | Yes      | Yes     | Yes       | Yes          |
+| GitHub   | Yes     | Yes      | Yes     | Yes       | Yes          |
 
 Provider is auto-detected from the git remote URL. Use `platform = "github"` or `platform = "gitlab"` to override.
 
