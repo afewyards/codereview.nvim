@@ -35,6 +35,8 @@ local M = {}
 ---@field pick_comments? codereview.keymap.Key
 ---@field pick_files? codereview.keymap.Key
 ---@field pick_commits? codereview.keymap.Key
+---@field copy_comment? codereview.keymap.Key
+---@field pipe_comment? codereview.keymap.Key
 
 local defaults = {
   next_file = { key = "]f", mode = "n", desc = "Next file" },
@@ -73,6 +75,8 @@ local defaults = {
   pick_comments = { key = "<leader>fc", mode = "n", desc = "Pick comment/suggestion" },
   pick_files = { key = "<leader>ff", mode = "n", desc = "Pick file" },
   pick_commits = { key = "C", mode = "n", desc = "Pick commit" },
+  copy_comment = { key = "yc", mode = "n", desc = "Copy comment to clipboard" },
+  pipe_comment = { key = "ya", mode = "n", desc = "Pipe comment to AI" },
 }
 
 local function deep_copy(orig)

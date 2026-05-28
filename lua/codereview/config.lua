@@ -13,6 +13,7 @@
 ---@field pipeline? codereview.config.Pipeline pipeline viewer
 ---@field ai? codereview.config.AI AI review
 ---@field keymaps? codereview.config.Keymap override or disable keybindings
+---@field hooks? codereview.config.Hooks lifecycle hooks
 
 ---@class codereview.config.Diff
 ---@field context? integer lines of context (0-20) (default: 8)
@@ -24,6 +25,9 @@
 ---@class codereview.config.Pipeline
 ---@field poll_interval? integer status poll interval (ms) (default: 10000)
 ---@field log_max_lines? integer max lines in job log viewer (default: 5000)
+
+---@class codereview.config.Hooks
+---@field pipe_comment? fun(data: {body: string, author: string, file: string, line: integer|nil}) Called when piping a comment to an external AI tool (e.g. sidekick.nvim). If nil, falls back to clipboard yank.
 
 ---@class codereview.config.AI
 ---@field enabled? boolean enable AI Review (default: `true`)

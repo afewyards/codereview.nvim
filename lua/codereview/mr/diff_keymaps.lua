@@ -2060,6 +2060,40 @@ function M.setup_keymaps(state, layout, active_states)
     pick_commits = function()
       require("codereview.picker.commits").pick(state, select_commit_entry)
     end,
+    copy_comment = function()
+      local disc = get_cursor_disc() or get_summary_disc()
+      if not disc or not disc.notes or not disc.notes[1] then
+        vim.notify("No comment at cursor", vim.log.levels.WARN)
+        return
+      end
+      local body = disc.notes[1].body or ""
+      vim.fn.setreg("+", body)
+      vim.notify("Comment copied to clipboard", vim.log.levels.INFO)
+    end,
+    pipe_comment = function()
+      local disc = get_cursor_disc() or get_summary_disc()
+      if not disc or not disc.notes or not disc.notes[1] then
+        vim.notify("No comment at cursor", vim.log.levels.WARN)
+        return
+      end
+      local note = disc.notes[1]
+      local pos = note.position or {}
+      local data = {
+        body = note.body or "",
+        author = note.author or "",
+        file = pos.new_path or pos.old_path or "",
+        line = pos.new_line,
+      }
+      local hooks = (require("codereview.config").get().hooks or {})
+      if type(hooks.pipe_comment) == "function" then
+        hooks.pipe_comment(data)
+      else
+        local clip = data.file ~= "" and string.format("[%s:%s]\n%s", data.file, tostring(data.line or "?"), data.body)
+          or data.body
+        vim.fn.setreg("+", clip)
+        vim.notify("Comment copied to clipboard (configure hooks.pipe_comment to pipe to AI)", vim.log.levels.INFO)
+      end
+    end,
     next_commit = function()
       nav_commit(-1)
     end,
