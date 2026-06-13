@@ -135,3 +135,78 @@ describe("config_file", function()
     assert.equals("owner/repo", parsed.project)
   end)
 end)
+
+-- providers.detect() respects .codereview.nvim overrides (issue #25) ---
+
+describe("providers.detect with config file overrides", function()
+  local orig_get_repo_root
+  local orig_get_remote_url
+  local orig_parse_remote
+  local tmpdir
+
+  before_each(function()
+    config.reset()
+    auth.reset()
+    orig_get_repo_root = git.get_repo_root
+    orig_get_remote_url = git.get_remote_url
+    orig_parse_remote = git.parse_remote
+    tmpdir = make_tmpdir()
+    git.get_repo_root = function()
+      return tmpdir
+    end
+  end)
+
+  after_each(function()
+    git.get_repo_root = orig_get_repo_root
+    git.get_remote_url = orig_get_remote_url
+    git.parse_remote = orig_parse_remote
+    vim.fn.delete(tmpdir, "rf")
+  end)
+
+  it("uses platform/project/base_url from config file (reproduces issue #25)", function()
+    write_config_file(tmpdir, {
+      "platform = gitlab",
+      "project = 26",
+      "base_url = https://gitlab.self-hosted.com",
+    })
+    local providers = require("codereview.providers")
+    local _, ctx, err = providers.detect()
+    assert.is_nil(err)
+    assert.equals("26", ctx.project)
+    assert.equals("https://gitlab.self-hosted.com", ctx.base_url)
+    assert.equals("gitlab", ctx.platform)
+    assert.equals("gitlab.self-hosted.com", ctx.host)
+  end)
+
+  it("config file project/base_url take precedence over plugin config values", function()
+    config.setup({
+      project = "plugin-project",
+      base_url = "https://gitlab.plugin-configured.com",
+    })
+    write_config_file(tmpdir, {
+      "project = file-project",
+      "base_url = https://gitlab.file-configured.com",
+    })
+    local providers = require("codereview.providers")
+    local _, ctx, err = providers.detect()
+    assert.is_nil(err)
+    assert.equals("file-project", ctx.project)
+    assert.equals("https://gitlab.file-configured.com", ctx.base_url)
+  end)
+
+  it("falls back to git remote parsing when no config file is present", function()
+    -- no file written; mock git remote so detect() succeeds without a real remote
+    git.get_remote_url = function()
+      return "git@github.com:owner/myrepo.git"
+    end
+    git.parse_remote = function(_url)
+      return "github.com", "owner/myrepo"
+    end
+    local providers = require("codereview.providers")
+    local _, ctx, err = providers.detect()
+    assert.is_nil(err)
+    assert.equals("owner/myrepo", ctx.project)
+    assert.equals("github.com", ctx.host)
+    assert.equals("github", ctx.platform)
+  end)
+end)

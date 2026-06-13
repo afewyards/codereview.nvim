@@ -133,6 +133,10 @@ function M.get_ai_skip_patterns()
   return parse_skip_patterns(file_config.ai_skip_patterns)
 end
 
+function M.get_file_config()
+  return read_config_file()
+end
+
 -- Exposed for testing only
 M._read_config_file_for_test = function()
   return read_config_file()

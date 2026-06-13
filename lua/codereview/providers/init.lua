@@ -26,11 +26,16 @@ function M.detect()
   local config = require("codereview.config").get()
   local git = require("codereview.git")
 
+  local file_cfg = require("codereview.api.auth").get_file_config() or {}
+  local eff_base_url = file_cfg.base_url or config.base_url
+  local eff_project = file_cfg.project or config.project
+  local eff_platform = file_cfg.platform or config.platform
+
   local host, project
-  if config.base_url and config.project then
-    local url = config.base_url
+  if eff_base_url and eff_project then
+    local url = eff_base_url
     host = url:match("^https?://([^/]+)")
-    project = config.project
+    project = eff_project
   else
     local remote_url = git.get_remote_url()
     if not remote_url then
@@ -42,14 +47,14 @@ function M.detect()
     end
   end
 
-  local platform = config.platform or M.detect_platform(host)
+  local platform = eff_platform or M.detect_platform(host)
   local provider = M.get_provider(platform)
 
   local base_url
   if platform == "github" then
-    base_url = config.base_url or "https://api.github.com"
+    base_url = eff_base_url or "https://api.github.com"
   else
-    base_url = config.base_url or ("https://" .. host)
+    base_url = eff_base_url or ("https://" .. host)
   end
 
   return provider, { base_url = base_url, project = project, host = host, platform = platform }, nil
