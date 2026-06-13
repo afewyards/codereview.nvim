@@ -32,19 +32,22 @@ function M.detect()
   local eff_platform = file_cfg.platform or config.platform
 
   local host, project
-  if eff_base_url and eff_project then
-    local url = eff_base_url
-    host = url:match("^https?://([^/]+)")
-    project = eff_project
-  else
+  if eff_base_url then
+    host = eff_base_url:match("^https?://([^/]+)")
+  end
+  project = eff_project
+
+  if not host or not project then
     local remote_url = git.get_remote_url()
     if not remote_url then
       return nil, nil, "Could not get git remote"
     end
-    host, project = git.parse_remote(remote_url)
-    if not host then
+    local git_host, git_project = git.parse_remote(remote_url)
+    if not git_host then
       return nil, nil, "Could not parse git remote"
     end
+    host = host or git_host
+    project = project or git_project
   end
 
   local platform = eff_platform or M.detect_platform(host)

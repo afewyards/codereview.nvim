@@ -209,4 +209,37 @@ describe("providers.detect with config file overrides", function()
     assert.equals("github.com", ctx.host)
     assert.equals("github", ctx.platform)
   end)
+
+  it("project-only in config file: git supplies host", function()
+    write_config_file(tmpdir, { "project = 26" })
+    git.get_remote_url = function()
+      return "git@gitlab.example.com:namespace/name.git"
+    end
+    git.parse_remote = function(_url)
+      return "gitlab.example.com", "namespace/name"
+    end
+    local providers = require("codereview.providers")
+    local _, ctx, err = providers.detect()
+    assert.is_nil(err)
+    assert.equals("26", ctx.project)
+    assert.equals("gitlab.example.com", ctx.host)
+    assert.equals("https://gitlab.example.com", ctx.base_url)
+    assert.equals("gitlab", ctx.platform)
+  end)
+
+  it("base_url-only in config file: git supplies project", function()
+    write_config_file(tmpdir, { "base_url = https://gl.example.com" })
+    git.get_remote_url = function()
+      return "git@gl.example.com:ns/proj.git"
+    end
+    git.parse_remote = function(_url)
+      return "gl.example.com", "ns/proj"
+    end
+    local providers = require("codereview.providers")
+    local _, ctx, err = providers.detect()
+    assert.is_nil(err)
+    assert.equals("https://gl.example.com", ctx.base_url)
+    assert.equals("ns/proj", ctx.project)
+    assert.equals("gl.example.com", ctx.host)
+  end)
 end)
