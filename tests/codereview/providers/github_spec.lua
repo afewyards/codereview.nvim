@@ -851,6 +851,28 @@ describe("providers.github", function()
     end)
   end)
 
+  describe("update_draft_note", function()
+    it("PATCHes the pending review comment", function()
+      package.loaded["codereview.api.auth"] = {
+        get_token = function()
+          return "ghp_test", "pat"
+        end,
+      }
+      local url, body
+      local mock_client = {
+        patch = function(_, path, opts)
+          url, body = path, opts.body
+          return { status = 200 }
+        end,
+      }
+      local ctx = { base_url = "https://api.github.com", project = "owner/repo" }
+      github.update_draft_note(mock_client, ctx, { id = 1 }, 55, "edited")
+      package.loaded["codereview.api.auth"] = nil
+      assert.truthy(url:find("/pulls/comments/55", 1, true))
+      assert.equals("edited", body.body)
+    end)
+  end)
+
   describe("delete_note", function()
     before_each(function()
       package.loaded["codereview.api.auth"] = {

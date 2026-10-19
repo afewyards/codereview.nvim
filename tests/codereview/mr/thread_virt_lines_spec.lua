@@ -281,6 +281,20 @@ describe("mr.thread_virt_lines", function()
       assert.is_nil(result.spacer_offset)
     end)
 
+    it("shows the edit key on draft footers", function()
+      local disc = { is_draft = true, notes = { { author = "You (draft)", body = "d" } } }
+      local flat = flatten_virt(tvl.build(disc, { sel_idx = 1, current_user = "u" }).virt_lines)
+      assert.truthy(flat:find("e:edit", 1, true))
+    end)
+
+    it("does not blank other id-less drafts while one is edited", function()
+      local a = { is_draft = true, notes = { { author = "You (draft)", body = "a" } } }
+      local b = { is_draft = true, notes = { { author = "You (draft)", body = "b" } } }
+      local opts = { editing_note = { disc = a, note_idx = 1 }, spacer_height = 3 }
+      assert.equals(1, tvl.build(a, opts).spacer_offset)
+      assert.is_nil(tvl.build(b, opts).spacer_offset)
+    end)
+
     it("shows x:delete footer for draft comments when selected", function()
       local disc = {
         id = "draft-1",

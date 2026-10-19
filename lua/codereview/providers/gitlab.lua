@@ -616,6 +616,18 @@ function M.delete_draft_note(client, ctx, review, draft_id)
   return client.delete(ctx.base_url, mr_base(ctx, review.id) .. "/draft_notes/" .. draft_id, { headers = headers })
 end
 
+function M.update_draft_note(client, ctx, review, draft_id, body)
+  local headers, err = get_headers()
+  if not headers then
+    return nil, err
+  end
+  return client.put(
+    ctx.base_url,
+    mr_base(ctx, review.id) .. "/draft_notes/" .. draft_id,
+    { body = { note = body }, headers = headers }
+  )
+end
+
 --- Create a draft note on an MR (not visible until published).
 --- @param params table { body, path, line, base_sha?, head_sha?, start_sha? }
 function M.create_draft_comment(client, ctx, review, params)

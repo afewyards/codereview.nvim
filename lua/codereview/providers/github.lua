@@ -516,6 +516,10 @@ function M.edit_note(client, ctx, review, discussion_id, note_id, body)
   return client.patch(ctx.base_url, path_url, { body = { body = body }, headers = headers })
 end
 
+function M.update_draft_note(client, ctx, review, draft_id, body)
+  return M.edit_note(client, ctx, review, nil, draft_id, body)
+end
+
 --- Delete a review comment. discussion_id unused for GitHub (kept for API consistency with GitLab).
 function M.delete_note(client, ctx, review, discussion_id, note_id)
   local headers, err = get_headers()

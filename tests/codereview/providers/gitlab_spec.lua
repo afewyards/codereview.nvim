@@ -575,6 +575,33 @@ describe("delete_draft_note", function()
   end)
 end)
 
+describe("update_draft_note", function()
+  before_each(function()
+    package.loaded["codereview.api.auth"] = {
+      get_token = function()
+        return "glpat-test", "pat"
+      end,
+    }
+  end)
+  after_each(function()
+    package.loaded["codereview.api.auth"] = nil
+  end)
+
+  it("PUTs note body to draft_notes/:id", function()
+    local url, body
+    local mock_client = {
+      put = function(_, path, opts)
+        url, body = path, opts.body
+        return { status = 200 }
+      end,
+    }
+    local ctx = { base_url = "https://gitlab.com", project = "owner/repo" }
+    gitlab.update_draft_note(mock_client, ctx, { id = 42 }, 101, "edited")
+    assert.truthy(url:find("/merge_requests/42/draft_notes/101", 1, true))
+    assert.equals("edited", body.note)
+  end)
+end)
+
 describe("get_commits", function()
   before_each(function()
     package.loaded["codereview.api.auth"] = {

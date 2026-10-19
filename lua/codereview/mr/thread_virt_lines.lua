@@ -129,7 +129,8 @@ function M.build(disc, opts)
     return { virt_lines = {}, note_segments = {}, spacer_offset = nil, sel_line_offset = nil }
   end
 
-  local editing_this = editing_note and editing_note.disc_id == disc.id
+  local editing_this = editing_note
+    and ((disc.id ~= nil and editing_note.disc_id == disc.id) or editing_note.disc == disc)
   local editing_note_idx = editing_this and editing_note.note_idx or nil
 
   local first = notes[1]
@@ -383,7 +384,7 @@ function M.build(disc, opts)
     local k_delete = km.get("delete_note") or "x"
     local k_react = km.get("react") or "rr"
     if disc.is_draft then
-      footer_content = k_delete .. ":delete"
+      footer_content = k_edit .. ":edit  " .. k_delete .. ":delete"
     elseif sel_note and current_user and sel_note.author == current_user then
       footer_content = k_reply
         .. ":reply  "

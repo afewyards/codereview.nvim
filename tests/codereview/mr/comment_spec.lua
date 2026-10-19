@@ -118,6 +118,62 @@ describe("mr.comment", function()
     end)
   end)
 
+  describe("edit_note on a draft", function()
+    it("calls update_draft_note with server_draft_id and updates the body", function()
+      local calls = {}
+      local provider = {
+        update_draft_note = function(_, _, _, draft_id, body)
+          calls.draft_id, calls.body = draft_id, body
+          return {}
+        end,
+        edit_note = function()
+          calls.edit_note = true
+        end,
+      }
+      local saved = {
+        popup = comment.open_input_popup,
+        providers = package.loaded["codereview.providers"],
+        client = package.loaded["codereview.api.client"],
+        aclient = package.loaded["codereview.api.async_client"],
+        run = require("plenary.async").run,
+        schedule = vim.schedule,
+      }
+      package.loaded["codereview.providers"] = {
+        detect = function()
+          return provider, { base_url = "u" }, nil
+        end,
+      }
+      package.loaded["codereview.api.client"] = {}
+      package.loaded["codereview.api.async_client"] = {}
+      comment.open_input_popup = function(_, cb)
+        cb("new body")
+      end
+      require("plenary.async").run = function(fn)
+        fn()
+      end
+      vim.schedule = function(fn)
+        fn()
+      end
+      local note = { author = "You (draft)", body = "old" }
+      local disc = { is_draft = true, server_draft_id = 77, notes = { note } }
+      local done = false
+      comment.edit_note(disc, note, { id = 1 }, function()
+        done = true
+      end)
+      comment.open_input_popup = saved.popup
+      package.loaded["codereview.providers"] = saved.providers
+      package.loaded["codereview.api.client"] = saved.client
+      package.loaded["codereview.api.async_client"] = saved.aclient
+      require("plenary.async").run = saved.run
+      vim.schedule = saved.schedule
+      assert.equals(77, calls.draft_id)
+      assert.equals("new body", calls.body)
+      assert.is_nil(calls.edit_note)
+      assert.equals("new body", note.body)
+      assert.is_true(done)
+    end)
+  end)
+
   describe("create_comment", function()
     it("function exists and is callable", function()
       assert.is_function(comment.create_comment)

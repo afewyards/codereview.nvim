@@ -261,7 +261,24 @@ function M.edit_note(disc, note, mr, on_success, opts)
       if not provider then
         return
       end
-      local _, err = provider.edit_note(async_client, ctx, mr, disc.id, note.id, text)
+      local err
+      if disc.is_draft then
+        if not disc.server_draft_id then
+          vim.schedule(function()
+            vim.notify("Cannot edit: draft has no server ID", vim.log.levels.ERROR)
+          end)
+          return
+        end
+        if not provider.update_draft_note then
+          vim.schedule(function()
+            vim.notify("Draft editing not supported on this platform", vim.log.levels.WARN)
+          end)
+          return
+        end
+        _, err = provider.update_draft_note(async_client, ctx, mr, disc.server_draft_id, text)
+      else
+        _, err = provider.edit_note(async_client, ctx, mr, disc.id, note.id, text)
+      end
       vim.schedule(function()
         if err then
           vim.notify("Edit failed: " .. err, vim.log.levels.ERROR)

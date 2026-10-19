@@ -1246,12 +1246,14 @@ function M.setup_keymaps(state, layout, active_states)
       if not note then
         return
       end
-      if not state.current_user then
-        return
-      end
-      if note.author ~= state.current_user then
-        vim.notify("Can only edit your own comments", vim.log.levels.WARN)
-        return
+      if not disc.is_draft then
+        if not state.current_user then
+          return
+        end
+        if note.author ~= state.current_user then
+          vim.notify("Can only edit your own comments", vim.log.levels.WARN)
+          return
+        end
       end
 
       -- Restore cursor visibility before opening the float (guicursor is global)
@@ -1269,6 +1271,7 @@ function M.setup_keymaps(state, layout, active_states)
       -- Set editing_note state so rerender_view() draws spacer virt_lines
       state.editing_note = {
         disc_id = disc.id,
+        disc = disc,
         note_idx = sel_idx,
         spacer_height = initial_height + 2,
       }
